@@ -239,6 +239,7 @@
         <li><span class="dot-tick">●</span><div><code>Device.Read.All</code> — read registered devices and their last sign-in</div></li>
         <li><span class="dot-tick">●</span><div><code>IdentityRiskyUser.Read.All</code>, <code>Policy.Read.All</code>, <code>UserAuthenticationMethod.Read.All</code>, <code>ServiceHealth.Read.All</code> — security views (risky users, Conditional Access, MFA, service health)</div></li>
         <li><span class="dot-tick">●</span><div><code>BitlockerKey.ReadBasic.All</code>, <code>DeviceLocalCredential.ReadBasic.All</code> &amp; <code>DeviceManagementManagedDevices.Read.All</code> — compliance &amp; antivirus views: BitLocker recovery-key and Windows LAPS metadata (no key/password material), Intune encryption status, Defender antivirus health, and active-malware reporting</div></li>
+        <li><span class="dot-tick">●</span><div><code>SecurityEvents.Read.All</code> &amp; <code>Application.Read.All</code> — advanced security views: Microsoft Secure Score, and Entra app registration credential expiry (privileged accounts, legacy auth and OAuth consents reuse the scopes above)</div></li>
         <li><span class="dot-tick">●</span><div><code>User.ReadWrite.All</code> — delete selected user accounts (soft-delete, recoverable 30 days)</div></li>
         <li><span class="dot-tick">●</span><div><code>Directory.AccessAsUser.All</code> — requested only at the moment you delete a device (Graph has no narrower delegated permission for that operation); permanent, no recovery</div></li>
         <li><span class="dot-tick">●</span><div>Needs an <b>Entra ID P1/P2</b> license. Deleting users needs User Administrator or Global Administrator; deleting devices needs Cloud Device Administrator, Intune Administrator, or Global Administrator.</div></li>
@@ -323,6 +324,18 @@
           <button class="tab" data-tab="bitlocker">BitLocker key <span class="cnt" id="cntBitlocker">—</span></button>
           <button class="tab" data-tab="laps">LAPS key <span class="cnt" id="cntLaps">—</span></button>
           <button class="tab" data-tab="patching">Patching status <span class="cnt" id="cntPatching">—</span></button>
+        </div>
+      </div>
+      <div class="navgroup" data-group="advsec">
+        <button class="navhead" data-grouphead="advsec"><span class="caret">▾</span> Advanced Security</button>
+        <div class="navitems">
+          <button class="tab" data-tab="devcompliance">Device compliance <span class="cnt" id="cntDevComp">—</span></button>
+          <button class="tab" data-tab="privileged">Privileged accounts <span class="cnt" id="cntPriv">—</span></button>
+          <button class="tab" data-tab="securescore">Secure Score <span class="cnt" id="cntSec">—</span></button>
+          <button class="tab" data-tab="jailbroken">Jailbroken devices <span class="cnt" id="cntJail">—</span></button>
+          <button class="tab" data-tab="legacyauth">Legacy auth <span class="cnt" id="cntLegacy">—</span></button>
+          <button class="tab" data-tab="appcreds">App credentials <span class="cnt" id="cntAppCreds">—</span></button>
+          <button class="tab" data-tab="oauth">OAuth consents <span class="cnt" id="cntOauth">—</span></button>
         </div>
       </div>
     </aside>
@@ -467,6 +480,44 @@
           <label>Health</label>
           <select id="fAvHealth"><option value="unhealthy">Unhealthy only</option><option value="">All</option><option value="healthy">Healthy</option></select>
         </div>
+        <!-- patching: view toggle -->
+        <div class="field hide" id="wrapPatchView">
+          <label>View</label>
+          <select id="fPatchView"><option value="devices">Devices</option><option value="coverage">Coverage %</option></select>
+        </div>
+        <!-- advanced security -->
+        <div class="field hide" id="wrapDcState">
+          <label>Compliance</label>
+          <select id="fDcState"><option value="">All</option><option value="compliant">Compliant</option><option value="noncompliant">Non-compliant</option><option value="inGracePeriod">In grace period</option><option value="error">Error</option><option value="conflict">Conflict</option><option value="unknown">Unknown</option><option value="notApplicable">Not applicable</option></select>
+        </div>
+        <div class="field hide" id="wrapDcOs">
+          <label>Operating system</label>
+          <select id="fDcOs"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapJailStatus">
+          <label>Jailbroken</label>
+          <select id="fJailStatus"><option value="">All</option><option value="True">Jailbroken</option><option value="False">Clean</option><option value="Unknown">Unknown</option></select>
+        </div>
+        <div class="field hide" id="wrapPrivMfa">
+          <label>MFA</label>
+          <select id="fPrivMfa"><option value="">All</option><option value="no">Without MFA</option><option value="yes">With MFA</option></select>
+        </div>
+        <div class="field hide" id="wrapSecCat">
+          <label>Category</label>
+          <select id="fSecCat"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapAcStatus">
+          <label>Status</label>
+          <select id="fAcStatus"><option value="">All</option><option value="expired">Expired</option><option value="expiring">Expiring ≤30d</option><option value="valid">Valid</option></select>
+        </div>
+        <div class="field hide" id="wrapAcType">
+          <label>Type</label>
+          <select id="fAcType"><option value="">All</option><option value="secret">Secret</option><option value="certificate">Certificate</option></select>
+        </div>
+        <div class="field hide" id="wrapOaConsent">
+          <label>Consent</label>
+          <select id="fOaConsent"><option value="">All</option><option value="AllPrincipals">Tenant-wide</option><option value="Principal">User</option></select>
+        </div>
         <span class="grow"></span>
         <span class="count" id="filterCount"></span>
         <button class="btn ghost" id="fClear">Clear filters</button>
@@ -560,7 +611,8 @@ const GRAPH = "https://graph.microsoft.com/v1.0";
 const GRAPH_BETA = "https://graph.microsoft.com/beta";
 const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All",
   "IdentityRiskyUser.Read.All","Policy.Read.All","UserAuthenticationMethod.Read.All","ServiceHealth.Read.All",
-  "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All","DeviceLocalCredential.ReadBasic.All"];
+  "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All","DeviceLocalCredential.ReadBasic.All",
+  "SecurityEvents.Read.All","Application.Read.All"];
 const WRITE_SCOPES = ["User.ReadWrite.All"];
 // Device.ReadWrite.All is application-only and cannot be granted to a SPA.
 // The only delegated permission that can delete a device is Directory.AccessAsUser.All —
@@ -591,11 +643,19 @@ let avOverview = null;      let avEndpoints = [];  let avEndpointsAvailable = tr
 let avMalware = [];         let avMalwareCols = []; let avMalwareAvailable = true;
 let avLoaded = false;
 let allLaps = [];           let lapsLoaded = false; let lapsAvailable = true;   // Windows LAPS backups
+/* ---- Advanced Security ---- */
+let mdmDevices = [];        let mdmLoaded = false;                              // managedDevices superset (compliance + jailbreak)
+let privRoles = [];         let privLoaded = false;                             // privileged accounts
+let secScore = null;        let secLoaded = false;                              // Microsoft Secure Score
+let legacySignins = [];     let legacyLoaded = false; let legacyAvailable = true; // legacy auth sign-ins
+let appCreds = [];          let appCredsLoaded = false; let appCredsAvailable = true; // app secrets/certs
+let oauthGrants = [];       let oauthLoaded = false;                            // OAuth consent grants
 let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
 
-const INFO_TABS = ["risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching"];
+const INFO_TABS = ["risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching",
+  "devcompliance","privileged","securescore","jailbroken","legacyauth","appcreds","oauth"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
 
@@ -971,6 +1031,115 @@ async function loadAntivirus(){
 }
 
 /* ========
+   GRAPH — Advanced Security loaders (each best-effort, validated endpoints)
+   ======== */
+async function loadMdm(){   // shared: device compliance + jailbroken
+  el("tbody").innerHTML = `<tr><td colspan="5" class="loadrow"><span class="spin"></span> Reading Intune managed devices…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES); if(!tok) return;
+    mdmDevices = [];
+    let url = `${GRAPH}/deviceManagement/managedDevices?$select=id,deviceName,operatingSystem,osVersion,complianceState,managedDeviceOwnerType,lastSyncDateTime,jailBroken&$top=200`, p=0;
+    while(url && p<10){ const page = await gget(url, tok); mdmDevices.push(...(page.value||[])); url = page["@odata.nextLink"]||null; p++; }
+    mdmLoaded = true;
+    fillSelect("fDcOs", [...new Set(mdmDevices.map(d=>d.operatingSystem).filter(Boolean))].sort());
+    render();
+  }catch(e){ handleGraphError(e); }
+}
+async function loadPrivileged(){
+  el("tbody").innerHTML = `<tr><td colspan="4" class="loadrow"><span class="spin"></span> Reading privileged role assignments…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES); if(!tok) return;
+    const r = await gget(`${GRAPH}/directoryRoles?$expand=members`, tok);
+    const map = new Map();
+    for(const role of (r.value||[])){
+      for(const m of (role.members||[])){
+        if(m["@odata.type"] && !/#microsoft\.graph\.user/i.test(m["@odata.type"])) continue;
+        let u = map.get(m.id);
+        if(!u){ u = { id:m.id, displayName:m.displayName, upn:m.userPrincipalName, accountEnabled:m.accountEnabled, roles:[] }; map.set(m.id, u); }
+        u.roles.push(role.displayName);
+      }
+    }
+    if(!mfaLoaded){
+      try{ let murl = `${GRAPH}/reports/authenticationMethods/userRegistrationDetails?$top=200`; allRegDetails = [];
+           while(murl){ const pg = await gget(murl, tok); allRegDetails.push(...(pg.value||[])); murl = pg["@odata.nextLink"]||null; } mfaLoaded = true; }catch(e){}
+    }
+    const mfaMap = new Map(allRegDetails.map(x=>[String(x.userPrincipalName||"").toLowerCase(), x.isMfaRegistered]));
+    privRoles = [...map.values()].map(u=>{ const k=String(u.upn||"").toLowerCase(); return { ...u, mfa: mfaMap.has(k)?mfaMap.get(k):null }; })
+      .sort((a,b)=> b.roles.length - a.roles.length);
+    privLoaded = true; render();
+  }catch(e){ handleGraphError(e); }
+}
+async function loadSecScore(){
+  el("tbody").innerHTML = `<tr><td colspan="4" class="loadrow"><span class="spin"></span> Reading Microsoft Secure Score…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES); if(!tok) return;
+    const r = await gget(`${GRAPH}/security/secureScores?$top=1`, tok);
+    secScore = (r.value||[])[0] || null;
+    secLoaded = true;
+    fillSelect("fSecCat", [...new Set(((secScore&&secScore.controlScores)||[]).map(c=>c.controlCategory).filter(Boolean))].sort());
+    render();
+  }catch(e){ handleGraphError(e); }
+}
+async function loadLegacyAuth(){
+  el("tbody").innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Reading legacy authentication sign-ins…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES); if(!tok) return;
+    legacySignins = []; legacyAvailable = true;
+    const legacy = ["Exchange ActiveSync","IMAP4","POP3","SMTP","MAPI","Other clients","Authenticated SMTP","Exchange Web Services","AutoDiscover","Outlook Anywhere (RPC over HTTP)"];
+    const filter = legacy.map(c=>`clientAppUsed eq '${c.replace(/'/g,"''")}'`).join(" or ");
+    try{
+      const page = await gget(`${GRAPH}/auditLogs/signIns?$top=100&$filter=${encodeURIComponent(filter)}`, tok);
+      legacySignins = page.value || [];
+    }catch(e){ legacyAvailable = false; legacySignins = []; }
+    legacyLoaded = true; render();
+  }catch(e){ handleGraphError(e); }
+}
+function mkCred(app, type, c){
+  const end = c.endDateTime ? new Date(c.endDateTime) : null;
+  const days = (end && !isNaN(end)) ? Math.floor((end.getTime()-Date.now())/864e5) : null;
+  const status = days===null ? "unknown" : (days<0 ? "expired" : (days<=30 ? "expiring" : "valid"));
+  return { app:app.displayName, appId:app.appId, type, name:c.displayName||"", endDateTime:c.endDateTime||null, _days:days, _status:status };
+}
+async function loadAppCreds(){
+  el("tbody").innerHTML = `<tr><td colspan="5" class="loadrow"><span class="spin"></span> Reading app registrations &amp; credentials…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES); if(!tok) return;
+    appCreds = []; appCredsAvailable = true;
+    try{
+      let url = `${GRAPH}/applications?$select=id,appId,displayName,passwordCredentials,keyCredentials&$top=200`, p=0; const apps=[];
+      while(url && p<10){ const page = await gget(url, tok); apps.push(...(page.value||[])); url = page["@odata.nextLink"]||null; p++; }
+      const rows=[];
+      for(const a of apps){
+        for(const c of (a.passwordCredentials||[])) rows.push(mkCred(a,"secret",c));
+        for(const c of (a.keyCredentials||[]))      rows.push(mkCred(a,"certificate",c));
+      }
+      appCreds = rows;
+    }catch(e){ appCredsAvailable = false; appCreds = []; }
+    appCredsLoaded = true; render();
+  }catch(e){ handleGraphError(e); }
+}
+async function loadOauth(){
+  el("tbody").innerHTML = `<tr><td colspan="4" class="loadrow"><span class="spin"></span> Reading OAuth app consents…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES); if(!tok) return;
+    const spName = new Map();
+    try{
+      let surl = `${GRAPH}/servicePrincipals?$select=id,appDisplayName&$top=500`, sp=0;
+      while(surl && sp<6){ const page = await gget(surl, tok); for(const s of (page.value||[])) spName.set(s.id, s.appDisplayName); surl = page["@odata.nextLink"]||null; sp++; }
+    }catch(e){}
+    let url = `${GRAPH}/oauth2PermissionGrants?$top=200`, p=0; const grants=[];
+    while(url && p<10){ const page = await gget(url, tok); grants.push(...(page.value||[])); url = page["@odata.nextLink"]||null; p++; }
+    oauthGrants = grants.map(g=>({
+      client: spName.get(g.clientId) || g.clientId,
+      resource: spName.get(g.resourceId) || g.resourceId,
+      scope: (g.scope||"").trim(),
+      consentType: g.consentType
+    }));
+    oauthLoaded = true; render();
+  }catch(e){ handleGraphError(e); }
+}
+
+/* ========
    FILTER + RENDER
    ======== */
 function computeDormant(){
@@ -1118,7 +1287,8 @@ function fillSelect(id, values){
 const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatus","wrapRisk","wrapRiskState",
   "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
   "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc",
-  "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth","wrapLapsOs","wrapLapsStatus"];
+  "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth","wrapLapsOs","wrapLapsStatus","wrapPatchView",
+  "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent"];
 const FILTERS_BY_TAB = {
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
@@ -1131,12 +1301,21 @@ const FILTERS_BY_TAB = {
   antivirus:["wrapAvMode","wrapAvHealth"],
   bitlocker:["wrapBlOs","wrapBlStatus","wrapBlEnc"],
   laps:["wrapLapsOs","wrapLapsStatus"],
-  patching:["wrapPatchRel","wrapPatchStatus"]
+  patching:["wrapPatchView","wrapPatchRel","wrapPatchStatus"],
+  devcompliance:["wrapDcState","wrapDcOs"],
+  jailbroken:["wrapJailStatus"],
+  privileged:["wrapPrivMfa"],
+  securescore:["wrapSecCat"],
+  legacyauth:[],
+  appcreds:["wrapAcStatus","wrapAcType"],
+  oauth:["wrapOaConsent"]
 };
 const SEARCH_PLACEHOLDER = {
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
   ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…",
-  patching:"device name or build…", antivirus:"device or malware…", laps:"device name…"
+  patching:"device name or build…", antivirus:"device or malware…", laps:"device name…",
+  devcompliance:"device or OS…", jailbroken:"device or OS…", privileged:"name, UPN or role…",
+  securescore:"control…", legacyauth:"user, app or client…", appcreds:"app or secret…", oauth:"app, resource or scope…"
 };
 
 function syncFilterBar(){
@@ -1161,6 +1340,13 @@ const HEAD_LICENSE = `<th>SKU</th><th>Enabled</th><th>Consumed</th><th>Available
 const HEAD_HEALTH  = `<th>Issue</th><th>Service</th><th>Classification</th><th>Status</th><th>Last updated</th>`;
 const HEAD_BITLOCKER = `<th>Device</th><th>OS</th><th>BitLocker key</th><th>Encrypted</th><th class="opt">Key escrowed</th><th>Ownership</th>`;
 const HEAD_LAPS = `<th>Device</th><th>OS</th><th>LAPS key</th><th class="opt">Last backup</th><th>Ownership</th>`;
+const HEAD_DEVCOMP = `<th>Device</th><th>OS</th><th>Compliance</th><th>Managed by</th><th class="opt">Last sync</th>`;
+const HEAD_JAIL    = `<th>Device</th><th>OS</th><th>Jailbroken / rooted</th><th>Managed by</th>`;
+const HEAD_PRIV    = `<th>Account</th><th>Roles</th><th>MFA</th><th>Status</th>`;
+const HEAD_SEC     = `<th>Control</th><th>Category</th><th>Score</th><th class="opt">Description</th>`;
+const HEAD_LEGACY  = `<th>User</th><th>App</th><th>Client</th><th>Result</th><th class="opt">IP</th><th>When</th>`;
+const HEAD_APPCREDS= `<th>Application</th><th>Type</th><th>Expires</th><th>Time left</th><th>Status</th>`;
+const HEAD_OAUTH   = `<th>Client app</th><th>Resource</th><th class="opt">Scopes</th><th>Consent</th>`;
 const HEAD_PATCHING  = `<th>Device</th><th>Current OS</th><th>Current build</th><th>Target build</th><th>Patch status</th><th class="opt">Last active</th>`;
 const HEAD_AV_ENDPOINTS = `<th>Device</th><th>Managed by</th><th>Malware protection</th><th>State</th><th>Real-time</th><th>Network</th><th>Signature</th><th>Tamper</th><th class="opt">Product status</th><th class="opt">Reboot</th>`;
 
@@ -1187,6 +1373,13 @@ function render(){
   if(bitlockerLoaded) el("cntBitlocker").textContent = bitlockerRows().filter(d=>d._status==="missing").length;
   if(lapsLoaded)      el("cntLaps").textContent = lapsRows().filter(d=>d._status==="missing").length;
   if(devicesLoaded)   el("cntPatching").textContent = patchingRows().filter(d=>d._status==="behind").length;
+  if(mdmLoaded){ el("cntDevComp").textContent = mdmDevices.filter(d=>d.complianceState==="noncompliant").length;
+                 el("cntJail").textContent = mdmDevices.filter(d=>String(d.jailBroken).toLowerCase()==="true").length; }
+  if(privLoaded)      el("cntPriv").textContent = privRoles.filter(u=>u.mfa===false).length;
+  if(secLoaded && secScore) el("cntSec").textContent = (secScore.maxScore?Math.round((secScore.currentScore||0)/secScore.maxScore*100):0)+"%";
+  if(legacyLoaded)    el("cntLegacy").textContent = legacyAvailable ? legacySignins.length : "0";
+  if(appCredsLoaded)  el("cntAppCreds").textContent = appCreds.filter(c=>c._status==="expired"||c._status==="expiring").length;
+  if(oauthLoaded)     el("cntOauth").textContent = oauthGrants.filter(g=>g.consentType==="AllPrincipals").length;
 
   // KPI cards are scoped to the ACTIVE dormant view, not the whole tenant
   if(!isInfoTab()) setDormantCards(members, guests, stale);
@@ -1194,10 +1387,12 @@ function render(){
   // antivirus sets its own header (per sub-mode) inside renderAntivirus
   if(tab==="antivirus"){ renderAntivirus(); return; }
 
-  const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING };
+  const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
+    devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH };
   if(heads[tab]){
     el("theadRow").innerHTML = heads[tab];
-    ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching })[tab]();
+    ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching,
+       devcompliance:renderDevCompliance, jailbroken:renderJailbroken, privileged:renderPrivileged, securescore:renderSecScore, legacyauth:renderLegacyAuth, appcreds:renderAppCreds, oauth:renderOauth })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
     renderUsers(tab==="member"?members:guests);
@@ -1432,6 +1627,173 @@ function renderBitlocker(){
   }).join("");
 }
 
+/* ---------- Advanced Security ---------- */
+const COMP_PILL = { compliant:"lic-yes", noncompliant:"miss", error:"miss", conflict:"guest", inGracePeriod:"guest", unknown:"off", notApplicable:"off", configManager:"member" };
+function renderDevCompliance(){
+  const q=searchVal(), st=v("fDcState"), os=v("fDcOs");
+  const rows = mdmDevices.filter(d=>{
+    if(q && !((d.deviceName||"")+" "+(d.operatingSystem||"")).toLowerCase().includes(q)) return false;
+    if(st && (d.complianceState||"")!==st) return false;
+    if(os && (d.operatingSystem||"")!==os) return false;
+    return true;
+  });
+  view = rows; setFilterCount(rows.length, mdmDevices.length);
+  const compliant = mdmDevices.filter(d=>d.complianceState==="compliant").length;
+  setInfoCards("Managed devices", mdmDevices.length, "Compliant", compliant,
+    "Non-compliant", mdmDevices.filter(d=>d.complianceState==="noncompliant").length,
+    "Compliance", mdmDevices.length?Math.round(compliant/mdmDevices.length*100)+"%":"—");
+  const tb=el("tbody");
+  if(!mdmDevices.length){ tb.innerHTML=`<tr><td colspan="5" class="empty"><div class="big">No managed devices</div>No Intune-managed devices found (needs an Intune licence + DeviceManagementManagedDevices.Read.All).</td></tr>`; return; }
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="5" class="empty"><div class="big">No matches</div>No devices match the current filters.</td></tr>`; return; }
+  tb.innerHTML = rows.map(d=>`<tr>
+      <td><div class="uname">${escapeHtml(d.deviceName||"—")}</div><div class="upn">${escapeHtml(d.osVersion||"")}</div></td>
+      <td>${escapeHtml(d.operatingSystem||"—")}</td>
+      <td><span class="pill ${COMP_PILL[d.complianceState]||"off"}">${escapeHtml(humanize(d.complianceState||"unknown"))}</span></td>
+      <td class="num">${escapeHtml(d.managedDeviceOwnerType||"—")}</td>
+      <td class="num opt">${fmtDate(d.lastSyncDateTime)}</td>
+    </tr>`).join("");
+}
+function renderJailbroken(){
+  const q=searchVal(), st=v("fJailStatus");
+  const rows = mdmDevices.filter(d=>{
+    if(q && !((d.deviceName||"")+" "+(d.operatingSystem||"")).toLowerCase().includes(q)) return false;
+    if(st && (d.jailBroken||"Unknown")!==st) return false;
+    return true;
+  });
+  view = rows; setFilterCount(rows.length, mdmDevices.length);
+  const jb = mdmDevices.filter(d=>String(d.jailBroken).toLowerCase()==="true").length;
+  setInfoCards("Managed devices", mdmDevices.length, "Jailbroken / rooted", jb,
+    "Clean", mdmDevices.filter(d=>String(d.jailBroken).toLowerCase()==="false").length,
+    "Unknown", mdmDevices.filter(d=>!["true","false"].includes(String(d.jailBroken).toLowerCase())).length);
+  const tb=el("tbody");
+  if(!mdmDevices.length){ tb.innerHTML=`<tr><td colspan="4" class="empty"><div class="big">No managed devices</div>No Intune-managed devices found.</td></tr>`; return; }
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="4" class="empty"><div class="big">No matches</div>No devices match the current filters.</td></tr>`; return; }
+  tb.innerHTML = rows.map(d=>{
+    const jbv = String(d.jailBroken||"Unknown").toLowerCase();
+    const pill = jbv==="true"?`<span class="pill miss">Yes</span>`:(jbv==="false"?`<span class="pill lic-yes">No</span>`:`<span class="pill off">Unknown</span>`);
+    return `<tr>
+      <td><div class="uname">${escapeHtml(d.deviceName||"—")}</div><div class="upn">${escapeHtml(d.osVersion||"")}</div></td>
+      <td>${escapeHtml(d.operatingSystem||"—")}</td>
+      <td>${pill}</td>
+      <td class="num">${escapeHtml(d.managedDeviceOwnerType||"—")}</td>
+    </tr>`;
+  }).join("");
+}
+function renderPrivileged(){
+  const q=searchVal(), mf=v("fPrivMfa");
+  const rows = privRoles.filter(u=>{
+    if(q && !((u.displayName||"")+" "+(u.upn||"")+" "+u.roles.join(" ")).toLowerCase().includes(q)) return false;
+    if(mf==="yes" && u.mfa!==true) return false;
+    if(mf==="no"  && u.mfa!==false) return false;
+    return true;
+  });
+  view = rows; setFilterCount(rows.length, privRoles.length);
+  setInfoCards("Privileged users", privRoles.length, "Without MFA", privRoles.filter(u=>u.mfa===false).length,
+    "Global Admins", privRoles.filter(u=>u.roles.some(r=>/global administrator/i.test(r))).length,
+    "MFA coverage", privRoles.length?Math.round(privRoles.filter(u=>u.mfa===true).length/privRoles.length*100)+"%":"—");
+  const tb=el("tbody");
+  if(!privRoles.length){ tb.innerHTML=`<tr><td colspan="4" class="empty"><div class="big">No privileged accounts</div>No activated directory roles with members found (needs Directory.Read.All).</td></tr>`; return; }
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="4" class="empty"><div class="big">No matches</div>No accounts match the current filters.</td></tr>`; return; }
+  tb.innerHTML = rows.map(u=>{
+    const mfaPill = u.mfa===true?`<span class="pill lic-yes">Yes</span>`:(u.mfa===false?`<span class="pill miss">No</span>`:`<span class="pill off">—</span>`);
+    return `<tr>
+      <td><div class="uname">${escapeHtml(u.displayName||"—")}</div><div class="upn">${escapeHtml(u.upn||"")}</div></td>
+      <td>${escapeHtml(u.roles.join(", "))}</td>
+      <td>${mfaPill}</td>
+      <td class="num">${u.accountEnabled===false?`<span class="pill off">disabled</span>`:"enabled"}</td>
+    </tr>`;
+  }).join("");
+}
+function renderSecScore(){
+  const tb=el("tbody");
+  if(!secScore){ setInfoCards("Secure Score","—","Max","—","Percent","—","Updated","—"); view=[]; setFilterCount(0,0);
+    tb.innerHTML=`<tr><td colspan="4" class="empty"><div class="big">No Secure Score</div>Couldn't read Microsoft Secure Score (needs SecurityEvents.Read.All).</td></tr>`; return; }
+  const cur=secScore.currentScore||0, max=secScore.maxScore||0, pct=max?Math.round(cur/max*100):0;
+  setInfoCards("Secure Score", Math.round(cur), "Max", Math.round(max), "Percent", pct+"%", "Updated", fmtDate(secScore.createdDateTime));
+  const q=searchVal(), cat=v("fSecCat");
+  const controls = (secScore.controlScores||[]).filter(c=>{
+    if(q && !((c.controlName||"")+" "+(c.description||"")).toLowerCase().includes(q)) return false;
+    if(cat && (c.controlCategory||"")!==cat) return false;
+    return true;
+  }).sort((a,b)=>(a.score||0)-(b.score||0));
+  view = controls; setFilterCount(controls.length, (secScore.controlScores||[]).length);
+  if(!controls.length){ tb.innerHTML=`<tr><td colspan="4" class="empty"><div class="big">No matches</div>No controls match the current filters.</td></tr>`; return; }
+  tb.innerHTML = controls.map(c=>`<tr>
+      <td><div class="uname">${escapeHtml(c.controlName||"—")}</div></td>
+      <td>${escapeHtml(c.controlCategory||"—")}</td>
+      <td class="num">${c.score!=null?Math.round(c.score):"—"}</td>
+      <td class="num opt">${escapeHtml(c.description||"")}</td>
+    </tr>`).join("");
+}
+function renderLegacyAuth(){
+  const tb=el("tbody");
+  setInfoCards("Legacy sign-ins", legacyAvailable?legacySignins.length:"—",
+    "Users", legacyAvailable?new Set(legacySignins.map(s=>s.userPrincipalName)).size:"—",
+    "Clients", legacyAvailable?new Set(legacySignins.map(s=>s.clientAppUsed)).size:"—", "Window", "recent");
+  if(!legacyAvailable){ view=[]; setFilterCount(0,0); tb.innerHTML=`<tr><td colspan="6" class="empty"><div class="big">Sign-in logs unavailable</div>Legacy-auth sign-ins need Entra ID P1 and AuditLog.Read.All.</td></tr>`; return; }
+  const q=searchVal();
+  const rows = legacySignins.filter(s=> !q || ((s.userDisplayName||"")+" "+(s.userPrincipalName||"")+" "+(s.appDisplayName||"")+" "+(s.clientAppUsed||"")).toLowerCase().includes(q));
+  view = rows; setFilterCount(rows.length, legacySignins.length);
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="6" class="empty"><div class="big">${legacySignins.length?"No matches":"No legacy sign-ins"}</div>${legacySignins.length?"No rows match the current search.":"No legacy-authentication sign-ins in the recent window."}</td></tr>`; return; }
+  tb.innerHTML = rows.map(s=>{
+    const ok = s.status && s.status.errorCode===0;
+    return `<tr>
+      <td><div class="uname">${escapeHtml(s.userDisplayName||"—")}</div><div class="upn">${escapeHtml(s.userPrincipalName||"")}</div></td>
+      <td>${escapeHtml(s.appDisplayName||"—")}</td>
+      <td><span class="pill miss">${escapeHtml(s.clientAppUsed||"—")}</span></td>
+      <td>${ok?`<span class="pill lic-yes">Success</span>`:`<span class="pill off">Fail</span>`}</td>
+      <td class="num opt">${escapeHtml(s.ipAddress||"—")}</td>
+      <td class="num">${fmtDate(s.createdDateTime)}</td>
+    </tr>`;
+  }).join("");
+}
+const ACRED_PILL = { expired:"miss", expiring:"guest", valid:"lic-yes", unknown:"off" };
+function renderAppCreds(){
+  const tb=el("tbody");
+  setInfoCards("Credentials", appCredsAvailable?appCreds.length:"—", "Expired", appCreds.filter(c=>c._status==="expired").length,
+    "Expiring ≤30d", appCreds.filter(c=>c._status==="expiring").length, "Apps", new Set(appCreds.map(c=>c.appId)).size);
+  if(!appCredsAvailable){ view=[]; setFilterCount(0,0); tb.innerHTML=`<tr><td colspan="5" class="empty"><div class="big">App registrations unavailable</div>Reading app credentials needs Application.Read.All (admin consent).</td></tr>`; return; }
+  const q=searchVal(), st=v("fAcStatus"), ty=v("fAcType");
+  const rows = appCreds.filter(c=>{
+    if(q && !((c.app||"")+" "+(c.name||"")).toLowerCase().includes(q)) return false;
+    if(st && c._status!==st) return false;
+    if(ty && c.type!==ty) return false;
+    return true;
+  }).sort((a,b)=> (a._days==null?1e9:a._days)-(b._days==null?1e9:b._days));
+  view = rows; setFilterCount(rows.length, appCreds.length);
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="5" class="empty"><div class="big">${appCreds.length?"No matches":"No credentials"}</div>${appCreds.length?"No rows match the current filters.":"No app secrets or certificates found."}</td></tr>`; return; }
+  tb.innerHTML = rows.map(c=>{
+    const dleft = c._days==null?"—":(c._days<0?`${Math.abs(c._days)}d ago`:`${c._days}d`);
+    return `<tr>
+      <td><div class="uname">${escapeHtml(c.app||"—")}</div><div class="upn">${escapeHtml(c.name||"")}</div></td>
+      <td>${escapeHtml(c.type)}</td>
+      <td class="num">${fmtDate(c.endDateTime)}</td>
+      <td class="num">${dleft}</td>
+      <td><span class="pill ${ACRED_PILL[c._status]||"off"}">${escapeHtml(humanize(c._status))}</span></td>
+    </tr>`;
+  }).join("");
+}
+function renderOauth(){
+  const tb=el("tbody");
+  setInfoCards("Consents", oauthGrants.length, "Tenant-wide", oauthGrants.filter(g=>g.consentType==="AllPrincipals").length,
+    "User-specific", oauthGrants.filter(g=>g.consentType==="Principal").length, "Apps", new Set(oauthGrants.map(g=>g.client)).size);
+  const q=searchVal(), ct=v("fOaConsent");
+  const rows = oauthGrants.filter(g=>{
+    if(q && !((g.client||"")+" "+(g.resource||"")+" "+(g.scope||"")).toLowerCase().includes(q)) return false;
+    if(ct && g.consentType!==ct) return false;
+    return true;
+  });
+  view = rows; setFilterCount(rows.length, oauthGrants.length);
+  if(!oauthGrants.length){ tb.innerHTML=`<tr><td colspan="4" class="empty"><div class="big">No OAuth consents</div>No delegated app consent grants found (needs Directory.Read.All).</td></tr>`; return; }
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="4" class="empty"><div class="big">No matches</div>No grants match the current filters.</td></tr>`; return; }
+  tb.innerHTML = rows.map(g=>`<tr>
+      <td><div class="uname">${escapeHtml(g.client||"—")}</div></td>
+      <td>${escapeHtml(g.resource||"—")}</td>
+      <td class="num opt">${escapeHtml(g.scope||"—")}</td>
+      <td>${g.consentType==="AllPrincipals"?`<span class="pill guest">Tenant-wide</span>`:`<span class="pill member">User</span>`}</td>
+    </tr>`).join("");
+}
+
 /* ---------- LAPS key (Compliance) ---------- */
 /* join Intune-managed devices with the set of devices that have a LAPS backup in Entra.
    has = backed up · missing = Windows managed device with no backup · na = non-Windows (LAPS n/a) */
@@ -1592,10 +1954,40 @@ const PATCH_PILL = {
   nobaseline:`<span class="pill off">No baseline</span>`,
   unknown:`<span class="pill off">Unknown</span>`
 };
+function renderPatchCoverage(all){
+  el("theadRow").innerHTML = `<th>Windows release</th><th>Devices</th><th>Patched</th><th>Behind</th><th>% patched</th>`;
+  const groups = {};
+  for(const d of all){ const rel = d._rel || "Unknown"; (groups[rel] = groups[rel]||[]).push(d); }
+  const relRows = Object.entries(groups).map(([rel,list])=>{
+    const evald = list.filter(d=>d._status==="patched"||d._status==="behind").length;
+    const patched = list.filter(d=>d._status==="patched").length;
+    const behind  = list.filter(d=>d._status==="behind").length;
+    return { rel, total:list.length, patched, behind, pct: evald ? Math.round(patched/evald*100) : null };
+  }).sort((a,b)=> b.total - a.total);
+  view = relRows;
+  const evAll = all.filter(d=>d._status==="patched"||d._status==="behind").length;
+  const pAll = all.filter(d=>d._status==="patched").length;
+  const overall = evAll ? Math.round(pAll/evAll*100) : 0;
+  setFilterCount(relRows.length, relRows.length);
+  setInfoCards("Patch Tuesday", ymd(currentPatchTuesday()), "Devices", all.length, "Patched", pAll, "% patched", overall+"%");
+  const tb = el("tbody");
+  if(!relRows.length){ tb.innerHTML=`<tr><td colspan="5" class="empty"><div class="big">No data</div>No Windows devices to evaluate.</td></tr>`; return; }
+  tb.innerHTML = relRows.map(r=>{
+    const cls = r.pct==null ? "off" : (r.pct>=90?"lic-yes":(r.pct>=70?"guest":"miss"));
+    return `<tr>
+      <td><div class="uname">${escapeHtml(r.rel)}</div></td>
+      <td class="num">${r.total}</td>
+      <td class="num">${r.patched}</td>
+      <td class="num">${r.behind}</td>
+      <td><span class="pill ${cls}">${r.pct==null?"—":r.pct+"%"}</span></td>
+    </tr>`;
+  }).join("");
+}
 function renderPatching(){
   const all = patchingRows();
   // release dropdown reflects what's actually present
   fillSelect("fPatchRel", [...new Set(all.map(d=>d._rel).filter(Boolean))].sort());
+  if(v("fPatchView")==="coverage"){ renderPatchCoverage(all); return; }
   view = applyPatchingFilters(all).sort((a,b)=> (PATCH_RANK[a._status]-PATCH_RANK[b._status]) || (b._build?b._build.major:0)-(a._build?a._build.major:0));
   setFilterCount(view.length, all.length);
   const behind = all.filter(d=>d._status==="behind").length;
@@ -1806,6 +2198,12 @@ el("btnRefresh").onclick = ()=>{
   else if(tab==="bitlocker"){ bitlockerLoaded=false; loadBitlocker(); }
   else if(tab==="laps"){ lapsLoaded=false; loadLaps(); }
   else if(tab==="patching"){ devicesLoaded=false; loadDevices(); }
+  else if(tab==="devcompliance"||tab==="jailbroken"){ mdmLoaded=false; loadMdm(); }
+  else if(tab==="privileged"){ privLoaded=false; loadPrivileged(); }
+  else if(tab==="securescore"){ secLoaded=false; loadSecScore(); }
+  else if(tab==="legacyauth"){ legacyLoaded=false; loadLegacyAuth(); }
+  else if(tab==="appcreds"){ appCredsLoaded=false; loadAppCreds(); }
+  else if(tab==="oauth"){ oauthLoaded=false; loadOauth(); }
   else { loadDirectory(); }
 };
 
@@ -1813,12 +2211,15 @@ el("btnRefresh").onclick = ()=>{
 ["fSearch"].forEach(id=> el(id).oninput = render);
 ["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
  "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
- "fPatchRel","fPatchStatus","fAvMode","fAvHealth","fLapsOs","fLapsStatus"].forEach(id=> el(id).onchange = render);
+ "fPatchRel","fPatchStatus","fAvMode","fAvHealth","fLapsOs","fLapsStatus","fPatchView",
+ "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
    "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
-   "fPatchRel","fPatchStatus","fLapsOs","fLapsStatus"].forEach(id=> el(id).value="");
+   "fPatchRel","fPatchStatus","fLapsOs","fLapsStatus",
+   "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent"].forEach(id=> el(id).value="");
   el("fAvMode").value="endpoints"; el("fAvHealth").value="unhealthy";   // antivirus keeps sensible defaults
+  el("fPatchView").value="devices";
   render();
 };
 
@@ -1845,7 +2246,11 @@ const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>risk
   mfa:[()=>mfaLoaded, loadMfa], ca:[()=>caLoaded, loadCa], license:[()=>skusLoaded, loadSkus],
   health:[()=>healthLoaded, loadHealth], bitlocker:[()=>bitlockerLoaded, loadBitlocker],
   patching:[()=>devicesLoaded, loadDevices], antivirus:[()=>avLoaded, loadAntivirus],
-  laps:[()=>lapsLoaded, loadLaps] };
+  laps:[()=>lapsLoaded, loadLaps],
+  devcompliance:[()=>mdmLoaded, loadMdm], jailbroken:[()=>mdmLoaded, loadMdm],
+  privileged:[()=>privLoaded, loadPrivileged], securescore:[()=>secLoaded, loadSecScore],
+  legacyauth:[()=>legacyLoaded, loadLegacyAuth], appcreds:[()=>appCredsLoaded, loadAppCreds],
+  oauth:[()=>oauthLoaded, loadOauth] };
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); tab=t.dataset.tab;
@@ -1926,6 +2331,30 @@ el("btnCsv").onclick = ()=>{
     rows = view.map(d=>[d.displayName, d.operatingSystem||"", d.operatingSystemVersion||"",
       (d._hasKey?"Yes":(d._isWin?"No":"N/A")), d._backup||"", d.deviceOwnership||"", d.deviceId]
       .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="devcompliance"){
+    head = ["deviceName","operatingSystem","osVersion","complianceState","managedBy","lastSync"];
+    rows = view.map(d=>[d.deviceName,d.operatingSystem,d.osVersion,d.complianceState,d.managedDeviceOwnerType,d.lastSyncDateTime].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="jailbroken"){
+    head = ["deviceName","operatingSystem","jailBroken","managedBy"];
+    rows = view.map(d=>[d.deviceName,d.operatingSystem,d.jailBroken,d.managedDeviceOwnerType].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="privileged"){
+    head = ["displayName","userPrincipalName","roles","mfaRegistered","accountEnabled"];
+    rows = view.map(u=>[u.displayName,u.upn,u.roles.join("; "),u.mfa,u.accountEnabled].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="securescore"){
+    head = ["controlName","controlCategory","score","description"];
+    rows = view.map(c=>[c.controlName,c.controlCategory,c.score,c.description].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="legacyauth"){
+    head = ["user","userPrincipalName","app","clientApp","result","ip","when"];
+    rows = view.map(s=>[s.userDisplayName,s.userPrincipalName,s.appDisplayName,s.clientAppUsed,(s.status&&s.status.errorCode===0)?"Success":"Fail",s.ipAddress,s.createdDateTime].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="appcreds"){
+    head = ["application","type","name","expires","daysLeft","status","appId"];
+    rows = view.map(c=>[c.app,c.type,c.name,c.endDateTime,c._days,c._status,c.appId].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="oauth"){
+    head = ["client","resource","scopes","consentType"];
+    rows = view.map(g=>[g.client,g.resource,g.scope,g.consentType].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="patching" && el("fPatchView").value==="coverage"){
+    head = ["windowsRelease","devices","patched","behind","pctPatched"];
+    rows = view.map(r=>[r.rel, r.total, r.patched, r.behind, r.pct==null?"":r.pct+"%"].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
   } else if(tab==="patching"){
     head = ["displayName","currentOS","currentBuild","targetBuild","patchStatus","operatingSystemVersion","lastActive","deviceId"];
     rows = view.map(d=>[d.displayName, d._osLabel, d._build?d._build.full:"", d._target||"", d._status,
