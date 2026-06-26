@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tenant Guard — Entra security &amp; compliance console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0E1117; --panel:#161B22; --panel-2:#1B222C; --border:#232A33;
+    --text:#E6EDF3; --muted:#8B98A5; --faint:#5B6671;
+    --accent:#4DD0C4; --accent-dim:#2C7A74;
+    --warn:#E0A500; --danger:#E5484D; --danger-dim:#7A2A2C; --ok:#3FB950;
+    --radius:10px; --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Inter',system-ui,sans-serif; font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent)}
+  button{font-family:inherit;cursor:pointer}
+  .mono{font-family:var(--mono)}
+
+  /* ---------- shell ---------- */
+  header.topbar{
+    display:flex;align-items:center;gap:14px;
+    padding:14px 22px;border-bottom:1px solid var(--border);
+    position:sticky;top:0;background:rgba(14,17,23,.92);backdrop-filter:blur(8px);z-index:20;
+  }
+  .brand{display:flex;align-items:center;gap:11px}
+  .glyph{width:30px;height:30px;flex:0 0 auto}
+  .wordmark{font-family:'Space Grotesk';font-weight:700;letter-spacing:.14em;font-size:15px}
+  .wordmark small{display:block;font-family:'Inter';font-weight:500;letter-spacing:.02em;
+    font-size:10.5px;color:var(--faint);letter-spacing:.04em;text-transform:uppercase;margin-top:1px}
+  .spacer{flex:1}
+  .who{font-size:12px;color:var(--muted);text-align:right;line-height:1.35}
+  .who b{color:var(--text);font-weight:600}
+
+  .btn{
+    border:1px solid var(--border);background:var(--panel-2);color:var(--text);
+    padding:8px 14px;border-radius:8px;font-size:13px;font-weight:500;
+    transition:border-color .15s,background .15s,opacity .15s;
+  }
+  .btn:hover{border-color:var(--accent-dim)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.primary{background:var(--accent);color:#06201E;border-color:transparent;font-weight:600}
+  .btn.primary:hover{background:#63ded2}
+  .btn.danger{background:var(--danger);color:#fff;border-color:transparent;font-weight:600}
+  .btn.danger:hover{background:#f05a5e}
+  .btn.ghost{background:transparent}
+
+  main{max-width:1280px;margin:0 auto;padding:26px 22px 80px}
+
+  /* ---------- sign-in screen ---------- */
+  .hero{max-width:620px;margin:9vh auto 0;text-align:center;padding:0 20px}
+  .hero .glyph-lg{width:74px;height:74px;margin:0 auto 26px;display:block}
+  .hero h1{font-family:'Space Grotesk';font-weight:700;font-size:32px;line-height:1.12;margin:0 0 14px}
+  .hero p{color:var(--muted);font-size:15px;margin:0 auto 30px;max-width:480px}
+  .hero .btn{padding:12px 22px;font-size:14px}
+  .req{margin-top:34px;text-align:left;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:18px 20px}
+  .req h3{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:0 0 12px;font-weight:600}
+  .req ul{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+  .req li{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted)}
+  .req li code{font-family:var(--mono);color:var(--accent);font-size:12px}
+  .dot-tick{color:var(--accent);flex:0 0 auto;margin-top:1px}
+
+  /* ---------- controls ---------- */
+  .controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;margin-bottom:20px}
+  .tabset{display:flex;gap:4px;background:var(--panel);border:1px solid var(--border);
+    border-radius:9px;padding:4px}
+  .tab{border:none;background:transparent;color:var(--muted);padding:8px 16px;border-radius:6px;
+    font-size:13px;font-weight:600}
+  .tab.active{background:var(--panel-2);color:var(--text)}
+  .tab .cnt{margin-left:7px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .tab.active .cnt{color:var(--accent)}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .field .row{display:flex;align-items:center;gap:10px}
+  input[type=range]{accent-color:var(--accent);width:150px}
+  .thresh-val{font-family:var(--mono);font-size:13px;color:var(--text);min-width:62px}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+  .chk input{accent-color:var(--accent);width:15px;height:15px}
+
+  /* ---------- summary cards ---------- */
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+  .card .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .card .v{font-family:'Space Grotesk';font-weight:700;font-size:26px;margin-top:6px;letter-spacing:-.01em}
+  .card.warn .v{color:var(--warn)} .card.danger .v{color:var(--danger)} .card.accent .v{color:var(--accent)}
+
+  /* ---------- action bar ---------- */
+  .actionbar{display:flex;align-items:center;gap:12px;margin-bottom:12px;min-height:36px}
+  .actionbar .sel{font-size:13px;color:var(--muted)}
+  .actionbar .sel b{color:var(--text)}
+
+  /* ---------- table ---------- */
+  .tablewrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--panel)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{
+    text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);
+    font-weight:600;padding:11px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);
+    white-space:nowrap;position:sticky;top:0
+  }
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr{transition:background .12s}
+  tbody tr:hover{background:var(--panel-2)}
+  tbody tr.picked{background:rgba(229,72,77,.07)}
+  .uname{font-weight:600}
+  .upn{color:var(--muted);font-family:var(--mono);font-size:11.5px;margin-top:1px}
+  .pill{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;letter-spacing:.03em}
+  .pill.member{background:rgba(77,208,196,.12);color:var(--accent)}
+  .pill.guest{background:rgba(224,165,0,.13);color:var(--warn)}
+  .pill.off{background:rgba(139,152,165,.12);color:var(--muted)}
+  td.num{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+  td.days{font-family:var(--mono);font-weight:500}
+  .never{color:var(--danger)}
+  /* inactivity decay bar — encodes days past threshold */
+  .decay{position:relative;height:5px;width:84px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden}
+  .decay i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,var(--warn),var(--danger))}
+  input.rowchk{accent-color:var(--danger);width:15px;height:15px}
+
+  .empty{padding:60px 20px;text-align:center;color:var(--muted)}
+  .empty .big{font-family:'Space Grotesk';font-size:18px;color:var(--text);margin-bottom:6px}
+
+  /* ---------- modal ---------- */
+  .scrim{position:fixed;inset:0;background:rgba(4,6,9,.72);backdrop-filter:blur(3px);
+    display:none;align-items:center;justify-content:center;z-index:60;padding:20px}
+  .scrim.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    width:100%;max-width:520px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  .modal h2{font-family:'Space Grotesk';font-size:19px;margin:0 0 10px;display:flex;align-items:center;gap:10px}
+  .modal p{color:var(--muted);font-size:13.5px;margin:0 0 14px}
+  .modal .warnbox{background:rgba(229,72,77,.08);border:1px solid var(--danger-dim);border-radius:8px;
+    padding:12px 14px;font-size:12.5px;color:#f3a9ab;margin-bottom:16px}
+  .modal input.confirm{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:14px;margin-bottom:16px}
+  .modal input.confirm:focus{outline:none;border-color:var(--danger)}
+  .modal .foot{display:flex;justify-content:flex-end;gap:10px}
+  .prog{margin-top:4px}
+  .progbar{height:7px;background:var(--border);border-radius:4px;overflow:hidden;margin:10px 0}
+  .progbar i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
+  .reslog{font-family:var(--mono);font-size:11.5px;max-height:160px;overflow:auto;color:var(--muted);
+    background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px}
+  .reslog .ok{color:var(--ok)} .reslog .err{color:var(--danger)}
+
+  /* ---------- settings popover ---------- */
+  .settings{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:18px 20px;margin-bottom:18px}
+  .settings h3{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin:0 0 14px;font-weight:600}
+  .settings .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .settings .f label{font-size:11px;color:var(--muted);display:block;margin-bottom:5px}
+  .settings .f input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:8px 10px;font-family:var(--mono);font-size:12px}
+  .settings .note{font-size:12px;color:var(--faint);margin-top:14px;line-height:1.5}
+  .settings .acts{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel-2);
+    border:1px solid var(--border);border-radius:9px;padding:11px 18px;font-size:13px;z-index:80;
+    box-shadow:0 12px 30px rgba(0,0,0,.4);display:none;max-width:90vw}
+  .toast.show{display:block}
+  .toast.err{border-color:var(--danger-dim);color:#f3a9ab}
+
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--border);
+    border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .loadrow{padding:50px;text-align:center;color:var(--muted)}
+
+  .hide{display:none!important}
+  @media (max-width:760px){
+    .cards{grid-template-columns:repeat(2,1fr)}
+    .settings .grid{grid-template-columns:1fr}
+    thead th.opt,tbody td.opt{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- glyph: a fading concentric "pulse" = decaying sign-in signal -->
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="glyph" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="3.4" fill="#4DD0C4"/>
+    <circle cx="16" cy="16" r="7.5" fill="none" stroke="#4DD0C4" stroke-width="1.7" opacity=".65"/>
+    <circle cx="16" cy="16" r="11.5" fill="none" stroke="#E0A500" stroke-width="1.5" opacity=".4" stroke-dasharray="3 4"/>
+    <circle cx="16" cy="16" r="15" fill="none" stroke="#E5484D" stroke-width="1.3" opacity=".22" stroke-dasharray="2 5"/>
+  </symbol>
+</defs></svg>
+
+<header class="topbar hide" id="topbar">
+  <div class="brand">
+    <svg class="glyph"><use href="#glyph"/></svg>
+    <div class="wordmark">TENANT GUARD<small>Entra security &amp; compliance console</small></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="who" id="whoami"></div>
+  <button class="btn ghost" id="btnSettings">Settings</button>
+  <button class="btn ghost" id="btnSignout">Sign out</button>
+</header>
+
+<!-- ============ SIGN IN ============ -->
+<section id="signin">
+  <div class="hero">
+    <svg class="glyph-lg"><use href="#glyph"/></svg>
+    <h1>Find &amp; clear inactive accounts<br>across your Entra tenant</h1>
+    <p>Tenant Guard surfaces members and guests with no interactive <em>or</em> non-interactive sign-in beyond your chosen window, and lets an administrator remove them — directly against Microsoft Graph, with no backend.</p>
+    <button class="btn primary" id="btnSignin">Sign in with Microsoft</button>
+    <div class="req">
+      <h3>What this requests (delegated, admin-consented)</h3>
+      <ul>
+        <li><span class="dot-tick">●</span><div><code>User.Read.All</code> &amp; <code>AuditLog.Read.All</code> — read users and their sign-in activity</div></li>
+        <li><span class="dot-tick">●</span><div><code>Directory.Read.All</code> — read tenant license state (required for sign-in activity)</div></li>
+        <li><span class="dot-tick">●</span><div><code>User.ReadWrite.All</code> — delete selected accounts (soft-delete, recoverable 30 days)</div></li>
+        <li><span class="dot-tick">●</span><div>Needs an <b>Entra ID P1/P2</b> license in the tenant and a signed-in admin (User Administrator or Global Administrator to delete).</div></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ APP ============ -->
+<main id="app" class="hide">
+
+  <div class="settings hide" id="settingsPanel">
+    <h3>Configuration</h3>
+    <div class="grid">
+      <div class="f">
+        <label>Application (client) ID — multi-tenant SPA</label>
+        <input id="cfgClient" placeholder="00000000-0000-0000-0000-000000000000" />
+      </div>
+      <div class="f">
+        <label>Authority</label>
+        <input id="cfgAuthority" value="https://login.microsoftonline.com/organizations" />
+      </div>
+    </div>
+    <div class="acts">
+      <button class="btn primary" id="cfgSave">Save &amp; reload</button>
+      <button class="btn" id="cfgConsent">Grant admin consent (one-time)</button>
+      <span style="flex:1"></span>
+      <span class="thresh-val" style="color:var(--faint);font-size:11px" id="redirNote"></span>
+    </div>
+    <div class="note">
+      The default client ID is baked into this page. An organization that prefers its own app registration can paste its
+      own <b>multi-tenant SPA</b> client ID here. "Grant admin consent" sends a Global Administrator through the consent
+      screen, which provisions the enterprise application (service principal) in the tenant automatically — no app needs
+      to be created by hand.
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="tabset">
+      <button class="tab active" data-tab="member">Dormant members <span class="cnt" id="cntMember">—</span></button>
+      <button class="tab" data-tab="guest">Dormant guests <span class="cnt" id="cntGuest">—</span></button>
+    </div>
+    <div class="field">
+      <label>Inactive for at least</label>
+      <div class="row">
+        <input type="range" id="thresh" min="30" max="365" step="5" value="90" />
+        <span class="thresh-val mono" id="threshVal">90 days</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Options</label>
+      <div class="row" style="gap:18px">
+        <label class="chk"><input type="checkbox" id="optNever" checked /> include never-signed-in</label>
+        <label class="chk"><input type="checkbox" id="optDisabled" checked /> include disabled accounts</label>
+      </div>
+    </div>
+    <span style="flex:1"></span>
+    <button class="btn" id="btnRefresh">↻ Reload directory</button>
+    <button class="btn" id="btnCsv">Export CSV</button>
+  </div>
+
+  <div class="cards" id="cards">
+    <div class="card"><div class="k">Users scanned</div><div class="v" id="cScanned">—</div></div>
+    <div class="card warn"><div class="k">Dormant members</div><div class="v" id="cMember">—</div></div>
+    <div class="card warn"><div class="k">Dormant guests</div><div class="v" id="cGuest">—</div></div>
+    <div class="card accent"><div class="k">Premium / license</div><div class="v" id="cLic" style="font-size:18px;padding-top:6px">—</div></div>
+  </div>
+
+  <div class="actionbar">
+    <label class="chk"><input type="checkbox" id="selAll" /> Select all (view)</label>
+    <span class="sel" id="selInfo"></span>
+    <span style="flex:1"></span>
+    <button class="btn danger" id="btnDelete" disabled>Delete selected</button>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:34px"></th>
+          <th>User</th>
+          <th>Type</th>
+          <th class="opt">Last interactive</th>
+          <th class="opt">Last non-interactive</th>
+          <th>Last activity</th>
+          <th>Inactive</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="7" class="loadrow"><span class="spin"></span> Loading directory…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- ============ DELETE MODAL ============ -->
+<div class="scrim" id="scrim">
+  <div class="modal">
+    <div id="mConfirm">
+      <h2>⚠ Delete <span id="mCount">0</span> account(s)</h2>
+      <p>These accounts will be deleted from Entra ID via Microsoft Graph.</p>
+      <div class="warnbox">
+        Deletion is a <b>soft-delete</b>: accounts are recoverable for 30 days from <span class="mono">Deleted users</span>,
+        after which removal is permanent. Your own account is automatically excluded.
+      </div>
+      <p>Type <b class="mono" style="color:var(--danger)">DELETE</b> to confirm.</p>
+      <input class="confirm mono" id="confirmInput" placeholder="DELETE" autocomplete="off" />
+      <div class="foot">
+        <button class="btn ghost" id="mCancel">Cancel</button>
+        <button class="btn danger" id="mGo" disabled>Delete accounts</button>
+      </div>
+    </div>
+    <div id="mRunning" class="hide">
+      <h2>Deleting…</h2>
+      <div class="prog">
+        <div class="progbar"><i id="progFill"></i></div>
+        <div class="reslog" id="resLog"></div>
+      </div>
+      <div class="foot" style="margin-top:16px">
+        <button class="btn primary hide" id="mDone">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
+<script>
+/* ============================================================
+   CONFIG  — set DEFAULT_CLIENT_ID to your multi-tenant SPA app.
+   Tenant Guard. Orgs can override it in Settings without editing this file.
+   ============================================================ */
+const DEFAULT_CLIENT_ID = "3a5eec25-4bcb-4d2f-98b2-9629f8e2178d";
+
+const GRAPH = "https://graph.microsoft.com/v1.0";
+const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All"];
+const WRITE_SCOPES = ["User.ReadWrite.All"];
+const ALL_SCOPES   = [...READ_SCOPES, ...WRITE_SCOPES];
+
+// redirect URI = this page, no query/hash. Register this exact value as a SPA platform.
+const REDIRECT = location.origin + location.pathname;
+
+const LS_CLIENT = "tenantguard.clientId", LS_AUTH = "tenantguard.authority";
+function clientId(){ return localStorage.getItem(LS_CLIENT) || DEFAULT_CLIENT_ID; }
+function authority(){ return localStorage.getItem(LS_AUTH) || "https://login.microsoftonline.com/organizations"; }
+
+let msalApp, account = null;
+let allUsers = [];          // raw graph users
+let view = [];              // filtered rows for current tab
+let tab = "member";
+let licensePremium = null;
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const el = (id) => document.getElementById(id);
+function toast(msg, isErr){ const t=el("toast"); t.textContent=msg; t.className="toast show"+(isErr?" err":""); clearTimeout(t._t); t._t=setTimeout(()=>t.className="toast",4200); }
+function fmtDate(d){ if(!d) return "—"; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return "—"; return dt.toISOString().slice(0,10); }
+function daysSince(d){ if(!d) return null; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return null; return Math.floor((Date.now()-dt)/864e5); }
+
+/* most-recent of interactive / non-interactive / successful sign-in */
+function lastActivity(u){
+  const a = u.signInActivity || {};
+  const cands = [a.lastSignInDateTime, a.lastNonInteractiveSignInDateTime, a.lastSuccessfulSignInDateTime]
+    .map(x => { const d=new Date(x); return (x && !isNaN(d) && d.getFullYear()>=2000) ? d.getTime() : null; })
+    .filter(Boolean);
+  return cands.length ? new Date(Math.max(...cands)).toISOString() : null;
+}
+
+/* ============================================================
+   AUTH
+   ============================================================ */
+async function initAuth(){
+  msalApp = new msal.PublicClientApplication({
+    auth: { clientId: clientId(), authority: authority(), redirectUri: REDIRECT },
+    cache:{ cacheLocation:"sessionStorage", storeAuthStateInCookie:false }
+  });
+  await msalApp.initialize();
+  const resp = await msalApp.handleRedirectPromise();
+  if(resp && resp.account) account = resp.account;
+  else { const accs = msalApp.getAllAccounts(); if(accs.length) account = accs[0]; }
+  if(account){ enterApp(); }
+}
+
+el("btnSignin").onclick = () => {
+  msalApp.loginRedirect({ scopes: ALL_SCOPES, redirectUri: REDIRECT });
+};
+el("btnSignout").onclick = () => msalApp.logoutRedirect({ postLogoutRedirectUri: REDIRECT });
+
+async function token(scopes){
+  try{
+    const r = await msalApp.acquireTokenSilent({ scopes, account });
+    return r.accessToken;
+  }catch(e){
+    const r = await msalApp.acquireTokenRedirect({ scopes, account });
+    return r && r.accessToken;
+  }
+}
+
+el("cfgConsent").onclick = () => {
+  msalApp.loginRedirect({ scopes: ALL_SCOPES, redirectUri: REDIRECT, prompt: "admin_consent" });
+};
+
+function enterApp(){
+  el("signin").classList.add("hide");
+  el("topbar").classList.remove("hide");
+  el("app").classList.remove("hide");
+  el("whoami").innerHTML = `<b>${account.name||account.username}</b><br>${account.username}`;
+  el("redirNote").textContent = "Redirect URI: " + REDIRECT;
+  el("cfgClient").value = clientId();
+  el("cfgAuthority").value = authority();
+  loadDirectory();
+}
+
+/* ============================================================
+   GRAPH — fetch all users with signInActivity (paged, 500/page)
+   ============================================================ */
+async function gget(url, tok){
+  const r = await fetch(url, { headers:{ Authorization:"Bearer "+tok, ConsistencyLevel:"eventual" } });
+  if(!r.ok){
+    const body = await r.text();
+    const e = new Error(body); e.status = r.status; e.body = body; throw e;
+  }
+  return r.json();
+}
+
+async function loadDirectory(){
+  el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Reading directory & sign-in activity…</td></tr>`;
+  el("cScanned").textContent="—"; el("cMember").textContent="—"; el("cGuest").textContent="—";
+  try{
+    const tok = await token(READ_SCOPES);
+    if(!tok) return; // redirect in flight
+    const select = "id,displayName,userPrincipalName,userType,accountEnabled,createdDateTime,signInActivity";
+    let url = `${GRAPH}/users?$select=${select}&$top=500&$count=true`;
+    allUsers = [];
+    while(url){
+      const page = await gget(url, tok);
+      allUsers.push(...(page.value||[]));
+      url = page["@odata.nextLink"] || null;
+      el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Loaded ${allUsers.length} users…</td></tr>`;
+    }
+    licensePremium = true;
+    el("cLic").textContent = "P1 / P2 ✓"; el("cLic").style.color="var(--accent)";
+    el("cScanned").textContent = allUsers.length.toLocaleString();
+    render();
+  }catch(e){
+    handleGraphError(e);
+  }
+}
+
+function handleGraphError(e){
+  let msg = "Graph request failed.";
+  if(/RequestFromNonPremiumTenant/i.test(e.body||"")){
+    msg = "This tenant has no Entra ID P1/P2 license — sign-in activity is unavailable.";
+    el("cLic").textContent="none ✗"; el("cLic").style.color="var(--danger)";
+  } else if(e.status===403){ msg="403 — admin consent not granted, or you lack the directory role. Use Settings → Grant admin consent."; }
+  else if(e.status===401){ msg="401 — token rejected. Try signing out and back in."; }
+  else if(e.status===429){ msg="429 — Graph throttling. Wait a moment and reload."; }
+  el("tbody").innerHTML = `<tr><td colspan="7" class="empty"><div class="big">Couldn't load</div>${msg}</td></tr>`;
+  toast(msg, true);
+}
+
+/* ============================================================
+   FILTER + RENDER
+   ============================================================ */
+function computeDormant(){
+  const thr = +el("thresh").value;
+  const includeNever = el("optNever").checked;
+  const includeDisabled = el("optDisabled").checked;
+  const out = [];
+  for(const u of allUsers){
+    if(u.id === account.localAccountId) continue;            // never list self
+    if(!includeDisabled && u.accountEnabled === false) continue;
+    const la = lastActivity(u);
+    let inactive;
+    if(la){ inactive = daysSince(la); }
+    else {
+      if(!includeNever) continue;                            // never signed in, excluded
+      inactive = daysSince(u.createdDateTime);               // age as proxy
+      if(inactive===null) continue;
+    }
+    if(inactive >= thr){
+      out.push({ ...u, _last:la, _inactive:inactive, _never:!la });
+    }
+  }
+  return out;
+}
+
+function render(){
+  const dorm = computeDormant();
+  const members = dorm.filter(u => (u.userType||"Member")!=="Guest");
+  const guests  = dorm.filter(u => (u.userType||"Member")==="Guest");
+  el("cntMember").textContent = members.length;
+  el("cntGuest").textContent  = guests.length;
+  el("cMember").textContent   = members.length.toLocaleString();
+  el("cGuest").textContent    = guests.length.toLocaleString();
+
+  view = (tab==="member"?members:guests).sort((a,b)=> b._inactive - a._inactive);
+  const thr = +el("thresh").value;
+  const tb = el("tbody");
+  if(!view.length){
+    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="big">Nothing dormant here</div>No ${tab==="member"?"members":"guests"} inactive beyond ${thr} days.</td></tr>`;
+    el("selAll").checked=false; updateSelection(); return;
+  }
+  tb.innerHTML = view.map(u=>{
+    const a = u.signInActivity||{};
+    const over = Math.min(100, Math.round(((u._inactive - thr)/thr)*100)+18);
+    const daysCell = u._never
+      ? `<span class="never">never${u.accountEnabled===false?" · off":""}</span>`
+      : `${u._inactive}d`;
+    const typePill = (u.userType==="Guest")
+      ? `<span class="pill guest">Guest</span>`
+      : `<span class="pill member">Member</span>`;
+    const offPill = u.accountEnabled===false ? ` <span class="pill off">disabled</span>` : "";
+    return `<tr data-id="${u.id}">
+      <td><input type="checkbox" class="rowchk" data-id="${u.id}"></td>
+      <td><div class="uname">${escapeHtml(u.displayName||"—")}</div><div class="upn">${escapeHtml(u.userPrincipalName||"")}</div></td>
+      <td>${typePill}${offPill}</td>
+      <td class="num opt">${fmtDate(a.lastSignInDateTime)}</td>
+      <td class="num opt">${fmtDate(a.lastNonInteractiveSignInDateTime)}</td>
+      <td class="num">${fmtDate(u._last)}</td>
+      <td class="days">${daysCell}<div class="decay"><i style="width:${over}%"></i></div></td>
+    </tr>`;
+  }).join("");
+  tb.querySelectorAll(".rowchk").forEach(c=> c.onchange=onRowToggle);
+  el("selAll").checked=false; updateSelection();
+}
+
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+
+/* ---------- selection ---------- */
+function onRowToggle(e){
+  e.target.closest("tr").classList.toggle("picked", e.target.checked);
+  updateSelection();
+}
+function selectedIds(){ return [...document.querySelectorAll(".rowchk:checked")].map(c=>c.dataset.id); }
+function updateSelection(){
+  const n = selectedIds().length;
+  el("selInfo").innerHTML = n ? `<b>${n}</b> selected` : "";
+  el("btnDelete").disabled = n===0;
+}
+el("selAll").onchange = e=>{
+  document.querySelectorAll(".rowchk").forEach(c=>{ c.checked=e.target.checked; c.closest("tr").classList.toggle("picked",e.target.checked); });
+  updateSelection();
+};
+
+/* ---------- controls wiring ---------- */
+el("thresh").oninput = ()=>{ el("threshVal").textContent = el("thresh").value+" days"; };
+el("thresh").onchange = render;
+el("optNever").onchange = render;
+el("optDisabled").onchange = render;
+el("btnRefresh").onclick = loadDirectory;
+document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  t.classList.add("active"); tab=t.dataset.tab; render();
+});
+el("btnSettings").onclick = ()=> el("settingsPanel").classList.toggle("hide");
+el("cfgSave").onclick = ()=>{
+  localStorage.setItem(LS_CLIENT, el("cfgClient").value.trim());
+  localStorage.setItem(LS_AUTH,  el("cfgAuthority").value.trim());
+  location.reload();
+};
+
+/* ---------- CSV ---------- */
+el("btnCsv").onclick = ()=>{
+  if(!view.length) return toast("Nothing to export.");
+  const head = ["displayName","userPrincipalName","userType","accountEnabled","lastInteractive","lastNonInteractive","lastSuccessful","lastActivity","daysInactive","id"];
+  const rows = view.map(u=>{ const a=u.signInActivity||{}; return [
+    u.displayName, u.userPrincipalName, u.userType||"Member", u.accountEnabled,
+    a.lastSignInDateTime||"", a.lastNonInteractiveSignInDateTime||"", a.lastSuccessfulSignInDateTime||"",
+    u._last||"never", u._never?"never":u._inactive, u.id
+  ].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","); });
+  const blob = new Blob([head.join(",")+"\n"+rows.join("\n")], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=`tenantguard-${tab}-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  URL.revokeObjectURL(url);
+};
+
+/* ============================================================
+   DELETE  (Graph $batch, chunks of 20, 429-aware)
+   ============================================================ */
+let pendingDelete = [];
+el("btnDelete").onclick = ()=>{
+  pendingDelete = selectedIds();
+  el("mCount").textContent = pendingDelete.length;
+  el("mConfirm").classList.remove("hide");
+  el("mRunning").classList.add("hide");
+  el("confirmInput").value=""; el("mGo").disabled=true;
+  el("scrim").classList.add("show");
+  el("confirmInput").focus();
+};
+el("confirmInput").oninput = e=>{ el("mGo").disabled = e.target.value.trim().toUpperCase()!=="DELETE"; };
+el("mCancel").onclick = ()=> el("scrim").classList.remove("show");
+
+el("mGo").onclick = async ()=>{
+  el("mConfirm").classList.add("hide");
+  el("mRunning").classList.remove("hide");
+  const log = el("resLog"); log.innerHTML=""; el("progFill").style.width="0%";
+  const ids = pendingDelete.slice();
+  const tok = await token(WRITE_SCOPES);
+  let done=0, ok=0, fail=0;
+  const byId = Object.fromEntries(allUsers.map(u=>[u.id,u]));
+
+  for(let i=0;i<ids.length;i+=20){
+    const chunk = ids.slice(i,i+20);
+    const reqs = chunk.map((id,j)=>({ id:String(j), method:"DELETE", url:`/users/${id}` }));
+    let r;
+    try{
+      r = await fetch(`${GRAPH}/$batch`, {
+        method:"POST",
+        headers:{ Authorization:"Bearer "+tok, "Content-Type":"application/json" },
+        body: JSON.stringify({ requests:reqs })
+      });
+    }catch(err){ chunk.forEach(id=>logLine(log,byId[id],false,"network")); fail+=chunk.length; done+=chunk.length; tickProg(done,ids.length); continue; }
+
+    const data = await r.json();
+    for(const res of (data.responses||[])){
+      const id = chunk[+res.id];
+      if(res.status>=200 && res.status<300){ ok++; logLine(log,byId[id],true); }
+      else if(res.status===429){
+        const wait = (res.headers && (res.headers["Retry-After"]||res.headers["retry-after"])) || 3;
+        logLine(log,byId[id],false,`throttled, retrying in ${wait}s`);
+        await sleep(wait*1000);
+        const retry = await retryDelete(id, tok);
+        if(retry){ ok++; logLine(log,byId[id],true," (retried)"); } else { fail++; }
+      }
+      else { fail++; logLine(log,byId[id],false,`HTTP ${res.status}`); }
+      done++; tickProg(done,ids.length);
+    }
+  }
+  // drop deleted from local cache
+  const okSet = new Set();
+  log.querySelectorAll(".ok").forEach(()=>{}); // ids tracked below
+  allUsers = allUsers.filter(u=> !ids.includes(u.id) ? true : false); // optimistic: re-fetch is safer
+  logLine(log, null, true, `\nFinished — ${ok} deleted, ${fail} failed.`);
+  el("mDone").classList.remove("hide");
+  el("mDone").onclick = ()=>{ el("scrim").classList.remove("show"); loadDirectory(); };
+};
+async function retryDelete(id, tok){
+  const r = await fetch(`${GRAPH}/users/${id}`, { method:"DELETE", headers:{ Authorization:"Bearer "+tok } });
+  return r.status>=200 && r.status<300;
+}
+function tickProg(done,total){ el("progFill").style.width = Math.round(done/total*100)+"%"; }
+function logLine(log,u,ok,extra){
+  const name = u ? (u.displayName||u.userPrincipalName) : "";
+  const cls = ok?"ok":"err";
+  log.innerHTML += `<div class="${cls}">${ok?"✓":"✗"} ${escapeHtml(name)}${extra?(" — "+escapeHtml(String(extra))):""}</div>`;
+  log.scrollTop = log.scrollHeight;
+}
+const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ---------- boot ---------- */
+if(DEFAULT_CLIENT_ID==="REPLACE_WITH_YOUR_CLIENT_ID" && !localStorage.getItem(LS_CLIENT)){
+  // first-run: let admin paste a client id from the sign-in screen via Settings after a placeholder login
+  el("btnSignin").onclick = ()=> { el("topbar").classList.remove("hide"); el("signin").classList.add("hide"); el("app").classList.remove("hide"); el("settingsPanel").classList.remove("hide"); el("redirNote").textContent="Redirect URI: "+REDIRECT; toast("Paste your client ID, then Save & reload.", false); };
+} else {
+  initAuth().catch(e=>{ console.error(e); toast("Auth init failed: "+e.message, true); });
+}
+</script>
+</body>
+</html>
