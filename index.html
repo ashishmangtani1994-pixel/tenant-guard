@@ -25,7 +25,6 @@
   a{color:var(--accent)}
   button{font-family:inherit;cursor:pointer}
   .mono{font-family:var(--mono)}
-
   /* ---------- shell ---------- */
   header.topbar{
     display:flex;align-items:center;gap:14px;
@@ -40,7 +39,6 @@
   .spacer{flex:1}
   .who{font-size:12px;color:var(--muted);text-align:right;line-height:1.35}
   .who b{color:var(--text);font-weight:600}
-
   .btn{
     border:1px solid var(--border);background:var(--panel-2);color:var(--text);
     padding:8px 14px;border-radius:8px;font-size:13px;font-weight:500;
@@ -53,9 +51,7 @@
   .btn.danger{background:var(--danger);color:#fff;border-color:transparent;font-weight:600}
   .btn.danger:hover{background:#f05a5e}
   .btn.ghost{background:transparent}
-
   main{max-width:1280px;margin:0 auto;padding:26px 22px 80px}
-
   /* ---------- sign-in screen ---------- */
   .hero{max-width:620px;margin:9vh auto 0;text-align:center;padding:0 20px}
   .hero .glyph-lg{width:74px;height:74px;margin:0 auto 26px;display:block}
@@ -69,7 +65,6 @@
   .req li{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted)}
   .req li code{font-family:var(--mono);color:var(--accent);font-size:12px}
   .dot-tick{color:var(--accent);flex:0 0 auto;margin-top:1px}
-
   /* ---------- controls ---------- */
   .controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;margin-bottom:20px}
   .tabset{display:flex;gap:4px;background:var(--panel);border:1px solid var(--border);
@@ -86,19 +81,29 @@
   .thresh-val{font-family:var(--mono);font-size:13px;color:var(--text);min-width:62px}
   .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
   .chk input{accent-color:var(--accent);width:15px;height:15px}
-
+  /* ---------- filter bar ---------- */
+  .filterbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;margin-bottom:16px;
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px}
+  .filterbar .field input[type=text],
+  .filterbar .field select{
+    background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:8px 10px;font-size:13px;min-width:150px;
+  }
+  .filterbar .field input[type=text]:focus,
+  .filterbar .field select:focus{outline:none;border-color:var(--accent-dim)}
+  .filterbar .grow{flex:1}
+  .filterbar .count{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+  .filterbar .count b{color:var(--text)}
   /* ---------- summary cards ---------- */
   .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
   .card .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:600}
   .card .v{font-family:'Space Grotesk';font-weight:700;font-size:26px;margin-top:6px;letter-spacing:-.01em}
   .card.warn .v{color:var(--warn)} .card.danger .v{color:var(--danger)} .card.accent .v{color:var(--accent)}
-
   /* ---------- action bar ---------- */
   .actionbar{display:flex;align-items:center;gap:12px;margin-bottom:12px;min-height:36px}
   .actionbar .sel{font-size:13px;color:var(--muted)}
   .actionbar .sel b{color:var(--text)}
-
   /* ---------- table ---------- */
   .tablewrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--panel)}
   table{width:100%;border-collapse:collapse;font-size:13px}
@@ -118,6 +123,8 @@
   .pill.member{background:rgba(77,208,196,.12);color:var(--accent)}
   .pill.guest{background:rgba(224,165,0,.13);color:var(--warn)}
   .pill.off{background:rgba(139,152,165,.12);color:var(--muted)}
+  .pill.lic-yes{background:rgba(63,185,80,.14);color:var(--ok)}
+  .pill.lic-no{background:rgba(139,152,165,.12);color:var(--muted)}
   td.num{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
   td.days{font-family:var(--mono);font-weight:500}
   .never{color:var(--danger)}
@@ -125,10 +132,8 @@
   .decay{position:relative;height:5px;width:84px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden}
   .decay i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,var(--warn),var(--danger))}
   input.rowchk{accent-color:var(--danger);width:15px;height:15px}
-
   .empty{padding:60px 20px;text-align:center;color:var(--muted)}
   .empty .big{font-family:'Space Grotesk';font-size:18px;color:var(--text);margin-bottom:6px}
-
   /* ---------- modal ---------- */
   .scrim{position:fixed;inset:0;background:rgba(4,6,9,.72);backdrop-filter:blur(3px);
     display:none;align-items:center;justify-content:center;z-index:60;padding:20px}
@@ -149,7 +154,6 @@
   .reslog{font-family:var(--mono);font-size:11.5px;max-height:160px;overflow:auto;color:var(--muted);
     background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px}
   .reslog .ok{color:var(--ok)} .reslog .err{color:var(--danger)}
-
   /* ---------- settings popover ---------- */
   .settings{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
     padding:18px 20px;margin-bottom:18px}
@@ -160,18 +164,15 @@
     border-radius:7px;padding:8px 10px;font-family:var(--mono);font-size:12px}
   .settings .note{font-size:12px;color:var(--faint);margin-top:14px;line-height:1.5}
   .settings .acts{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
-
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel-2);
     border:1px solid var(--border);border-radius:9px;padding:11px 18px;font-size:13px;z-index:80;
     box-shadow:0 12px 30px rgba(0,0,0,.4);display:none;max-width:90vw}
   .toast.show{display:block}
   .toast.err{border-color:var(--danger-dim);color:#f3a9ab}
-
   .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--border);
     border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
   @keyframes sp{to{transform:rotate(360deg)}}
   .loadrow{padding:50px;text-align:center;color:var(--muted)}
-
   .hide{display:none!important}
   @media (max-width:760px){
     .cards{grid-template-columns:repeat(2,1fr)}
@@ -182,7 +183,6 @@
 </style>
 </head>
 <body>
-
 <!-- glyph: a fading concentric "pulse" = decaying sign-in signal -->
 <svg width="0" height="0" style="position:absolute"><defs>
   <symbol id="glyph" viewBox="0 0 32 32">
@@ -204,7 +204,7 @@
   <button class="btn ghost" id="btnSignout">Sign out</button>
 </header>
 
-<!-- ============ SIGN IN ============ -->
+<!-- ==== SIGN IN ======== -->
 <section id="signin">
   <div class="hero">
     <svg class="glyph-lg"><use href="#glyph"/></svg>
@@ -225,9 +225,8 @@
   </div>
 </section>
 
-<!-- ============ APP ============ -->
+<!-- ==== APP ======== -->
 <main id="app" class="hide">
-
   <div class="settings hide" id="settingsPanel">
     <h3>Configuration</h3>
     <div class="grid">
@@ -279,6 +278,49 @@
     <button class="btn" id="btnCsv">Export CSV</button>
   </div>
 
+  <!-- ==== COLUMN FILTERS ======== -->
+  <div class="filterbar" id="filterbar">
+    <div class="field">
+      <label>Search</label>
+      <input type="text" id="fSearch" placeholder="name or UPN…" autocomplete="off" />
+    </div>
+    <div class="field" id="wrapType">
+      <label>Type</label>
+      <select id="fType">
+        <option value="">All</option>
+        <option value="Member">Member</option>
+        <option value="Guest">Guest</option>
+      </select>
+    </div>
+    <div class="field" id="wrapLicense">
+      <label>License assigned</label>
+      <select id="fLicense">
+        <option value="">All</option>
+        <option value="yes">Yes — licensed</option>
+        <option value="no">No — unlicensed</option>
+      </select>
+    </div>
+    <div class="field hide" id="wrapOs">
+      <label>Operating system</label>
+      <select id="fOs"><option value="">All</option></select>
+    </div>
+    <div class="field hide" id="wrapOwn">
+      <label>Ownership</label>
+      <select id="fOwn"><option value="">All</option></select>
+    </div>
+    <div class="field" id="wrapStatus">
+      <label>Status</label>
+      <select id="fStatus">
+        <option value="">All</option>
+        <option value="enabled">Enabled</option>
+        <option value="disabled">Disabled</option>
+      </select>
+    </div>
+    <span class="grow"></span>
+    <span class="count" id="filterCount"></span>
+    <button class="btn ghost" id="fClear">Clear filters</button>
+  </div>
+
   <div class="cards" id="cards">
     <div class="card"><div class="k">Users scanned</div><div class="v" id="cScanned">—</div></div>
     <div class="card warn"><div class="k">Dormant members</div><div class="v" id="cMember">—</div></div>
@@ -301,6 +343,7 @@
           <th style="width:34px"></th>
           <th>User</th>
           <th>Type</th>
+          <th>License</th>
           <th class="opt">Last interactive</th>
           <th class="opt">Last non-interactive</th>
           <th>Last activity</th>
@@ -308,13 +351,13 @@
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="7" class="loadrow"><span class="spin"></span> Loading directory…</td></tr>
+        <tr><td colspan="8" class="loadrow"><span class="spin"></span> Loading directory…</td></tr>
       </tbody>
     </table>
   </div>
 </main>
 
-<!-- ============ DELETE MODAL ============ -->
+<!-- ==== DELETE MODAL ======== -->
 <div class="scrim" id="scrim">
   <div class="modal">
     <div id="mConfirm">
@@ -348,12 +391,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
 <script>
-/* ============================================================
+/* ================
    CONFIG  — set DEFAULT_CLIENT_ID to your multi-tenant SPA app.
    Tenant Guard. Orgs can override it in Settings without editing this file.
-   ============================================================ */
+   ================ */
 const DEFAULT_CLIENT_ID = "63aad37d-5338-46cd-9790-2651f0af3233";
-
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All"];
 const WRITE_SCOPES = ["User.ReadWrite.All"];
@@ -366,8 +408,8 @@ const ALL_SCOPES   = [...READ_SCOPES, ...WRITE_SCOPES];
 
 // redirect URI = this page, no query/hash. Register this exact value as a SPA platform.
 const REDIRECT = location.origin + location.pathname;
-
 const LS_CLIENT = "tenantguard.clientId", LS_AUTH = "tenantguard.authority";
+
 function clientId(){ return localStorage.getItem(LS_CLIENT) || DEFAULT_CLIENT_ID; }
 function authority(){ return localStorage.getItem(LS_AUTH) || "https://login.microsoftonline.com/organizations"; }
 
@@ -378,6 +420,7 @@ let devicesLoaded = false;
 let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
+
 function entityType(){ return tab==="device" ? "device" : "user"; }
 
 /* ---------- helpers ---------- */
@@ -386,6 +429,9 @@ const el = (id) => document.getElementById(id);
 function toast(msg, isErr){ const t=el("toast"); t.textContent=msg; t.className="toast show"+(isErr?" err":""); clearTimeout(t._t); t._t=setTimeout(()=>t.className="toast",4200); }
 function fmtDate(d){ if(!d) return "—"; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return "—"; return dt.toISOString().slice(0,10); }
 function daysSince(d){ if(!d) return null; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return null; return Math.floor((Date.now()-dt)/864e5); }
+
+/* a user is "licensed" if Graph returns one or more assignedLicenses entries */
+function hasLicense(u){ return Array.isArray(u.assignedLicenses) && u.assignedLicenses.length > 0; }
 
 /* most-recent of interactive / non-interactive / successful sign-in */
 function lastActivity(u){
@@ -396,9 +442,9 @@ function lastActivity(u){
   return cands.length ? new Date(Math.max(...cands)).toISOString() : null;
 }
 
-/* ============================================================
+/* ================
    AUTH
-   ============================================================ */
+   ================ */
 async function initAuth(){
   msalApp = new msal.PublicClientApplication({
     auth: { clientId: clientId(), authority: authority(), redirectUri: REDIRECT },
@@ -457,9 +503,9 @@ function enterApp(){
   loadDirectory();
 }
 
-/* ============================================================
+/* ================
    GRAPH — fetch all users with signInActivity (paged, 500/page)
-   ============================================================ */
+   ================ */
 async function gget(url, tok){
   const r = await fetch(url, { headers:{ Authorization:"Bearer "+tok, ConsistencyLevel:"eventual" } });
   if(!r.ok){
@@ -470,19 +516,19 @@ async function gget(url, tok){
 }
 
 async function loadDirectory(){
-  el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Reading directory & sign-in activity…</td></tr>`;
+  el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Reading directory & sign-in activity…</td></tr>`;
   el("cScanned").textContent="—"; el("cMember").textContent="—"; el("cGuest").textContent="—";
   try{
     const tok = await token(READ_SCOPES);
     if(!tok) return; // redirect in flight
-    const select = "id,displayName,userPrincipalName,userType,accountEnabled,createdDateTime,signInActivity";
+    const select = "id,displayName,userPrincipalName,userType,accountEnabled,createdDateTime,signInActivity,assignedLicenses";
     let url = `${GRAPH}/users?$select=${select}&$top=500&$count=true`;
     allUsers = [];
     while(url){
       const page = await gget(url, tok);
       allUsers.push(...(page.value||[]));
       url = page["@odata.nextLink"] || null;
-      el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Loaded ${allUsers.length} users…</td></tr>`;
+      el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Loaded ${allUsers.length} users…</td></tr>`;
     }
     licensePremium = true;
     el("cLic").textContent = "P1 / P2 ✓"; el("cLic").style.color="var(--accent)";
@@ -501,15 +547,15 @@ function handleGraphError(e){
   } else if(e.status===403){ msg="403 — admin consent not granted, or you lack the directory role. Use Settings → Grant admin consent."; }
   else if(e.status===401){ msg="401 — token rejected. Try signing out and back in."; }
   else if(e.status===429){ msg="429 — Graph throttling. Wait a moment and reload."; }
-  el("tbody").innerHTML = `<tr><td colspan="7" class="empty"><div class="big">Couldn't load</div>${msg}</td></tr>`;
+  el("tbody").innerHTML = `<tr><td colspan="8" class="empty"><div class="big">Couldn't load</div>${msg}</td></tr>`;
   toast(msg, true);
 }
 
-/* ============================================================
+/* ================
    GRAPH — fetch all devices with approximateLastSignInDateTime
-   ============================================================ */
+   ================ */
 async function loadDevices(){
-  el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Reading registered devices…</td></tr>`;
+  el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Reading registered devices…</td></tr>`;
   el("cDevice").textContent="—";
   try{
     const tok = await token(READ_SCOPES);
@@ -521,18 +567,19 @@ async function loadDevices(){
       const page = await gget(url, tok);
       allDevices.push(...(page.value||[]));
       url = page["@odata.nextLink"] || null;
-      el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Loaded ${allDevices.length} devices…</td></tr>`;
+      el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Loaded ${allDevices.length} devices…</td></tr>`;
     }
     devicesLoaded = true;
+    populateDeviceFilters();
     render();
   }catch(e){
     handleGraphError(e);
   }
 }
 
-/* ============================================================
+/* ================
    FILTER + RENDER
-   ============================================================ */
+   ================ */
 function computeDormant(){
   const thr = +el("thresh").value;
   const includeNever = el("optNever").checked;
@@ -578,10 +625,82 @@ function computeStaleDevices(){
   return out;
 }
 
-const HEAD_USERS  = `<th style="width:34px"></th><th>User</th><th>Type</th><th class="opt">Last interactive</th><th class="opt">Last non-interactive</th><th>Last activity</th><th>Inactive</th>`;
+/* ---------- column filters ---------- */
+/* read the current filter-bar state once per render */
+function filterState(){
+  return {
+    q:    (el("fSearch").value||"").trim().toLowerCase(),
+    type:  el("fType").value,      // "", "Member", "Guest"
+    lic:   el("fLicense").value,   // "", "yes", "no"
+    os:    el("fOs").value,        // "", os name
+    own:   el("fOwn").value,       // "", ownership
+    status:el("fStatus").value     // "", "enabled", "disabled"
+  };
+}
+function matchStatus(enabledFlag, want){
+  if(!want) return true;
+  const enabled = enabledFlag !== false;
+  return want==="enabled" ? enabled : !enabled;
+}
+function applyUserFilters(rows){
+  const f = filterState();
+  return rows.filter(u=>{
+    if(f.q){
+      const hay = ((u.displayName||"")+" "+(u.userPrincipalName||"")).toLowerCase();
+      if(!hay.includes(f.q)) return false;
+    }
+    if(f.type && (u.userType||"Member")!==f.type) return false;
+    if(f.lic){
+      const h = hasLicense(u);
+      if(f.lic==="yes" && !h) return false;
+      if(f.lic==="no"  &&  h) return false;
+    }
+    if(!matchStatus(u.accountEnabled, f.status)) return false;
+    return true;
+  });
+}
+function applyDeviceFilters(rows){
+  const f = filterState();
+  return rows.filter(d=>{
+    if(f.q){
+      const hay = ((d.displayName||"")+" "+(d.operatingSystem||"")+" "+(d.operatingSystemVersion||"")).toLowerCase();
+      if(!hay.includes(f.q)) return false;
+    }
+    if(f.os  && (d.operatingSystem||"")!==f.os)  return false;
+    if(f.own && (d.deviceOwnership||"")!==f.own) return false;
+    if(!matchStatus(d.accountEnabled, f.status)) return false;
+    return true;
+  });
+}
+
+/* build the OS / Ownership dropdown options from loaded devices */
+function populateDeviceFilters(){
+  const osSet = [...new Set(allDevices.map(d=>d.operatingSystem).filter(Boolean))].sort();
+  const ownSet= [...new Set(allDevices.map(d=>d.deviceOwnership).filter(Boolean))].sort();
+  fillSelect("fOs", osSet);
+  fillSelect("fOwn", ownSet);
+}
+function fillSelect(id, values){
+  const sel = el(id); const cur = sel.value;
+  sel.innerHTML = `<option value="">All</option>` + values.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  if(values.includes(cur)) sel.value = cur;
+}
+
+/* show the filter controls that apply to the active tab */
+function syncFilterBar(){
+  const isDevice = tab==="device";
+  el("wrapType").classList.toggle("hide", isDevice);
+  el("wrapLicense").classList.toggle("hide", isDevice);
+  el("wrapOs").classList.toggle("hide", !isDevice);
+  el("wrapOwn").classList.toggle("hide", !isDevice);
+  el("fSearch").placeholder = isDevice ? "device name or OS…" : "name or UPN…";
+}
+
+const HEAD_USERS  = `<th style="width:34px"></th><th>User</th><th>Type</th><th>License</th><th class="opt">Last interactive</th><th class="opt">Last non-interactive</th><th>Last activity</th><th>Inactive</th>`;
 const HEAD_DEVICES= `<th style="width:34px"></th><th>Device</th><th>OS</th><th class="opt">Ownership</th><th class="opt">Registered</th><th>Last sign-in</th><th>Inactive</th>`;
 
 function render(){
+  syncFilterBar();
   // refresh member/guest counts regardless of active tab, so switching tabs shows fresh numbers
   const dorm = computeDormant();
   const members = dorm.filter(u => (u.userType||"Member")!=="Guest");
@@ -590,6 +709,7 @@ function render(){
   el("cntGuest").textContent  = guests.length;
   el("cMember").textContent   = members.length.toLocaleString();
   el("cGuest").textContent    = guests.length.toLocaleString();
+
   if(devicesLoaded){
     const stale = computeStaleDevices();
     el("cntDevice").textContent = stale.length;
@@ -600,12 +720,21 @@ function render(){
   else { el("theadRow").innerHTML = HEAD_USERS; renderUsers(tab==="member"?members:guests); }
 }
 
+function setFilterCount(shown, total){
+  el("filterCount").innerHTML = shown===total
+    ? `<b>${total}</b> rows`
+    : `<b>${shown}</b> of ${total} rows`;
+}
+
 function renderUsers(rows){
-  view = rows.sort((a,b)=> b._inactive - a._inactive);
+  const total = rows.length;
+  view = applyUserFilters(rows).sort((a,b)=> b._inactive - a._inactive);
+  setFilterCount(view.length, total);
   const thr = +el("thresh").value;
   const tb = el("tbody");
   if(!view.length){
-    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="big">Nothing dormant here</div>No ${tab==="member"?"members":"guests"} inactive beyond ${thr} days.</td></tr>`;
+    const why = total ? "No rows match the current filters." : `No ${tab==="member"?"members":"guests"} inactive beyond ${thr} days.`;
+    tb.innerHTML = `<tr><td colspan="8" class="empty"><div class="big">${total?"No matches":"Nothing dormant here"}</div>${why}</td></tr>`;
     el("selAll").checked=false; updateSelection(); return;
   }
   tb.innerHTML = view.map(u=>{
@@ -617,11 +746,15 @@ function renderUsers(rows){
     const typePill = (u.userType==="Guest")
       ? `<span class="pill guest">Guest</span>`
       : `<span class="pill member">Member</span>`;
-    const offPill = u.accountEnabled===false ? ` <span class="pill off">disabled</span>` : "";
+    const offPill = u.accountEnabled===false ? `&#32;<span class="pill off">disabled</span>` : "";
+    const licPill = hasLicense(u)
+      ? `<span class="pill lic-yes">Yes</span>`
+      : `<span class="pill lic-no">No</span>`;
     return `<tr data-id="${u.id}">
       <td><input type="checkbox" class="rowchk" data-id="${u.id}"></td>
       <td><div class="uname">${escapeHtml(u.displayName||"—")}</div><div class="upn">${escapeHtml(u.userPrincipalName||"")}</div></td>
       <td>${typePill}${offPill}</td>
+      <td>${licPill}</td>
       <td class="num opt">${fmtDate(a.lastSignInDateTime)}</td>
       <td class="num opt">${fmtDate(a.lastNonInteractiveSignInDateTime)}</td>
       <td class="num">${fmtDate(u._last)}</td>
@@ -633,11 +766,15 @@ function renderUsers(rows){
 }
 
 function renderDevices(){
-  view = computeStaleDevices().sort((a,b)=> b._inactive - a._inactive);
+  const all = computeStaleDevices();
+  const total = all.length;
+  view = applyDeviceFilters(all).sort((a,b)=> b._inactive - a._inactive);
+  setFilterCount(view.length, total);
   const thr = +el("thresh").value;
   const tb = el("tbody");
   if(!view.length){
-    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="big">Nothing stale here</div>No devices inactive beyond ${thr} days.</td></tr>`;
+    const why = total ? "No devices match the current filters." : `No devices inactive beyond ${thr} days.`;
+    tb.innerHTML = `<tr><td colspan="8" class="empty"><div class="big">${total?"No matches":"Nothing stale here"}</div>${why}</td></tr>`;
     el("selAll").checked=false; updateSelection(); return;
   }
   tb.innerHTML = view.map(d=>{
@@ -646,7 +783,7 @@ function renderDevices(){
       ? `<span class="never">never${d.accountEnabled===false?" · off":""}</span>`
       : `${d._inactive}d`;
     const osPill = `<span class="pill member">${escapeHtml(d.operatingSystem||"—")}</span>`;
-    const offPill = d.accountEnabled===false ? ` <span class="pill off">disabled</span>` : "";
+    const offPill = d.accountEnabled===false ? `&#32;<span class="pill off">disabled</span>` : "";
     return `<tr data-id="${d.id}">
       <td><input type="checkbox" class="rowchk" data-id="${d.id}"></td>
       <td><div class="uname">${escapeHtml(d.displayName||"—")}</div><div class="upn">${escapeHtml(d.operatingSystemVersion||"")}</div></td>
@@ -685,11 +822,26 @@ el("thresh").onchange = render;
 el("optNever").onchange = render;
 el("optDisabled").onchange = render;
 el("btnRefresh").onclick = ()=>{ if(tab==="device"){ devicesLoaded=false; loadDevices(); } else { loadDirectory(); } };
+
+/* filter-bar wiring — re-render on any filter change */
+el("fSearch").oninput  = render;
+el("fType").onchange    = render;
+el("fLicense").onchange = render;
+el("fOs").onchange      = render;
+el("fOwn").onchange     = render;
+el("fStatus").onchange  = render;
+el("fClear").onclick = ()=>{
+  el("fSearch").value=""; el("fType").value=""; el("fLicense").value="";
+  el("fOs").value=""; el("fOwn").value=""; el("fStatus").value="";
+  render();
+};
+
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); tab=t.dataset.tab;
   if(tab==="device" && !devicesLoaded){ loadDevices(); } else { render(); }
 });
+
 el("btnSettings").onclick = ()=> el("settingsPanel").classList.toggle("hide");
 el("cfgSave").onclick = ()=>{
   localStorage.setItem(LS_CLIENT, el("cfgClient").value.trim());
@@ -708,9 +860,9 @@ el("btnCsv").onclick = ()=>{
       d.accountEnabled, d.createdDateTime||"", d._last||"never", d._never?"never":d._inactive, d.id
     ].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
   } else {
-    head = ["displayName","userPrincipalName","userType","accountEnabled","lastInteractive","lastNonInteractive","lastSuccessful","lastActivity","daysInactive","id"];
+    head = ["displayName","userPrincipalName","userType","licenseAssigned","accountEnabled","lastInteractive","lastNonInteractive","lastSuccessful","lastActivity","daysInactive","id"];
     rows = view.map(u=>{ const a=u.signInActivity||{}; return [
-      u.displayName, u.userPrincipalName, u.userType||"Member", u.accountEnabled,
+      u.displayName, u.userPrincipalName, u.userType||"Member", hasLicense(u)?"Yes":"No", u.accountEnabled,
       a.lastSignInDateTime||"", a.lastNonInteractiveSignInDateTime||"", a.lastSuccessfulSignInDateTime||"",
       u._last||"never", u._never?"never":u._inactive, u.id
     ].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","); });
@@ -721,9 +873,9 @@ el("btnCsv").onclick = ()=>{
   URL.revokeObjectURL(url);
 };
 
-/* ============================================================
+/* ================
    DELETE  (Graph $batch, chunks of 20, 429-aware)
-   ============================================================ */
+   ================ */
 let pendingDelete = [];
 function openDeleteModal(){
   const isDevice = tab==="device";
@@ -773,6 +925,7 @@ el("mGo").onclick = async ()=>{
   el("mConfirm").classList.add("hide");
   el("mRunning").classList.remove("hide");
   const log = el("resLog"); log.innerHTML=""; el("progFill").style.width="0%";
+
   const path = isDevice ? "devices" : "users";
   let done=0, ok=0, fail=0;
   const byId = Object.fromEntries((isDevice?allDevices:allUsers).map(x=>[x.id,x]));
@@ -788,7 +941,6 @@ el("mGo").onclick = async ()=>{
         body: JSON.stringify({ requests:reqs })
       });
     }catch(err){ chunk.forEach(id=>logLine(log,byId[id],false,"network")); fail+=chunk.length; done+=chunk.length; tickProg(done,ids.length); continue; }
-
     const data = await r.json();
     for(const res of (data.responses||[])){
       const id = chunk[+res.id];
@@ -804,13 +956,16 @@ el("mGo").onclick = async ()=>{
       done++; tickProg(done,ids.length);
     }
   }
+
   // drop deleted from the relevant local cache
   if(isDevice){ allDevices = allDevices.filter(d=> !ids.includes(d.id)); }
   else { allUsers = allUsers.filter(u=> !ids.includes(u.id)); }
+
   logLine(log, null, true, `\nFinished — ${ok} deleted, ${fail} failed.`);
   el("mDone").classList.remove("hide");
   el("mDone").onclick = ()=>{ el("scrim").classList.remove("show"); if(isDevice){ devicesLoaded=false; loadDevices(); } else { loadDirectory(); } };
 };
+
 async function retryDelete(path, id, tok){
   const r = await fetch(`${GRAPH}/${path}/${id}`, { method:"DELETE", headers:{ Authorization:"Bearer "+tok } });
   return r.status>=200 && r.status<300;
