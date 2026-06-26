@@ -146,6 +146,21 @@
   .pill.pass{background:rgba(63,185,80,.14);color:var(--ok)}
   .pill.fail{background:rgba(229,72,77,.13);color:var(--danger)}
   .pill.notset{background:rgba(139,152,165,.12);color:var(--muted)}
+  .pill.na{background:rgba(139,152,165,.08);color:var(--faint);border:1px solid var(--border)}
+  .pill.manual{background:rgba(224,165,0,.10);color:var(--warn);border:1px solid rgba(224,165,0,.32)}
+  .srcchip{display:inline-block;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+    padding:1px 6px;border-radius:5px;border:1px solid var(--border);color:var(--muted);margin-right:9px;vertical-align:middle}
+  .srcchip.live{color:var(--accent);border-color:var(--accent-dim)}
+  .srcchip.securescore{color:#5aa6ff;border-color:rgba(90,166,255,.4)}
+  .srcchip.manual{color:var(--warn);border-color:rgba(224,165,0,.4)}
+  select.manualsel{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:3px 7px;font-size:12px;font-family:inherit}
+  select.manualsel:focus{outline:none;border-color:var(--accent-dim)}
+  ul.subchecks .sdot.na{color:var(--faint)}
+  .evrow .sdot.na{color:var(--faint)}
+  .evpol a{color:var(--accent);text-decoration:none}
+  .evpol a:hover{text-decoration:underline}
+  .evpol .open{font-family:var(--mono);font-size:10.5px;color:var(--accent);margin-left:2px}
   .sev{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:500;padding:1px 7px;
     border-radius:5px;text-transform:uppercase;letter-spacing:.03em;border:1px solid transparent;vertical-align:middle}
   .sev.critical{background:var(--danger);color:#fff;border-color:var(--danger)}
@@ -568,7 +583,7 @@
         </div>
         <div class="field hide" id="wrapBaseStatus">
           <label>Result</label>
-          <select id="fBaseStatus"><option value="">All</option><option value="pass">Passed</option><option value="fail">Failed</option><option value="notset">Not set</option></select>
+          <select id="fBaseStatus"><option value="">All</option><option value="pass">Passed</option><option value="fail">Failed</option><option value="manual">Manual</option></select>
         </div>
         <div class="field hide" id="wrapBaseSev">
           <label>Severity</label>
@@ -1664,94 +1679,230 @@ function setFilterCount(shown, total){
   el("filterCount").innerHTML = shown===total ? `<b>${total}</b> rows` : `<b>${shown}</b> of ${total} rows`;
 }
 
-/* ---- Conditional Access enforcement ----
-   A control that the report passed only because a Conditional Access policy was
-   "found" must NOT pass if that policy is in report-only mode (it isn't enforced).
-   We re-check the tenant's live CA policies (already fetched by the CA view). */
-let caLoading = false;
-async function ensureCaForBaseline(){
-  if(caLoaded || caLoading) return;
-  caLoading = true;
+/* ============================================================
+   MICROSOFT SECURITY BASELINE — live assessment engine
+   For each control, resolve in priority order:
+     1) LIVE  — evaluate directly from Microsoft Graph data
+     2) SCORE — fall back to Microsoft Secure Score
+     3) MANUAL — no automatic source; user sets it (persisted)
+   ============================================================ */
+
+/* ---- manual overrides (persisted in this browser) ---- */
+const LS_BMANUAL = "tenantguard.baselineManual";
+function manualOverrides(){ try{ return JSON.parse(localStorage.getItem(LS_BMANUAL)||"{}"); }catch{ return {}; } }
+function setManualOverride(id, val){
+  const m = manualOverrides();
+  if(val) m[id]=val; else delete m[id];
+  localStorage.setItem(LS_BMANUAL, JSON.stringify(m));
+}
+
+/* ---- quietly load every live source the baseline can use (no tbody takeover) ---- */
+let baselineDataLoaded=false, baselineLoading=false;
+let bAuthz=null, bDomains=[], bDynGroups=null, bGAs=null;
+async function ensureBaselineData(force){
+  if((baselineDataLoaded && !force) || baselineLoading) return;
+  baselineLoading=true;
   try{
     const tok = await token(READ_SCOPES);
     if(tok){
-      const r = await gget(`${GRAPH}/identity/conditionalAccess/policies`, tok);
-      allCaPolicies = r.value || [];
-      caLoaded = true;
+      const q = async (url)=>{ try{ return await gget(url, tok); }catch(e){ return null; } };
+      const dynFilter = encodeURIComponent("groupTypes/any(c:c eq 'DynamicMembership')");
+      const r = await Promise.all([
+        caLoaded ? Promise.resolve(null) : q(`${GRAPH}/identity/conditionalAccess/policies`),
+        secLoaded ? Promise.resolve(null) : q(`${GRAPH}/security/secureScores?$top=1`),
+        q(`${GRAPH}/policies/authorizationPolicy`),
+        q(`${GRAPH}/domains`),
+        q(`${GRAPH}/groups?$count=true&$top=1&$filter=${dynFilter}`),
+        q(`${GRAPH}/directoryRoles?$expand=members($select=id,displayName,userPrincipalName,accountEnabled,onPremisesSyncEnabled)`),
+        devicesLoaded ? Promise.resolve(null) : q(`${GRAPH}/devices?$select=id,displayName,accountEnabled,approximateLastSignInDateTime&$top=500`),
+      ]);
+      if(r[0]){ allCaPolicies = r[0].value||[]; caLoaded=true; }
+      if(r[1]){ secScore = (r[1].value||[])[0]||null; secLoaded=true; }
+      if(r[2]) bAuthz = r[2];
+      if(r[3]) bDomains = r[3].value||[];
+      if(r[4]) bDynGroups = (r[4]["@odata.count"] ?? null);
+      if(r[5]){ const ga=(r[5].value||[]).find(x=>/^global administrator$/i.test(x.displayName||"")); bGAs = ga ? (ga.members||[]).filter(m=>!m["@odata.type"]||/#microsoft\.graph\.user/i.test(m["@odata.type"])) : []; }
+      if(r[6]){ allDevices = r[6].value||[]; devicesLoaded=true; }
     }
-  }catch(e){ /* if CA can't be read, fall back to the report's static results */ }
-  caLoading = false;
-  if(caLoaded && tab==="baseline") render();
+  }catch(e){ /* best effort — unresolved sources simply fall through to Manual */ }
+  baselineDataLoaded=true; baselineLoading=false;
+  if(tab==="baseline") render();
 }
+
+/* ---- Conditional Access matchers ---- */
 const _caGrants = p => (p.grantControls && p.grantControls.builtInControls) || [];
+const _caAuthStrength = p => !!(p.grantControls && p.grantControls.authenticationStrength);
+const _usersAll = p => (p.conditions?.users?.includeUsers||[]).includes("All");
+const _appsAll  = p => (p.conditions?.applications?.includeApplications||[]).includes("All");
+const _hasRoles = p => (p.conditions?.users?.includeRoles||[]).length>0;
 const CA_RULES = {
-  "mfa-all":      p => _caGrants(p).includes("mfa") && (p.conditions?.users?.includeUsers||[]).includes("All") && (p.conditions?.applications?.includeApplications||[]).includes("All"),
-  "mfa-admin":    p => _caGrants(p).includes("mfa") && (p.conditions?.users?.includeRoles||[]).length>0,
-  "legacy-block": p => _caGrants(p).includes("block") && (p.conditions?.clientAppTypes||[]).some(c=>c==="exchangeActiveSync"||c==="other")
+  "mfa-all":            p => _caGrants(p).includes("mfa") && _usersAll(p) && _appsAll(p),
+  "mfa-admin":          p => _caGrants(p).includes("mfa") && _hasRoles(p),
+  "legacy-block":       p => _caGrants(p).includes("block") && (p.conditions?.clientAppTypes||[]).some(c=>c==="exchangeActiveSync"||c==="other"),
+  "device-compliant":   p => (_caGrants(p).includes("compliantDevice")||_caGrants(p).includes("domainJoinedDevice")) && _usersAll(p),
+  "signin-risk":        p => _caGrants(p).includes("block") && ((p.conditions?.signInRiskLevels||[]).length>0 || (p.conditions?.userRiskLevels||[]).length>0),
+  "device-code":        p => _caGrants(p).includes("block") && String(p.conditions?.authenticationFlows?.transferMethods||"").includes("deviceCodeFlow"),
+  "authstrength-admin": p => _caAuthStrength(p) && _hasRoles(p)
 };
-// enabled = a truly enforced policy matches; reportOnly = only a report-only policy matches
+// enabled = a truly enforced policy matches; otherwise note why it isn't enforced
 function caEnforcement(rule){
-  const pred = CA_RULES[rule]; if(!pred) return {enabled:false, reportOnly:false};
-  let enabled=false, ro=false;
+  const pred = CA_RULES[rule]; if(!pred) return {enabled:false, notEnforced:false, reason:null};
+  let enabled=false, reportOnly=false, disabled=false;
   for(const p of allCaPolicies){
     if(!pred(p)) continue;
     if(p.state==="enabled") enabled=true;
-    else if(p.state==="enabledForReportingButNotEnforced") ro=true;
+    else if(p.state==="enabledForReportingButNotEnforced") reportOnly=true;
+    else if(p.state==="disabled") disabled=true;
   }
-  return {enabled, reportOnly: ro && !enabled};
+  const notEnforced = !enabled && (reportOnly || disabled);
+  const reason = reportOnly ? "in report-only mode" : (disabled ? "disabled" : null);
+  return {enabled, notEnforced, reason};
 }
-/* clone of the report data with report-only CA-backed passes downgraded to Failed */
+function caEval(rule){
+  if(!caLoaded) return null;                       // CA data unavailable → fall through
+  const e = caEnforcement(rule);
+  const pols = caMatchedPolicies(rule);
+  const link = (pols[0] && pols[0].id) ? caPolicyLink(pols[0].id) : entraLink("Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies");
+  if(e.enabled){
+    const p = pols.find(x=>x.state==="enabled")||pols[0];
+    return {status:"pass", evidence:`Enforced by Conditional Access policy "${p?p.name:""}".`, link, policies:pols};
+  }
+  if(e.notEnforced) return {status:"fail", evidence:`A matching Conditional Access policy exists but is ${e.reason} (not enforced).`, link, policies:pols};
+  return {status:"fail", evidence:"No enabled Conditional Access policy enforces this control.", link, policies:pols};
+}
+
+/* ---- direct Graph evaluators (use data loaded by ensureBaselineData) ---- */
+function bDormantCount(){
+  const cut = Date.now() - 45*864e5;
+  return allUsers.filter(u=> u.accountEnabled!==false && (u.userType||"Member")!=="Guest")
+    .filter(u=>{ const la=lastActivity(u); return la && new Date(la).getTime()<cut; }).length;
+}
+function bStaleDevices(){
+  const cut = Date.now() - 30*864e5;
+  return allDevices.filter(d=>{ const t=d.approximateLastSignInDateTime; return t && new Date(t).getTime()<cut; }).length;
+}
+const ROLE_LINK = entraLink("Microsoft_AAD_IAM/RolesManagementMenuBlade/~/AllRoles");
+const LIVE_EVAL = {
+  "1.1":  ()=>caEval("mfa-all"),
+  "1.2":  ()=>caEval("mfa-admin"),
+  "1.3":  ()=>caEval("legacy-block"),
+  "1.18": ()=>caEval("device-compliant"),
+  "1.19": ()=>caEval("device-compliant"),
+  "1.20": ()=>caEval("authstrength-admin"),
+  "1.21": ()=>caEval("signin-risk"),
+  "1.24": ()=>caEval("device-code"),
+  "1.5":  ()=>{ if(!bGAs) return null; const n=bGAs.length; return {status:(n>=2&&n<=4)?"pass":"fail", evidence:`${n} Global Administrator${n===1?"":"s"} assigned (recommended 2–4).`, link:ROLE_LINK}; },
+  "1.6":  ()=>{ if(!bGAs||!bGAs.length) return null; const cloud=bGAs.filter(m=>m.onPremisesSyncEnabled!==true).length; return {status:(cloud===bGAs.length)?"pass":"fail", evidence:`${cloud}/${bGAs.length} Global Admins are cloud-only.`, link:ROLE_LINK}; },
+  "1.7":  ()=>{ if(!bAuthz) return null; const create=bAuthz.defaultUserRolePermissions?.allowedToCreateApps; return {status:(create===false)?"pass":"fail", evidence:`Standard users ${create===false?"cannot":"can"} register third-party applications.`, link:entraLink("Microsoft_AAD_IAM/UserManagementMenuBlade/~/UserSettings")}; },
+  "1.9":  ()=>{ if(!bDomains.length) return null; const expiring=bDomains.filter(d=> d.passwordValidityPeriodInDays!=null && d.passwordValidityPeriodInDays<2147483647); return {status:(expiring.length===0)?"pass":"fail", evidence: expiring.length===0?"Passwords are set to never expire on all domains.":`${expiring.length} domain(s) enforce password expiration.`, link:entraLink("Microsoft_AAD_IAM/PasswordResetMenuBlade")}; },
+  "1.12": ()=>{ if(!allUsers.length) return null; const n=bDormantCount(); return {status:(n===0)?"pass":"fail", evidence:`${n} enabled account(s) inactive for 45+ days.`, link:entraLink("Microsoft_AAD_UsersAndTenants/UserManagementMenuBlade/~/AllUsers")}; },
+  "1.14": ()=>{ if(!devicesLoaded) return null; const n=bStaleDevices(); return {status:(n===0)?"pass":"fail", evidence:`${n} device(s) have not checked in for 30+ days.`, link:entraLink("Microsoft_AAD_Devices/DevicesMenuBlade/~/Devices")}; },
+  "1.16": ()=>{ if(bDynGroups==null) return null; return {status:(bDynGroups>0)?"pass":"fail", evidence:`${bDynGroups} dynamic group(s) detected.`, link:entraLink("Microsoft_AAD_IAM/GroupsManagementMenuBlade/~/AllGroups")}; }
+};
+
+/* ---- Microsoft Secure Score fallback ---- */
+const SS_MAP = {
+  "1.4":["break glass","emergency access"], "1.22":["privileged identity management","pim","just-in-time"],
+  "2.2":["anti-spam","antispam","spam"], "2.3":["anti-phishing","antiphishing","phishing"],
+  "2.4":["anti-malware","antimalware","common attachment","zap"], "2.5":["mail forwarding","external forwarding","auto-forward","autoforward"],
+  "2.6":["mailbox auditing","mailbox audit"], "2.8":["external sender","external email"],
+  "4.4":["security baseline"], "4.6":["bitlocker","encryption"], "4.10":["laps","local admin"],
+  "6.1":["attack simulation","security awareness","training"], "6.2":["defender antivirus","microsoft defender antivirus","antivirus"],
+  "6.3":["defender for endpoint","edr","endpoint detection"], "6.4":["firewall"],
+  "6.5":["safe links"], "6.6":["safe attachment"], "6.7":["tamper protection"], "6.8":["attack surface reduction"],
+  "6.9":["defender for cloud apps","cloud app"], "7.2":["audit log","unified audit"],
+  "7.3":["retention"], "7.4":["sensitivity label","information protection"], "7.5":["dlp","data loss prevention"]
+};
+function secureScoreFor(id){
+  if(!secLoaded || !secScore) return null;
+  const frags = SS_MAP[id]; if(!frags) return null;
+  const list = secScore.controlScores||[];
+  const hit = list.find(c=> frags.some(f=> (c.controlName||"").toLowerCase().includes(f) || (c.description||"").toLowerCase().includes(f)));
+  if(!hit) return null;
+  const pct = hit.scoreInPercentage;
+  let pass;
+  if(pct!=null) pass = pct>=100;
+  else { const impl=(hit.implementationStatus||"").toLowerCase(); pass = /implemented|complete|resolved/.test(impl) && !/not\s/.test(impl); }
+  const ev = `Microsoft Secure Score control "${hit.controlName}"`
+    + (pct!=null?` — ${Math.round(pct)}% implemented`:"")
+    + (hit.score!=null?` (score ${Math.round(hit.score)})`:"") + ".";
+  return {status: pass?"pass":"fail", evidence: ev, link:"https://security.microsoft.com/securescore"};
+}
+
+/* ---- resolve one control through the 3 tiers ---- */
+function resolveControl(c, ov){
+  const fn = LIVE_EVAL[c.id];
+  if(fn){ let r=null; try{ r=fn(); }catch(e){} if(r) return {...r, source:"live"}; }
+  const ss = secureScoreFor(c.id);
+  if(ss) return {...ss, source:"securescore"};
+  const set = ov[c.id];
+  return { status: set||"manual", source:"manual",
+    evidence: set ? `Manually marked ${set==="pass"?"Passed":"Failed"}.`
+                  : "No automatic data source for this control — set the status manually once it is implemented." };
+}
 function effectiveBaseline(){
+  const ov = manualOverrides();
   return BASELINE_DATA.map(c=>{
-    const subs = c.subs.map(s=>{
-      if(caLoaded && s.status==="pass" && s.caRule && caEnforcement(s.caRule).reportOnly){
-        return {...s, status:"fail", severity:s.severity||"high",
-          detail:(s.detail?s.detail+" ":"")+"— policy is in report-only mode (not enforced)."};
-      }
-      return s;
-    });
-    let status=c.status, severity=c.severity;
-    if(status!=="fail" && subs.some(s=>s.status==="fail")){ status="fail"; severity=severity||"high"; }
-    return {...c, subs, status, severity};
+    const r = resolveControl(c, ov);
+    return { ...c, status:r.status, source:r.source, evidence:r.evidence,
+      link:r.link||null, policies:r.policies||null,
+      severity: r.status==="fail" ? (c.severity||"high") : undefined };
   });
 }
 
+function baseStatusPill(s){
+  return s==="pass" ? `<span class="pill pass">Passed</span>`
+    : (s==="fail" ? `<span class="pill fail">Failed</span>` : `<span class="pill manual">Manual</span>`);
+}
+function srcLabel(s){ return s==="live"?"Live":(s==="securescore"?"Secure Score":"Manual"); }
+function manualSelect(c){
+  const ov = manualOverrides()[c.id]||"";
+  return `<select class="manualsel" data-cid="${escapeHtml(c.id)}">
+    <option value=""    ${ov===""?"selected":""}>Manual</option>
+    <option value="pass" ${ov==="pass"?"selected":""}>Passed</option>
+    <option value="fail" ${ov==="fail"?"selected":""}>Failed</option>
+  </select>`;
+}
 function renderBaseline(){
-  ensureCaForBaseline();   // lazily pull live CA policy state, then re-render when ready
-  const DATA = effectiveBaseline();
-  // populate the Category dropdown once, from the dataset itself
+  ensureBaselineData();   // quietly load every live source, then re-render when ready
   const catSel = el("fBaseCat");
-  if(!catSel._filled){ fillSelect("fBaseCat", [...new Set(DATA.map(c=>c.category))]); catSel._filled = true; }
+  if(!catSel._filled){ fillSelect("fBaseCat", [...new Set(BASELINE_DATA.map(c=>c.category))]); catSel._filled = true; }
+  const tb = el("tbody");
+  if(!baselineDataLoaded){
+    setInfoCards("Controls", BASELINE_DATA.length, "Passed", "…", "Failed", "…", "Pass rate", "…");
+    setFilterCount(BASELINE_DATA.length, BASELINE_DATA.length);
+    tb.innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Assessing controls against live tenant data…</td></tr>`;
+    return;
+  }
+  const DATA = effectiveBaseline();
   view = applyBaselineFilters(DATA);
   setFilterCount(view.length, DATA.length);
-  // cards reflect the CURRENT view (filtered by category / result / severity / search)
+  // cards reflect the CURRENT view; manual/unset controls are excluded from the pass rate
   const passed = view.filter(c=>c.status==="pass").length;
   const failed = view.filter(c=>c.status==="fail").length;
   const evaluated = passed + failed;
-  const pct = evaluated ? Math.round(passed/evaluated*100) : 0;
-  setInfoCards("Controls", view.length, "Passed", passed, "Failed", failed, "Pass rate", pct+"%");
-  const tb = el("tbody");
+  const pct = evaluated ? Math.round(passed/evaluated*100)+"%" : "—";
+  setInfoCards("Controls", view.length, "Passed", passed, "Failed", failed, "Pass rate", pct);
   if(!view.length){
     tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">No matches</div>No baseline controls match the current filters.</td></tr>`;
     return;
   }
-  const statusPill = s => s==="pass" ? `<span class="pill pass">Passed</span>`
-    : (s==="fail" ? `<span class="pill fail">Failed</span>` : `<span class="pill notset">Not set</span>`);
   const sevBadge = sv => sv ? `<span class="sev ${sv}">${escapeHtml(sv)}</span>` : `<span class="num">—</span>`;
-  const sdot = s => s==="pass" ? `<span class="sdot pass">✓</span>`
-    : (s==="fail" ? `<span class="sdot fail">✕</span>` : `<span class="sdot notset">○</span>`);
   tb.innerHTML = view.map(c=>{
-    const subs = (c.subs||[]).map(s=>
-      `<li>${sdot(s.status)}<div><span class="sname">${escapeHtml(s.name)}</span>${s.severity?` <span class="sev ${s.severity}">${escapeHtml(s.severity)}</span>`:""}${s.detail?`<div class="sdetail">${escapeHtml(s.detail)}</div>`:""}</div></li>`).join("");
+    const resultCell = c.source==="manual" ? manualSelect(c) : baseStatusPill(c.status);
     return `<tr class="clickrow" data-cid="${escapeHtml(c.id)}" title="View evidence">
-      <td>${statusPill(c.status)}</td>
+      <td>${resultCell}</td>
       <td class="ctlid">${escapeHtml(c.id)}</td>
       <td><div class="uname">${escapeHtml(c.title)}</div></td>
       <td class="num">${escapeHtml(c.category)}</td>
       <td>${sevBadge(c.severity)}</td>
-      <td class="opt"><ul class="subchecks">${subs}</ul></td>
+      <td class="opt"><span class="srcchip ${c.source}">${srcLabel(c.source)}</span>${escapeHtml(c.evidence||"")}</td>
     </tr>`;
   }).join("");
+  tb.querySelectorAll("select.manualsel").forEach(sel=>{
+    sel.onclick = e=> e.stopPropagation();
+    sel.onchange = e=>{ e.stopPropagation(); setManualOverride(sel.dataset.cid, sel.value); render(); };
+  });
   tb.querySelectorAll("tr.clickrow").forEach(r=> r.onclick = ()=> openBaselineEvidence(r.dataset.cid));
 }
 
@@ -1767,36 +1918,49 @@ function caStatePill(s){
 }
 function caMatchedPolicies(rule){
   const pred = CA_RULES[rule]; if(!pred) return [];
-  return allCaPolicies.filter(pred).map(p=>({name:p.displayName||"(unnamed policy)", state:p.state}));
+  return allCaPolicies.filter(pred).map(p=>({id:p.id, name:p.displayName||"(unnamed policy)", state:p.state}));
 }
+// deep link straight to the Conditional Access policy in the Entra admin center
+function caPolicyLink(id){ return entraLink(`Microsoft_AAD_ConditionalAccess/PolicyBlade/policyId/${encodeURIComponent(id||"")}`); }
 function openBaselineEvidence(cid){
   const c = effectiveBaseline().find(x=>x.id===cid);
   if(!c) return;
-  const pillTxt = c.status==="pass" ? `<span class="pill pass">Passed</span>`
-    : (c.status==="fail" ? `<span class="pill fail">Failed</span>` : `<span class="pill notset">Not set</span>`);
-  el("evPill").innerHTML = pillTxt;
+  el("evPill").innerHTML = baseStatusPill(c.status);
   el("evTitle").textContent = `${c.id} — ${c.title}`;
-  el("evCat").textContent = `Category: ${c.category}${c.severity?`  ·  Severity: ${c.severity}`:""}`;
-  const dot = s => s==="pass" ? `<span class="sdot pass">✓</span>`
-    : (s==="fail" ? `<span class="sdot fail">✕</span>` : `<span class="sdot notset">○</span>`);
-  el("evBody").innerHTML = (c.subs||[]).map(s=>{
-    let block = `<div class="evrow">${dot(s.status)}<div style="flex:1">
-      <div class="evname">${escapeHtml(s.name)}${s.severity?` <span class="sev ${s.severity}">${escapeHtml(s.severity)}</span>`:""}</div>
-      ${s.detail?`<div class="evdetail">${escapeHtml(s.detail)}</div>`:""}`;
-    if(s.caRule){
-      const pols = caMatchedPolicies(s.caRule);
-      if(pols.length){
-        block += `<div class="evpolicies"><div class="evpol-h">Matched Conditional Access ${pols.length>1?"policies":"policy"}</div>`
-          + pols.map(p=>`<div class="evpol">${caStatePill(p.state)} ${escapeHtml(p.name)}</div>`).join("")
-          + `</div>`;
-      } else if(caLoaded){
-        block += `<div class="evpolicies"><div class="evpol-h note">No Conditional Access policy in the live tenant matches this control.</div></div>`;
-      } else {
-        block += `<div class="evpolicies"><div class="evpol-h note">Loading live Conditional Access policies… reopen to see the matched policy.</div></div>`;
-      }
-    }
-    return block + `</div></div>`;
-  }).join("");
+  el("evCat").textContent = `Category: ${c.category}  ·  Source: ${srcLabel(c.source)}${c.severity?`  ·  Severity: ${c.severity}`:""}`;
+  let html = `<div class="evrow"><div style="flex:1">
+    <div class="evname">Assessment</div>
+    <div class="evdetail">${escapeHtml(c.evidence||"")}</div>`;
+  const pols = c.policies||[];
+  if(pols.length){
+    html += `<div class="evpolicies"><div class="evpol-h">Matched Conditional Access ${pols.length>1?"policies":"policy"} — click to open</div>`
+      + pols.map(p=>`<div class="evpol">${caStatePill(p.state)} <a href="${caPolicyLink(p.id)}" target="_blank" rel="noopener">${escapeHtml(p.name)}</a><span class="open">↗</span></div>`).join("")
+      + `</div>`;
+  } else if(c.link){
+    html += `<div class="evpolicies"><div class="evpol"><a href="${c.link}" target="_blank" rel="noopener">Open in portal</a><span class="open">↗</span></div></div>`;
+  }
+  html += `</div></div>`;
+  // baseline requirements (the control's definition — not tenant data)
+  if(c.subs && c.subs.length){
+    html += `<div class="evrow"><div style="flex:1"><div class="evname">Baseline requirements</div>
+      <ul class="subchecks" style="margin-top:6px">`
+      + c.subs.map(s=>`<li><span class="sdot na">•</span><div><span class="sname">${escapeHtml(s.name)}</span></div></li>`).join("")
+      + `</ul></div></div>`;
+  }
+  // manual editor — user can set the status once the control is implemented
+  if(c.source==="manual"){
+    const ov = manualOverrides()[c.id]||"";
+    html += `<div class="evrow"><div style="flex:1"><div class="evname">Set status manually</div>
+      <div style="margin-top:6px"><select class="manualsel" id="evManual">
+        <option value=""    ${ov===""?"selected":""}>Manual — not implemented</option>
+        <option value="pass" ${ov==="pass"?"selected":""}>Passed</option>
+        <option value="fail" ${ov==="fail"?"selected":""}>Failed</option>
+      </select></div>
+      <div class="evpol-h note" style="margin-top:6px">Saved in this browser. Change it once the control is implemented.</div></div></div>`;
+  }
+  el("evBody").innerHTML = html;
+  const ms = el("evManual");
+  if(ms) ms.onchange = ()=>{ setManualOverride(cid, ms.value); render(); openBaselineEvidence(cid); };
   el("evScrim").classList.add("show");
 }
 function applyBaselineFilters(rows){
@@ -1807,7 +1971,7 @@ function applyBaselineFilters(rows){
     if(st  && c.status!==st)   return false;
     if(sv  && c.severity!==sv) return false;
     if(q){
-      const hay = (c.id+" "+c.title+" "+c.category+" "+(c.subs||[]).map(s=>s.name+" "+(s.detail||"")).join(" ")).toLowerCase();
+      const hay = (c.id+" "+c.title+" "+c.category+" "+(c.evidence||"")+" "+(c.subs||[]).map(s=>s.name).join(" ")).toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
@@ -2677,14 +2841,10 @@ el("btnCsv").onclick = ()=>{
   if(!view.length) return toast("Nothing to export.");
   let head, rows;
   if(tab==="baseline"){
-    head = ["category","control","baseline","result","severity","subCheck","subResult","subSeverity","finding"];
-    rows = [];
-    view.forEach(c=>{
-      (c.subs&&c.subs.length?c.subs:[{}]).forEach(s=>{
-        rows.push([c.category,c.id,c.title,c.status,c.severity||"",s.name||"",s.status||"",s.severity||"",s.detail||""]
-          .map(val=>`"${String(val??"").replace(/"/g,'""')}"`).join(","));
-      });
-    });
+    head = ["category","control","baseline","result","source","severity","evidence","policies"];
+    rows = view.map(c=>[c.category,c.id,c.title,c.status,c.source||"",c.severity||"",c.evidence||"",
+        (c.policies||[]).map(p=>`${p.name} (${p.state})`).join("; ")]
+        .map(val=>`"${String(val??"").replace(/"/g,'""')}"`).join(","));
   } else if(tab==="device"){
     head = ["displayName","deviceId","operatingSystem","operatingSystemVersion","deviceOwnership","accountEnabled","registered","lastSignIn","daysInactive","id"];
     rows = view.map(d=>[
