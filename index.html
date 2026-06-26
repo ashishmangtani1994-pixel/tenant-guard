@@ -142,6 +142,25 @@
   .pill.lic-yes{background:rgba(63,185,80,.14);color:var(--ok)}
   .pill.lic-no{background:rgba(139,152,165,.12);color:var(--muted)}
   .pill.miss{background:rgba(229,72,77,.13);color:var(--danger)}
+  /* ---------- microsoft security baseline ---------- */
+  .pill.pass{background:rgba(63,185,80,.14);color:var(--ok)}
+  .pill.fail{background:rgba(229,72,77,.13);color:var(--danger)}
+  .pill.notset{background:rgba(139,152,165,.12);color:var(--muted)}
+  .sev{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:500;padding:1px 7px;
+    border-radius:5px;text-transform:uppercase;letter-spacing:.03em;border:1px solid transparent;vertical-align:middle}
+  .sev.critical{background:var(--danger);color:#fff;border-color:var(--danger)}
+  .sev.high{background:transparent;color:var(--danger);border-color:var(--danger-dim)}
+  .sev.medium{background:transparent;color:var(--warn);border-color:rgba(224,165,0,.45)}
+  .sev.low{background:transparent;color:#5aa6ff;border-color:rgba(90,166,255,.5)}
+  .ctlid{font-family:var(--mono);color:var(--muted);font-size:12px;white-space:nowrap}
+  ul.subchecks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;min-width:340px}
+  ul.subchecks li{display:flex;gap:8px;align-items:flex-start;line-height:1.4}
+  ul.subchecks .sdot{flex:0 0 auto;width:14px;text-align:center;margin-top:1px;font-size:12px;line-height:1.3}
+  ul.subchecks .sdot.pass{color:var(--ok)}
+  ul.subchecks .sdot.fail{color:var(--danger)}
+  ul.subchecks .sdot.notset{color:var(--faint)}
+  ul.subchecks .sname{font-weight:500;color:var(--text)}
+  ul.subchecks .sdetail{color:var(--muted);margin-top:1px}
   td.num{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
   td.days{font-family:var(--mono);font-weight:500}
   .never{color:var(--danger)}
@@ -299,6 +318,12 @@
   <div class="workspace">
     <!-- ==== LEFT NAV — collapsible sections ==== -->
     <aside class="sidenav" id="sidenav">
+      <div class="navgroup" data-group="baseline">
+        <button class="navhead" data-grouphead="baseline"><span class="caret">▾</span> Microsoft Security Baseline</button>
+        <div class="navitems">
+          <button class="tab" data-tab="baseline">Baseline checks <span class="cnt" id="cntBaseline">—</span></button>
+        </div>
+      </div>
       <div class="navgroup" data-group="dormant">
         <button class="navhead" data-grouphead="dormant"><span class="caret">▾</span> Dormant Status</button>
         <div class="navitems">
@@ -518,6 +543,19 @@
           <label>Consent</label>
           <select id="fOaConsent"><option value="">All</option><option value="AllPrincipals">Tenant-wide</option><option value="Principal">User</option></select>
         </div>
+        <!-- microsoft security baseline -->
+        <div class="field hide" id="wrapBaseCat">
+          <label>Category</label>
+          <select id="fBaseCat"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapBaseStatus">
+          <label>Result</label>
+          <select id="fBaseStatus"><option value="">All</option><option value="pass">Passed</option><option value="fail">Failed</option><option value="notset">Not set</option></select>
+        </div>
+        <div class="field hide" id="wrapBaseSev">
+          <label>Severity</label>
+          <select id="fBaseSev"><option value="">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+        </div>
         <span class="grow"></span>
         <span class="count" id="filterCount"></span>
         <button class="btn ghost" id="fClear">Clear filters</button>
@@ -654,7 +692,7 @@ let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
 
-const INFO_TABS = ["risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching",
+const INFO_TABS = ["baseline","risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching",
   "devcompliance","privileged","securescore","jailbroken","legacyauth","appcreds","oauth"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
@@ -1288,8 +1326,10 @@ const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatu
   "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
   "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc",
   "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth","wrapLapsOs","wrapLapsStatus","wrapPatchView",
-  "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent"];
+  "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent",
+  "wrapBaseCat","wrapBaseStatus","wrapBaseSev"];
 const FILTERS_BY_TAB = {
+  baseline:["wrapBaseCat","wrapBaseStatus","wrapBaseSev"],
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
   device:["wrapOs","wrapOwn","wrapStatus"],
@@ -1311,6 +1351,7 @@ const FILTERS_BY_TAB = {
   oauth:["wrapOaConsent"]
 };
 const SEARCH_PLACEHOLDER = {
+  baseline:"control, check or finding…",
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
   ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…",
   patching:"device name or build…", antivirus:"device or malware…", laps:"device name…",
@@ -1349,10 +1390,172 @@ const HEAD_APPCREDS= `<th>Application</th><th>Type</th><th>Expires</th><th>Time 
 const HEAD_OAUTH   = `<th>Client app</th><th>Resource</th><th class="opt">Scopes</th><th>Consent</th>`;
 const HEAD_PATCHING  = `<th>Device</th><th>Current OS</th><th>Current build</th><th>Target build</th><th>Patch status</th><th class="opt">Last active</th>`;
 const HEAD_AV_ENDPOINTS = `<th>Device</th><th>Managed by</th><th>Malware protection</th><th>State</th><th>Real-time</th><th>Network</th><th>Signature</th><th>Tamper</th><th class="opt">Product status</th><th class="opt">Reboot</th>`;
+const HEAD_BASELINE = `<th>Result</th><th>Control</th><th>Microsoft Security Baseline</th><th>Category</th><th>Severity</th><th class="opt">Finding</th>`;
+
+/* ========
+   MICROSOFT SECURITY BASELINE
+   Tenant assessment matched against each baseline control in the source report.
+   status: "pass" | "fail" | "notset".  severity: highest of the failing sub-checks.
+   ======== */
+const BASELINE_DATA = [
+  /* ---- 1. Entra ID ---- */
+  {cat:"Entra ID", id:"1.1", title:`Multi-factor authentication is enforced for all users`, status:"fail", severity:"critical", subs:[
+    {status:"pass", name:`MFA is enforced for all users`, detail:`Conditional Access Policy found that enables MFA for all users.`},
+    {status:"fail", name:`MFA is enforced for Azure Management`, detail:`A conditional access policy is either missing or misconfigured.`},
+    {status:"fail", severity:"critical", name:`Users are enrolled in MFA and covered by a policy`, detail:`14 users do not have MFA enabled`}]},
+  {cat:"Entra ID", id:"1.2", title:`MFA is required for all Admins`, status:"pass", subs:[
+    {status:"pass", name:`MFA is enforced on accounts with highly privileged roles`, detail:`Conditional Access Policy found that is enforcing MFA for admins.`}]},
+  {cat:"Entra ID", id:"1.3", title:`Legacy Authentication is blocked`, status:"pass", subs:[
+    {status:"pass", name:`Legacy Authentication shall be blocked`, detail:`Conditional Access Policy found`}]},
+  {cat:"Entra ID", id:"1.4", title:`Break Glass users are created for emergency access`, status:"notset", subs:[
+    {status:"notset", name:`Break Glass users are created for emergency access`, detail:`Manual.`}]},
+  {cat:"Entra ID", id:"1.5", title:`Ensure that between two and four global admins are designated`, status:"fail", severity:"high", subs:[
+    {status:"fail", severity:"high", name:`Ensure that between two and four global admins are designated`, detail:`5 Global admin were detected.`}]},
+  {cat:"Entra ID", id:"1.6", title:`Highly privileged accounts shall be cloud-only`, status:"pass", subs:[
+    {status:"pass", name:`Ensure Administrative accounts are cloud-only`, detail:`All Global Admins are cloud-only.`}]},
+  {cat:"Entra ID", id:"1.7", title:`Non-admin users shall be prevented from providing consent to 3rd party applications`, status:"pass", subs:[
+    {status:"pass", name:`Only Admins shall be allowed to register 3rd party applications`, detail:`Authorization Policy`},
+    {status:"pass", name:`Non-admin users shall be prevented from providing consent to 3rd party applications`, detail:`Authorization Policy.`}]},
+  {cat:"Entra ID", id:"1.8", title:`Guest users have limited access to properties and memberships of directory objects`, status:"pass", subs:[
+    {status:"pass", name:`Guest users have limited access to properties and memberships of directory objects`, detail:`Guest users have limited access to properties and memberships of directory objects.`}]},
+  {cat:"Entra ID", id:"1.9", title:`Passwords shall not expire`, status:"pass", subs:[
+    {status:"pass", name:`Passwords shall not expire`, detail:`Passwords do not expire.`}]},
+  {cat:"Entra ID", id:"1.10", title:`MFA shall be required to enroll devices to Azure AD`, status:"fail", severity:"low", subs:[
+    {status:"fail", severity:"low", name:`MFA shall be required to enroll devices to Entra ID`, detail:`A conditional access policy is either missing or misconfigured.`}]},
+  {cat:"Entra ID", id:"1.11", title:`Local Administrator settings are configured for device joins`, status:"fail", subs:[
+    {status:"fail", name:`Local Administrator settings are configured for device joins`, detail:`Local Administrator settings are not configured for device joins.`}]},
+  {cat:"Entra ID", id:"1.12", title:`Dormant Accounts are disabled with 45 days of Inactivity`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Dormant accounts are disabled after 45 days`, detail:`52 accounts were found active that have not signed in for over 45 days.`}]},
+  {cat:"Entra ID", id:"1.13", title:`Browser Sessions are limited for Privileged Users`, status:"fail", subs:[
+    {status:"fail", name:`Browser Sessions shall not be persistent for privileged users`, detail:`No conditional access policy found.`}]},
+  {cat:"Entra ID", id:"1.14", title:`Devices shall be deleted that haven't checked in for over 30 days`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Devices shall be deleted that haven't checked in for over 45 days.`, detail:`232 Devices have not checked in for 45+ days`}]},
+  {cat:"Entra ID", id:"1.15", title:`All corporate approved applications are cataloged and periodically reviewed`, status:"pass", subs:[
+    {status:"pass", name:`All corporate approved applications are cataloged and periodically reviewed`, detail:`54 Enterprise applications were detected.`}]},
+  {cat:"Entra ID", id:"1.16", title:`Dynamic Groups are leveraged for automated group management`, status:"pass", subs:[
+    {status:"pass", name:`Dynamic Groups are leveraged for automated group management`, detail:`Dynamic Group(s) detected.`}]},
+  {cat:"Entra ID", id:"1.17", title:`MFA Shall be required for Intune Enrollment`, status:"fail", severity:"low", subs:[
+    {status:"fail", severity:"low", name:`MFA Shall be required for Intune Enrollment`, detail:`A conditional access policy is either missing or misconfigured.`}]},
+  {cat:"Entra ID", id:"1.18", title:`Require Managed Devices for Sign in`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Managed Devices shall be required for authentication`, detail:`No conditional access policy found.`}]},
+  {cat:"Entra ID", id:"1.19", title:`Device Compliance is required for access to resources`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Noncompliant devices shall be blocked from accessing corporate resources.`, detail:`No conditional access policy found or misconfigured`}]},
+  {cat:"Entra ID", id:"1.20", title:`Require Phishing Resistant MFA for Admins`, status:"fail", severity:"low", subs:[
+    {status:"fail", severity:"low", name:`Ensure 'Phishing-resistant MFA strength' is required for Administrators`, detail:`MFA used for authenticating administrators is not phishing resistant`}]},
+  {cat:"Entra ID", id:"1.21", title:`High risk users and sign-ins are blocked`, status:"fail", subs:[
+    {status:"fail", name:`Ensure 'sign-in risk' is blocked for medium and high risk`, detail:`No conditional access policy found`}]},
+  {cat:"Entra ID", id:"1.22", title:`Privileged Identity Management (PIM) is configured for JIT access`, status:"notset", subs:[
+    {status:"notset", name:`Ensure 'Privileged Identity Management' is used to manage roles`, detail:`Not Set`},
+    {status:"notset", name:`Ensure approval is required for Global Administrator role activation`, detail:`Manual.`}]},
+  {cat:"Entra ID", id:"1.23", title:`Microsoft Sentinel in configured in ingest logs from Entra and Defender`, status:"notset", subs:[
+    {status:"notset", name:`Microsoft Sentinel shall be configured to ingest log information`, detail:`Manual.`}]},
+  {cat:"Entra ID", id:"1.24", title:`Ensure the device code sign-in flow is blocked`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Ensure the device code sign-in flow is blocked`, detail:`No Conditional Access Policy is configured to block device code flow.`}]},
+  {cat:"Entra ID", id:"1.25", title:`Require App Protection`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Require App protection policy for Android/iOS`, detail:`App Protection policy not required for Android and iOS.`}]},
+  /* ---- 2. Exchange ---- */
+  {cat:"Exchange", id:"2.1", title:`SPF, DKIM, and DMARC records are set up for every domain`, status:"pass", subs:[
+    {status:"pass", name:`Ensure that SPF records are published for all Exchange Domains`, detail:`SPF configured for primary domain`},
+    {status:"pass", name:`Ensure DMARC Records for all Exchange Online domains are published`, detail:`DMARC configured for all custom domains`},
+    {status:"pass", name:`Ensure that DKIM is enabled for all Exchange Online Domains`, detail:`DKIM enabled for primary domain`}]},
+  {cat:"Exchange", id:"2.2", title:`Anti-spam policies are configured`, status:"pass", subs:[
+    {status:"pass", name:`Inbound Anti-Spam Protections SHALL Be Enabled.`, detail:`Anti-spam policy detected.`}]},
+  {cat:"Exchange", id:"2.3", title:`Anti-phishing policies are configured`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Ensure that an anti-phishing policy has been created`, detail:`No antiphishing policy with targeted user protection found`}]},
+  {cat:"Exchange", id:"2.4", title:`Anti-malware policies are configured`, status:"pass", subs:[
+    {status:"pass", name:`Zero-hour auto purge (ZAP) for malware SHOULD be enabled in the default antimalware policy and in all existing custom policies.`, detail:`Anti-malware policy found with Zap Enabled`},
+    {status:"pass", name:`Ensure the Common Attachment Types Filter is enabled`, detail:`Anti-malware policy found with Common Attachment filter enabled`}]},
+  {cat:"Exchange", id:"2.5", title:`Automatic forwarding to external domains SHALL be disabled`, status:"fail", severity:"high", subs:[
+    {status:"fail", severity:"high", name:`Ensure all forms of mail forwarding are blocked and/or disabled`, detail:`Mail forwarding is not blocked.`}]},
+  {cat:"Exchange", id:"2.6", title:`Mailbox Auditing SHALL Be Enabled`, status:"pass", subs:[
+    {status:"pass", name:`Ensure 'AuditDisabled' organizationally is set to 'False'`, detail:`Mailbox Logging Enabled.`}]},
+  {cat:"Exchange", id:"2.7", title:`Calendar and Contact Sharing Shall Be Restricted`, status:"pass", subs:[
+    {status:"pass", name:`Ensure 'External sharing' of calendars is not available`, detail:`Sharing policy is configured to restrict calendar and contact sharing.`}]},
+  {cat:"Exchange", id:"2.8", title:`External Sender Warnings are Implemented`, status:"pass", subs:[
+    {status:"pass", name:`Ensure email from external senders is identified`, detail:`Outlook setting enabled`}]},
+  {cat:"Exchange", id:"2.9", title:`Ensure Direct Send submissions are rejected`, status:"fail", severity:"low", subs:[
+    {status:"fail", severity:"low", name:`Ensure Direct Send submissions are rejected`, detail:`Direct send submissions are not rejected`}]},
+  /* ---- 3. Teams ---- */
+  {cat:"Teams", id:"3.1", title:`External User Access SHALL Be Restricted`, status:"pass", subs:[
+    {status:"pass", name:`Ensure external domains are restricted in the Teams admin center`, detail:`Teams policy configured.`}]},
+  {cat:"Teams", id:"3.2", title:`External Participants SHOULD NOT Be Enabled to Request Control of Shared Desktops or Windows in Meetings`, status:"fail", severity:"low", subs:[
+    {status:"fail", severity:"low", name:`Ensure external participants can't give or request control`, detail:`Teams Policy misconfigured.`}]},
+  {cat:"Teams", id:"3.3", title:`Anonymous Users SHALL NOT Be Enabled to Start Meetings`, status:"pass", subs:[
+    {status:"pass", name:`Ensure anonymous users and dial-in callers can't start a meeting`, detail:`Teams Policy configured accurately.`}]},
+  {cat:"Teams", id:"3.4", title:`Automatic Admittance to Meetings SHOULD Be Restricted`, status:"pass", subs:[
+    {status:"pass", name:`Ensure only people in my org can bypass the lobby`, detail:`Teams Policy configured accurately.`}]},
+  {cat:"Teams", id:"3.5", title:`Unmanaged users SHALL NOT be enabled to initiate contact with internal users.`, status:"fail", severity:"low", subs:[
+    {status:"fail", severity:"low", name:`Unmanaged users SHALL NOT be enabled to initiate contact with internal users.`, detail:`Teams Policy misconfigured.`}]},
+  {cat:"Teams", id:"3.6", title:`Contact with Skype SHALL Be Blocked.`, status:"pass", subs:[
+    {status:"pass", name:`Ensure communication with Skype users is disabled`, detail:`Teams Policy configured accurately.`}]},
+  {cat:"Teams", id:"3.7", title:`File Sharing and File Storage Options shall be blocked`, status:"pass", subs:[
+    {status:"pass", name:`Ensure external file sharing in Teams is enabled for only approved cloud storage services`, detail:`3rd party file sharing is blocked in Teams`}]},
+  /* ---- 4. Intune ---- */
+  {cat:"Intune", id:"4.1", title:`Automated patching is performed on all devices`, status:"fail", severity:"critical", subs:[
+    {status:"fail", severity:"critical", name:`Windows Update Rings shall be configured for Windows Devices`, detail:`4 policies found in Intune. 42 devices that need patching.`},
+    {status:"fail", name:`Update Policies shall be configured for Apple Devices`, detail:`No update policy found in Intune.`}]},
+  {cat:"Intune", id:"4.2", title:`Managed devices are enrolled in MDM`, status:"notset", subs:[
+    {status:"notset", name:`Managed Devices are enrolled in MDM`, detail:`Manual`}]},
+  {cat:"Intune", id:"4.3", title:`Personal Devices should be restricted from enrolling into the MDM solution`, status:"fail", severity:"low", subs:[
+    {status:"fail", severity:"low", name:`Personal Devices should be restricted from enrolling into the MDM solution`, detail:`Personal devices are not restricted from enrolling into Intune MDM`}]},
+  {cat:"Intune", id:"4.4", title:`Security Baselines should be configured for Windows Devices`, status:"fail", subs:[
+    {status:"fail", name:`Security Baselines should be configured for Windows Devices`, detail:`No Security Baseline policy configured in Intune.`}]},
+  {cat:"Intune", id:"4.5", title:`Devices compliance policies shall be configured for every supported device platform`, status:"fail", severity:"low", subs:[
+    {status:"fail", severity:"low", name:`Devices compliance policies shall be configured for every supported device platform`, detail:`1 platform without compliance policies.`}]},
+  {cat:"Intune", id:"4.6", title:`All devices have drive encryption applied`, status:"fail", severity:"high", subs:[
+    {status:"fail", severity:"high", name:`Encryption shall be required on all devices`, detail:`4 were found that are not encrypted.`}]},
+  {cat:"Intune", id:"4.7", title:`Lockout screen and password settings shall be configured for each device`, status:"pass", subs:[
+    {status:"pass", name:`Lockout screen and password settings shall be configured for each device`, detail:`Device lockout policy configured in Intune.`}]},
+  {cat:"Intune", id:"4.8", title:`App Protection policies should be created for mobile devices`, status:"pass", subs:[
+    {status:"pass", name:`App Protection policies should be created for mobile devices`, detail:`Polices are in Intune for iOS and Android`}]},
+  {cat:"Intune", id:"4.9", title:`Approved 3rd party applications are deployed and patched`, status:"pass", subs:[
+    {status:"pass", name:`Authorized Applications should be deployed to managed devices`, detail:`Applications are being deployed through Intune`}]},
+  {cat:"Intune", id:"4.10", title:`Local Administrators passwords are managed with LAPS`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Ensure Local Administrator Password Solution is enabled`, detail:`Local admin password solution is not enabled`}]},
+  {cat:"Intune", id:"4.11", title:`OneDrive KFM is configured`, status:"fail", subs:[
+    {status:"fail", name:`OneDrive Sync Requirement`, detail:`No OneDrive Sync Requirement configuration profile found.`}]},
+  /* ---- 5. SharePoint and OneDrive ---- */
+  {cat:"SharePoint and OneDrive", id:"5.1", title:`Default sharing settings are set for New and Existing Guest`, status:"fail", subs:[
+    {status:"fail", name:`Ensure SharePoint external sharing is managed through domain whitelist/blacklists`, detail:`SharePoint Settings Misconfigured`},
+    {status:"notset", name:`Ensure link sharing is restricted in SharePoint and OneDrive`, detail:`Manual.`}]},
+  {cat:"SharePoint and OneDrive", id:"5.2", title:`Expiration Dates are set for Anyone links`, status:"notset", subs:[
+    {status:"notset", name:`Expiration Date SHOULD Be Set for Anyone Links`, detail:`Manual.`}]},
+  /* ---- 6. Defender ---- */
+  {cat:"Defender", id:"6.1", title:`Security Awareness training is conducted at least once per year`, status:"notset", subs:[
+    {status:"notset", name:`Attack simulations shall be periodically conducted`, detail:`Manual`}]},
+  {cat:"Defender", id:"6.2", title:`Anti-virus protections are applied to all devices`, status:"fail", severity:"high", subs:[
+    {status:"fail", severity:"high", name:`Microsoft Defender Antivirus is deployed and managed through Microsoft Intune`, detail:`No Microsoft Defender Antivirus policy configured in Intune.`}]},
+  {cat:"Defender", id:"6.3", title:`Endpoint detection and response software is running on all devices`, status:"pass", subs:[
+    {status:"pass", name:`Devices shall be enrolled for Defender for Business or Defender for Endpoint`, detail:`229 enrolled in Defender`}]},
+  {cat:"Defender", id:"6.4", title:`Firewall protections configured on devices`, status:"fail", severity:"high", subs:[
+    {status:"fail", severity:"high", name:`Firewall Policies are configured for Windows Devices`, detail:`No Windows firewall policy found in Intune.`}]},
+  {cat:"Defender", id:"6.5", title:`Safe Links policies are configured`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Safe Links policies are configured`, detail:`Safe Links policies exist but are missing required configurations.`}]},
+  {cat:"Defender", id:"6.6", title:`Safe Attachment policies are configured`, status:"pass", subs:[
+    {status:"pass", name:`Safe Attachment Policies are configured`, detail:`Active Safe Attachment policy found`}]},
+  {cat:"Defender", id:"6.7", title:`Tamper Protection is configured`, status:"notset", subs:[
+    {status:"notset", name:`Turn on Tamper Protection`, detail:`Manual`}]},
+  {cat:"Defender", id:"6.8", title:`Attack Surface reduction rules are configured`, status:"fail", severity:"medium", subs:[
+    {status:"fail", severity:"medium", name:`Attack Surface Reduction rules shall be configured`, detail:`No Attack surface reduction policy found in Intune`}]},
+  {cat:"Defender", id:"6.9", title:`Defender for Cloud Apps is configured to monitor applications on the network`, status:"pass", subs:[
+    {status:"pass", name:`Cloud App Discovery is configured and apps are periodically reviewed`, detail:`Your tenant is licensed for Defender for Cloud Apps`}]},
+  /* ---- 7. Purview ---- */
+  {cat:"Purview", id:"7.1", title:`Periodic backups are performed for email, files, and Servers`, status:"notset", subs:[
+    {status:"notset", name:`Maintain 3rd party backups of Microsoft 365 data`, detail:`Manual`}]},
+  {cat:"Purview", id:"7.2", title:`Audit Logging SHALL Be Enabled`, status:"pass", subs:[
+    {status:"pass", name:`Audit Logging SHALL Be Enabled`, detail:`Audit Logging Enabled.`}]},
+  {cat:"Purview", id:"7.3", title:`Retention Polices are configured`, status:"notset", subs:[
+    {status:"notset", name:`Retention Policies shall be configured`, detail:`Manual`}]},
+  {cat:"Purview", id:"7.4", title:`Sensitivity Labels are configured`, status:"fail", subs:[
+    {status:"fail", name:`Information Protection Labels shall be configured`, detail:`Secure Score Controls.`}]},
+  {cat:"Purview", id:"7.5", title:`Data Loss Prevention Policies are configured`, status:"pass", subs:[
+    {status:"pass", name:`Data loss prevention policies shall be configured`, detail:`Secure Score Controls.`}]},
+];
 
 function render(){
   syncFilterBar();
   // refresh sidebar badge counts regardless of active tab, so switching tabs shows fresh numbers
+  el("cntBaseline").textContent = BASELINE_DATA.filter(c=>c.status==="fail").length;  // static dataset, always available
   const dorm = computeDormant();
   const members = dorm.filter(u => (u.userType||"Member")!=="Guest");
   const guests  = dorm.filter(u => (u.userType||"Member")==="Guest");
@@ -1387,11 +1590,11 @@ function render(){
   // antivirus sets its own header (per sub-mode) inside renderAntivirus
   if(tab==="antivirus"){ renderAntivirus(); return; }
 
-  const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
+  const heads = { baseline:HEAD_BASELINE, device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
     devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH };
   if(heads[tab]){
     el("theadRow").innerHTML = heads[tab];
-    ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching,
+    ({ baseline:renderBaseline, device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching,
        devcompliance:renderDevCompliance, jailbroken:renderJailbroken, privileged:renderPrivileged, securescore:renderSecScore, legacyauth:renderLegacyAuth, appcreds:renderAppCreds, oauth:renderOauth })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
@@ -1431,6 +1634,55 @@ function setInfoCards(k1,v1,k2,v2,k3,v3,k4,v4){
 function entraLink(path){ return `https://entra.microsoft.com/#view/${path}`; }
 function setFilterCount(shown, total){
   el("filterCount").innerHTML = shown===total ? `<b>${total}</b> rows` : `<b>${shown}</b> of ${total} rows`;
+}
+
+function renderBaseline(){
+  // populate the Category dropdown once, from the dataset itself
+  const catSel = el("fBaseCat");
+  if(!catSel._filled){ fillSelect("fBaseCat", [...new Set(BASELINE_DATA.map(c=>c.category))]); catSel._filled = true; }
+  view = applyBaselineFilters(BASELINE_DATA);
+  setFilterCount(view.length, BASELINE_DATA.length);
+  const passed = BASELINE_DATA.filter(c=>c.status==="pass").length;
+  const failed = BASELINE_DATA.filter(c=>c.status==="fail").length;
+  const evaluated = passed + failed;
+  const pct = evaluated ? Math.round(passed/evaluated*100) : 0;
+  setInfoCards("Controls", BASELINE_DATA.length, "Passed", passed, "Failed", failed, "Pass rate", pct+"%");
+  const tb = el("tbody");
+  if(!view.length){
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">No matches</div>No baseline controls match the current filters.</td></tr>`;
+    return;
+  }
+  const statusPill = s => s==="pass" ? `<span class="pill pass">Passed</span>`
+    : (s==="fail" ? `<span class="pill fail">Failed</span>` : `<span class="pill notset">Not set</span>`);
+  const sevBadge = sv => sv ? `<span class="sev ${sv}">${escapeHtml(sv)}</span>` : `<span class="num">—</span>`;
+  const sdot = s => s==="pass" ? `<span class="sdot pass">✓</span>`
+    : (s==="fail" ? `<span class="sdot fail">✕</span>` : `<span class="sdot notset">○</span>`);
+  tb.innerHTML = view.map(c=>{
+    const subs = (c.subs||[]).map(s=>
+      `<li>${sdot(s.status)}<div><span class="sname">${escapeHtml(s.name)}</span>${s.severity?` <span class="sev ${s.severity}">${escapeHtml(s.severity)}</span>`:""}${s.detail?`<div class="sdetail">${escapeHtml(s.detail)}</div>`:""}</div></li>`).join("");
+    return `<tr>
+      <td>${statusPill(c.status)}</td>
+      <td class="ctlid">${escapeHtml(c.id)}</td>
+      <td><div class="uname">${escapeHtml(c.title)}</div></td>
+      <td class="num">${escapeHtml(c.category)}</td>
+      <td>${sevBadge(c.severity)}</td>
+      <td class="opt"><ul class="subchecks">${subs}</ul></td>
+    </tr>`;
+  }).join("");
+}
+function applyBaselineFilters(rows){
+  const q = searchVal();
+  const cat = v("fBaseCat"), st = v("fBaseStatus"), sv = v("fBaseSev");
+  return rows.filter(c=>{
+    if(cat && c.category!==cat) return false;
+    if(st  && c.status!==st)   return false;
+    if(sv  && c.severity!==sv) return false;
+    if(q){
+      const hay = (c.id+" "+c.title+" "+c.category+" "+(c.subs||[]).map(s=>s.name+" "+(s.detail||"")).join(" ")).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
 }
 
 function renderRisky(){
@@ -2212,12 +2464,14 @@ el("btnRefresh").onclick = ()=>{
 ["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
  "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
  "fPatchRel","fPatchStatus","fAvMode","fAvHealth","fLapsOs","fLapsStatus","fPatchView",
- "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent"].forEach(id=> el(id).onchange = render);
+ "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent",
+ "fBaseCat","fBaseStatus","fBaseSev"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
    "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
    "fPatchRel","fPatchStatus","fLapsOs","fLapsStatus",
-   "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent"].forEach(id=> el(id).value="");
+   "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent",
+   "fBaseCat","fBaseStatus","fBaseSev"].forEach(id=> el(id).value="");
   el("fAvMode").value="endpoints"; el("fAvHealth").value="unhealthy";   // antivirus keeps sensible defaults
   el("fPatchView").value="devices";
   render();
@@ -2293,7 +2547,16 @@ el("patchSave").onclick = ()=>{
 el("btnCsv").onclick = ()=>{
   if(!view.length) return toast("Nothing to export.");
   let head, rows;
-  if(tab==="device"){
+  if(tab==="baseline"){
+    head = ["category","control","baseline","result","severity","subCheck","subResult","subSeverity","finding"];
+    rows = [];
+    view.forEach(c=>{
+      (c.subs&&c.subs.length?c.subs:[{}]).forEach(s=>{
+        rows.push([c.category,c.id,c.title,c.status,c.severity||"",s.name||"",s.status||"",s.severity||"",s.detail||""]
+          .map(val=>`"${String(val??"").replace(/"/g,'""')}"`).join(","));
+      });
+    });
+  } else if(tab==="device"){
     head = ["displayName","deviceId","operatingSystem","operatingSystemVersion","deviceOwnership","accountEnabled","registered","lastSignIn","daysInactive","id"];
     rows = view.map(d=>[
       d.displayName, d.deviceId, d.operatingSystem||"", d.operatingSystemVersion||"", d.deviceOwnership||"",
