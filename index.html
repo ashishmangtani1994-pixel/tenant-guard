@@ -1355,7 +1355,16 @@ function parseBuild(osVer){
   return null;
 }
 const LS_PATCH = "tenantguard.patchBaselines";
-function patchBaselines(){ try{ return JSON.parse(localStorage.getItem(LS_PATCH)||"{}")||{}; }catch{ return {}; } }
+/* Seeded with the real latest second-Tuesday Patch Tuesday build so the view works out of
+   the box. Editable in Settings — refresh each month with the new second-Tuesday build.
+   June 9, 2026 — KB5094126 — OS Builds 26100.8655 (24H2) / 26200.8655 (25H2). */
+const PATCH_DEFAULTS = { "24H2":"26100.8655", "25H2":"26200.8655" };
+function storedBaselines(){ try{ return JSON.parse(localStorage.getItem(LS_PATCH)||"{}")||{}; }catch{ return {}; } }
+function patchBaselines(){ return Object.assign({}, PATCH_DEFAULTS, storedBaselines()); }   // effective = defaults + admin overrides
+const PATCH_DEFAULTS_PT = "2026-06-09";   // the Patch Tuesday the seeded builds belong to
+function baselineAsOf(){ return storedBaselines()._asOf || PATCH_DEFAULTS_PT; }
+/* stale = a newer Patch Tuesday has occurred than the one the saved build is for */
+function baselineStale(){ return ymd(currentPatchTuesday()) > baselineAsOf(); }
 /* compare a device build to the admin-entered target ("26100.4567" or just "4567") */
 function patchStatus(b, target){
   if(!b) return "unknown";
@@ -1368,15 +1377,30 @@ function patchStatus(b, target){
   if(b.major !== tMajor) return b.major > tMajor ? "patched" : "behind";
   return b.rev >= tRev ? "patched" : "behind";
 }
+/* auto baseline: the latest build seen in the fleet for each release. Recomputed
+   on every refresh, so the "current" target tracks whatever's rolled out — no manual upkeep. */
+function fleetTargets(devs){
+  const maxRev = {};
+  for(const d of devs){ if(!d._build) continue; const m=d._build.major; if(!(m in maxRev) || d._build.rev>maxRev[m]) maxRev[m]=d._build.rev; }
+  const out = {};
+  for(const m in maxRev){ const rel = RELEASE_BY_BUILD[m]; if(rel) out[rel] = m+"."+maxRev[m]; }
+  return out;
+}
 function patchingRows(){
-  const base = patchBaselines();
-  return allDevices.filter(d=> /windows/i.test(d.operatingSystem||"") || /^10\.0\./.test(d.operatingSystemVersion||"")).map(d=>{
-    const b = parseBuild(d.operatingSystemVersion);
-    const rel = b ? (RELEASE_BY_BUILD[String(b.major)] || null) : null;
-    const target = rel ? (base[rel] || null) : null;
-    const status = patchStatus(b, target);
-    return { ...d, _build:b, _rel:rel, _osLabel: b ? osLabel(b.major) : (d.operatingSystem||"—"),
-             _target:target, _status:status };
+  const stored = storedBaselines();   // manual overrides only (empty = automatic)
+  const parsed = allDevices
+    .filter(d=> /windows/i.test(d.operatingSystem||"") || /^10\.0\./.test(d.operatingSystemVersion||""))
+    .map(d=>{
+      const b = parseBuild(d.operatingSystemVersion);
+      const rel = b ? (RELEASE_BY_BUILD[String(b.major)] || null) : null;
+      return { ...d, _build:b, _rel:rel, _osLabel: b ? osLabel(b.major) : (d.operatingSystem||"—") };
+    });
+  const fleet = fleetTargets(parsed);                          // ← recomputed each refresh
+  return parsed.map(d=>{
+    const manual = d._rel ? stored[d._rel] : null;
+    const auto   = d._rel ? (fleet[d._rel] || null) : null;
+    const target = manual || auto;                              // manual override wins, else fleet-latest
+    return { ...d, _target:target, _tsource: manual?"manual":(target?"fleet":null), _status: patchStatus(d._build, target) };
   });
 }
 function applyPatchingFilters(rows){
@@ -1401,10 +1425,10 @@ function renderPatching(){
   fillSelect("fPatchRel", [...new Set(all.map(d=>d._rel).filter(Boolean))].sort());
   view = applyPatchingFilters(all).sort((a,b)=> (PATCH_RANK[a._status]-PATCH_RANK[b._status]) || (b._build?b._build.major:0)-(a._build?a._build.major:0));
   setFilterCount(view.length, all.length);
-  const base = patchBaselines();
   const behind = all.filter(d=>d._status==="behind").length;
+  const trackTgt = rel => { const r = all.find(x=>x._rel===rel); return r && r._target ? r._target : "—"; };
   setInfoCards("Patch Tuesday", ymd(currentPatchTuesday()),
-    "24H2 target", base["24H2"] || "set ↗", "25H2 target", base["25H2"] || "set ↗", "Behind", behind);
+    "24H2 target", trackTgt("24H2"), "25H2 target", trackTgt("25H2"), "Behind", behind);
   const tb = el("tbody");
   if(!view.length){
     tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">${all.length?"No matches":"No Windows devices"}</div>${all.length?"No rows match the current filters.":"No registered Windows devices found. Load the Devices view, or check Device.Read.All consent."}</td></tr>`;
@@ -1586,18 +1610,19 @@ el("cfgSave").onclick = ()=>{
 /* patch baselines settings */
 const PATCH_FIELDS = { "24H2":"cfgPatch24H2", "25H2":"cfgPatch25H2", "23H2":"cfgPatch23H2", "Windows 10 22H2":"cfgPatch22H2Win10" };
 function fillPatchSettings(){
-  const b = patchBaselines();
+  const b = storedBaselines();
   for(const [key,id] of Object.entries(PATCH_FIELDS)) el(id).value = b[key] || "";
-  el("patchTuesdayNote").innerHTML = `Validating devices against <b>${ymd(currentPatchTuesday())}</b> — the most recent <b>second-Tuesday</b> Patch Tuesday. Enter that date's cumulative-update build per track (not the later optional/preview update).`;
+  el("patchTuesdayNote").innerHTML = `Every refresh recomputes the current <b>second-Tuesday</b> Patch Tuesday (now <b>${ymd(currentPatchTuesday())}</b>) and re-validates each device — no monthly upkeep needed. By default the target is the <b>latest build present in your fleet</b> for each release, so it tracks the current patch level automatically. To pin an exact Microsoft build instead, enter it below — that overrides the auto target for that track only. For reference, <b>KB5094126</b> (2026-06-09) shipped 24H2 <span class="mono">26100.8655</span> / 25H2 <span class="mono">26200.8655</span>.`;
   el("patch24Link").href = "https://support.microsoft.com/en-us/topic/windows-11-version-24h2-update-history-0929c747-1815-4543-8461-0160d16f15e5";
   el("patch25Link").href = "https://support.microsoft.com/en-us/search?query=Windows%2011%20version%2025H2%20update%20history";
 }
 el("patchSave").onclick = ()=>{
-  const b = patchBaselines();
+  const b = storedBaselines();
   for(const [key,id] of Object.entries(PATCH_FIELDS)){
     const x = el(id).value.trim();
     if(x) b[key] = x; else delete b[key];
   }
+  b._asOf = ymd(currentPatchTuesday());   // mark the baseline as current for this Patch Tuesday
   localStorage.setItem(LS_PATCH, JSON.stringify(b));
   toast("Patch baselines saved.");
   render();
