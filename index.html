@@ -139,6 +139,7 @@
   .pill.off{background:rgba(139,152,165,.12);color:var(--muted)}
   .pill.lic-yes{background:rgba(63,185,80,.14);color:var(--ok)}
   .pill.lic-no{background:rgba(139,152,165,.12);color:var(--muted)}
+  .pill.miss{background:rgba(229,72,77,.13);color:var(--danger)}
   td.num{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
   td.days{font-family:var(--mono);font-weight:500}
   .never{color:var(--danger)}
@@ -235,6 +236,7 @@
         <li><span class="dot-tick">●</span><div><code>Directory.Read.All</code> — read tenant license state (required for sign-in activity)</div></li>
         <li><span class="dot-tick">●</span><div><code>Device.Read.All</code> — read registered devices and their last sign-in</div></li>
         <li><span class="dot-tick">●</span><div><code>IdentityRiskyUser.Read.All</code>, <code>Policy.Read.All</code>, <code>UserAuthenticationMethod.Read.All</code>, <code>ServiceHealth.Read.All</code> — security views (risky users, Conditional Access, MFA, service health)</div></li>
+        <li><span class="dot-tick">●</span><div><code>BitlockerKey.ReadBasic.All</code> &amp; <code>DeviceManagementManagedDevices.Read.All</code> — compliance view: BitLocker recovery-key metadata (no key material) plus Intune encryption status, to find devices missing a key or not encrypted</div></li>
         <li><span class="dot-tick">●</span><div><code>User.ReadWrite.All</code> — delete selected user accounts (soft-delete, recoverable 30 days)</div></li>
         <li><span class="dot-tick">●</span><div><code>Directory.AccessAsUser.All</code> — requested only at the moment you delete a device (Graph has no narrower delegated permission for that operation); permanent, no recovery</div></li>
         <li><span class="dot-tick">●</span><div>Needs an <b>Entra ID P1/P2</b> license. Deleting users needs User Administrator or Global Administrator; deleting devices needs Cloud Device Administrator, Intune Administrator, or Global Administrator.</div></li>
@@ -290,6 +292,12 @@
           <button class="tab" data-tab="ca">Conditional Access <span class="cnt" id="cntCa">—</span></button>
           <button class="tab" data-tab="license">Licenses <span class="cnt" id="cntLicense">—</span></button>
           <button class="tab" data-tab="health">Service health <span class="cnt" id="cntHealth">—</span></button>
+        </div>
+      </div>
+      <div class="navgroup" data-group="compliance">
+        <button class="navhead" data-grouphead="compliance"><span class="caret">▾</span> Compliance</button>
+        <div class="navitems">
+          <button class="tab" data-tab="bitlocker">BitLocker key <span class="cnt" id="cntBitlocker">—</span></button>
         </div>
       </div>
     </aside>
@@ -394,16 +402,29 @@
           <label>Status</label>
           <select id="fHealthStatus"><option value="">All</option><option value="active">Active</option><option value="resolved">Resolved</option></select>
         </div>
+        <!-- compliance: bitlocker -->
+        <div class="field hide" id="wrapBlOs">
+          <label>Operating system</label>
+          <select id="fBlOs"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapBlStatus">
+          <label>BitLocker key</label>
+          <select id="fBlStatus"><option value="">All</option><option value="missing">Missing key</option><option value="has">Has key</option><option value="na">Not applicable</option></select>
+        </div>
+        <div class="field hide" id="wrapBlEnc">
+          <label>Encrypted</label>
+          <select id="fBlEnc"><option value="">All</option><option value="yes">Encrypted</option><option value="no">Not encrypted</option><option value="unknown">Unknown</option></select>
+        </div>
         <span class="grow"></span>
         <span class="count" id="filterCount"></span>
         <button class="btn ghost" id="fClear">Clear filters</button>
       </div>
 
       <div class="cards" id="cards">
-        <div class="card"><div class="k">Users scanned</div><div class="v" id="cScanned">—</div></div>
-        <div class="card warn"><div class="k">Dormant members</div><div class="v" id="cMember">—</div></div>
-        <div class="card warn"><div class="k">Dormant guests</div><div class="v" id="cGuest">—</div></div>
-        <div class="card warn"><div class="k">Stale devices</div><div class="v" id="cDevice">—</div></div>
+        <div class="card"><div class="k" id="dCard1k">Scanned</div><div class="v" id="dCard1v">—</div></div>
+        <div class="card warn"><div class="k" id="dCard2k">Dormant</div><div class="v" id="dCard2v">—</div></div>
+        <div class="card warn"><div class="k" id="dCard3k">Never signed in</div><div class="v" id="dCard3v">—</div></div>
+        <div class="card warn"><div class="k" id="dCard4k">Unlicensed</div><div class="v" id="dCard4v">—</div></div>
         <div class="card accent"><div class="k">Premium / license</div><div class="v" id="cLic" style="font-size:18px;padding-top:6px">—</div></div>
       </div>
 
@@ -485,7 +506,8 @@
 const DEFAULT_CLIENT_ID = "63aad37d-5338-46cd-9790-2651f0af3233";
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All",
-  "IdentityRiskyUser.Read.All","Policy.Read.All","UserAuthenticationMethod.Read.All","ServiceHealth.Read.All"];
+  "IdentityRiskyUser.Read.All","Policy.Read.All","UserAuthenticationMethod.Read.All","ServiceHealth.Read.All",
+  "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All"];
 const WRITE_SCOPES = ["User.ReadWrite.All"];
 // Device.ReadWrite.All is application-only and cannot be granted to a SPA.
 // The only delegated permission that can delete a device is Directory.AccessAsUser.All —
@@ -510,11 +532,13 @@ let allRegDetails = [];     let mfaLoaded = false;
 let allCaPolicies = [];     let caLoaded = false;
 let allSkus = [];           let skusLoaded = false;
 let allHealthIssues = [];   let healthLoaded = false;
+let allBitlockerKeys = [];  let bitlockerLoaded = false;
+let allManagedDevices = []; let intuneAvailable = false;   // Intune encryption status (best-effort)
 let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
 
-const INFO_TABS = ["risky","mfa","ca","license","health"];
+const INFO_TABS = ["risky","mfa","ca","license","health","bitlocker"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
 
@@ -613,7 +637,6 @@ async function gget(url, tok){
 
 async function loadDirectory(){
   el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Reading directory & sign-in activity…</td></tr>`;
-  el("cScanned").textContent="—"; el("cMember").textContent="—"; el("cGuest").textContent="—";
   try{
     const tok = await token(READ_SCOPES);
     if(!tok) return; // redirect in flight
@@ -628,7 +651,6 @@ async function loadDirectory(){
     }
     licensePremium = true;
     el("cLic").textContent = "P1 / P2 ✓"; el("cLic").style.color="var(--accent)";
-    el("cScanned").textContent = allUsers.length.toLocaleString();
     render();
   }catch(e){
     handleGraphError(e);
@@ -652,7 +674,6 @@ function handleGraphError(e){
    ======== */
 async function loadDevices(){
   el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Reading registered devices…</td></tr>`;
-  el("cDevice").textContent="—";
   try{
     const tok = await token(READ_SCOPES);
     if(!tok) return; // redirect in flight
@@ -765,6 +786,52 @@ async function loadHealth(){
     }
     healthLoaded = true;
     fillSelect("fHealthSvc", [...new Set(allHealthIssues.map(h=>h.service).filter(Boolean))].sort());
+    render();
+  }catch(e){ handleGraphError(e); }
+}
+
+/* ========
+   GRAPH — BitLocker recovery keys (Compliance)
+   Reads escrowed key metadata (deviceId only — no key material) and compares against
+   the device list to find Windows devices with no recovery key backed up to Entra.
+   Needs BitlockerKey.ReadBasic.All + a privileged role (Global Admin, Cloud Device
+   Admin, Helpdesk/Intune Admin). Devices are loaded first if not already cached.
+   ======== */
+async function loadBitlocker(){
+  el("tbody").innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Reading BitLocker &amp; encryption status…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES);
+    if(!tok) return;
+    if(!devicesLoaded){
+      const dsel = "id,displayName,deviceId,operatingSystem,operatingSystemVersion,deviceOwnership,accountEnabled,createdDateTime,approximateLastSignInDateTime";
+      let durl = `${GRAPH}/devices?$select=${dsel}&$top=500&$count=true`;
+      allDevices = [];
+      while(durl){ const page = await gget(durl, tok); allDevices.push(...(page.value||[])); durl = page["@odata.nextLink"]||null; }
+      devicesLoaded = true; populateDeviceFilters();
+    }
+    let url = `${GRAPH}/informationProtection/bitlocker/recoveryKeys?$select=id,deviceId,createdDateTime,volumeType&$top=200`;
+    allBitlockerKeys = [];
+    while(url){
+      const page = await gget(url, tok);
+      allBitlockerKeys.push(...(page.value||[]));
+      url = page["@odata.nextLink"] || null;
+    }
+    // Intune encryption status — best-effort. A 403/feature-off here must NOT fail the
+    // whole compliance view, so it's caught separately and the column degrades to "—".
+    try{
+      let murl = `${GRAPH}/deviceManagement/managedDevices?$select=id,deviceName,azureADDeviceId,isEncrypted,complianceState,operatingSystem&$top=200`;
+      allManagedDevices = [];
+      while(murl){
+        const page = await gget(murl, tok);
+        allManagedDevices.push(...(page.value||[]));
+        murl = page["@odata.nextLink"] || null;
+      }
+      intuneAvailable = true;
+    }catch(err){
+      intuneAvailable = false; allManagedDevices = [];
+    }
+    bitlockerLoaded = true;
+    fillSelect("fBlOs", [...new Set(allDevices.map(d=>d.operatingSystem).filter(Boolean))].sort());
     render();
   }catch(e){ handleGraphError(e); }
 }
@@ -916,7 +983,7 @@ function fillSelect(id, values){
 /* which filter controls each view shows (only its own fields) */
 const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatus","wrapRisk","wrapRiskState",
   "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
-  "wrapHealthSvc","wrapHealthClass","wrapHealthStatus"];
+  "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc"];
 const FILTERS_BY_TAB = {
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
@@ -925,11 +992,12 @@ const FILTERS_BY_TAB = {
   mfa:   ["wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr"],
   ca:    ["wrapCaState"],
   license:["wrapLicStatus"],
-  health:["wrapHealthSvc","wrapHealthClass","wrapHealthStatus"]
+  health:["wrapHealthSvc","wrapHealthClass","wrapHealthStatus"],
+  bitlocker:["wrapBlOs","wrapBlStatus","wrapBlEnc"]
 };
 const SEARCH_PLACEHOLDER = {
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
-  ca:"policy name…", license:"SKU…", health:"issue or service…"
+  ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…"
 };
 
 function syncFilterBar(){
@@ -952,36 +1020,62 @@ const HEAD_MFA     = `<th>User</th><th>Type</th><th>MFA registered</th><th>MFA c
 const HEAD_CA      = `<th>Policy</th><th>State</th><th class="opt">Created</th><th>Modified</th><th></th>`;
 const HEAD_LICENSE = `<th>SKU</th><th>Enabled</th><th>Consumed</th><th>Available</th><th>Status</th>`;
 const HEAD_HEALTH  = `<th>Issue</th><th>Service</th><th>Classification</th><th>Status</th><th>Last updated</th>`;
+const HEAD_BITLOCKER = `<th>Device</th><th>OS</th><th>BitLocker key</th><th>Encrypted</th><th class="opt">Key escrowed</th><th>Ownership</th>`;
 
 function render(){
   syncFilterBar();
-  // refresh member/guest counts regardless of active tab, so switching tabs shows fresh numbers
+  // refresh sidebar badge counts regardless of active tab, so switching tabs shows fresh numbers
   const dorm = computeDormant();
   const members = dorm.filter(u => (u.userType||"Member")!=="Guest");
   const guests  = dorm.filter(u => (u.userType||"Member")==="Guest");
   el("cntMember").textContent = members.length;
   el("cntGuest").textContent  = guests.length;
-  el("cMember").textContent   = members.length.toLocaleString();
-  el("cGuest").textContent    = guests.length.toLocaleString();
 
+  let stale = [];
   if(devicesLoaded){
-    const stale = computeStaleDevices();
+    stale = computeStaleDevices();
     el("cntDevice").textContent = stale.length;
-    el("cDevice").textContent   = stale.length.toLocaleString();
   }
   if(riskyLoaded)  el("cntRisky").textContent  = allRisky.length;
   if(mfaLoaded)    el("cntMfa").textContent    = allRegDetails.filter(r=>!r.isMfaRegistered).length;
   if(caLoaded)     el("cntCa").textContent     = allCaPolicies.length;
   if(skusLoaded)   el("cntLicense").textContent= allSkus.length;
   if(healthLoaded) el("cntHealth").textContent = allHealthIssues.filter(h=>!h.isResolved).length;
+  if(bitlockerLoaded) el("cntBitlocker").textContent = bitlockerRows().filter(d=>d._status==="missing").length;
 
-  const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH };
+  // KPI cards are scoped to the ACTIVE dormant view, not the whole tenant
+  if(!isInfoTab()) setDormantCards(members, guests, stale);
+
+  const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER };
   if(heads[tab]){
     el("theadRow").innerHTML = heads[tab];
-    ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth })[tab]();
+    ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
     renderUsers(tab==="member"?members:guests);
+  }
+}
+
+/* dormant KPI cards — values are specific to the active view (members / guests / devices) */
+function fillDormCards(k1,v1,k2,v2,k3,v3,k4,v4){
+  const n = x => typeof x === "number" ? x.toLocaleString() : x;
+  el("dCard1k").textContent=k1; el("dCard1v").textContent=n(v1);
+  el("dCard2k").textContent=k2; el("dCard2v").textContent=n(v2);
+  el("dCard3k").textContent=k3; el("dCard3v").textContent=n(v3);
+  el("dCard4k").textContent=k4; el("dCard4v").textContent=n(v4);
+}
+function setDormantCards(members, guests, stale){
+  if(tab==="member"){
+    const scanned = allUsers.filter(u=>(u.userType||"Member")!=="Guest" && u.id!==account.localAccountId).length;
+    fillDormCards("Members scanned", scanned, "Dormant members", members.length,
+      "Never signed in", members.filter(x=>x._never).length, "Unlicensed", members.filter(x=>!hasLicense(x)).length);
+  } else if(tab==="guest"){
+    const scanned = allUsers.filter(u=>(u.userType||"Member")==="Guest").length;
+    fillDormCards("Guests scanned", scanned, "Dormant guests", guests.length,
+      "Never signed in", guests.filter(x=>x._never).length, "Unlicensed", guests.filter(x=>!hasLicense(x)).length);
+  } else if(tab==="device"){
+    fillDormCards("Devices scanned", devicesLoaded ? allDevices.length : "—", "Stale devices", stale.length,
+      "Never signed in", stale.filter(x=>x._never).length, "Disabled", stale.filter(x=>x.accountEnabled===false).length);
   }
 }
 
@@ -1121,6 +1215,72 @@ function renderHealth(){
   }).join("");
 }
 
+/* join the device list with escrowed BitLocker keys; classify each device:
+   has = key escrowed · missing = Windows device with no key · na = non-Windows (BitLocker n/a) */
+function bitlockerRows(){
+  const keyed = new Set(allBitlockerKeys.map(k=>k.deviceId).filter(Boolean));
+  const latest = {};
+  for(const k of allBitlockerKeys){
+    if(!k.deviceId) continue;
+    const t = k.createdDateTime ? new Date(k.createdDateTime).getTime() : 0;
+    if(!(k.deviceId in latest) || t > latest[k.deviceId]) latest[k.deviceId] = t;
+  }
+  // Intune encryption status keyed by Azure AD device id (matches Entra device.deviceId)
+  const encMap = new Map();
+  for(const m of allManagedDevices){
+    if(m.azureADDeviceId && typeof m.isEncrypted === "boolean") encMap.set(m.azureADDeviceId, m.isEncrypted);
+  }
+  return allDevices.map(d=>{
+    const isWin = /windows/i.test(d.operatingSystem||"");
+    const hasKey = keyed.has(d.deviceId);
+    const status = hasKey ? "has" : (isWin ? "missing" : "na");
+    const kd = latest[d.deviceId] ? new Date(latest[d.deviceId]).toISOString() : null;
+    const enc = encMap.has(d.deviceId) ? encMap.get(d.deviceId) : null;   // true / false / null(unknown)
+    const encStatus = enc===true ? "yes" : (enc===false ? "no" : "unknown");
+    return { ...d, _isWin:isWin, _hasKey:hasKey, _status:status, _keyDate:kd, _encrypted:enc, _encStatus:encStatus };
+  });
+}
+function applyBitlockerFilters(rows){
+  const q=searchVal(), os=v("fBlOs"), st=v("fBlStatus"), enc=v("fBlEnc");
+  return rows.filter(d=>{
+    if(q && !((d.displayName||"")+" "+(d.operatingSystem||"")).toLowerCase().includes(q)) return false;
+    if(os && (d.operatingSystem||"")!==os) return false;
+    if(st && d._status!==st) return false;
+    if(enc && d._encStatus!==enc) return false;
+    return true;
+  });
+}
+function renderBitlocker(){
+  const all = bitlockerRows();
+  view = applyBitlockerFilters(all).sort((a,b)=> (a._status==="missing"?0:1) - (b._status==="missing"?0:1));
+  setFilterCount(view.length, all.length);
+  const win = all.filter(d=>d._isWin);
+  const withKey = win.filter(d=>d._hasKey).length;
+  const missing = win.filter(d=>!d._hasKey).length;
+  const cov = win.length ? Math.round((withKey/win.length)*100) : 0;
+  setInfoCards("Windows devices", win.length, "Key escrowed", withKey, "Missing key", missing, "Coverage", cov+"%");
+  const tb = el("tbody");
+  if(!view.length){
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">${all.length?"No matches":"No devices"}</div>${all.length?"No rows match the current filters.":"No registered devices found, or BitLocker key access wasn't granted (needs BitlockerKey.ReadBasic.All and a privileged role)."}</td></tr>`;
+    return;
+  }
+  tb.innerHTML = view.map(d=>{
+    const osPill = `<span class="pill member">${escapeHtml(d.operatingSystem||"—")}</span>`;
+    const keyPill = d._hasKey ? `<span class="pill lic-yes">Yes</span>`
+      : (d._isWin ? `<span class="pill miss">No</span>` : `<span class="pill off">N/A</span>`);
+    const encPill = d._encrypted===true ? `<span class="pill lic-yes">Yes</span>`
+      : (d._encrypted===false ? `<span class="pill miss">No</span>` : `<span class="pill off">—</span>`);
+    return `<tr>
+      <td><div class="uname">${escapeHtml(d.displayName||"—")}</div><div class="upn">${escapeHtml(d.operatingSystemVersion||"")}</div></td>
+      <td>${osPill}</td>
+      <td>${keyPill}</td>
+      <td>${encPill}</td>
+      <td class="num opt">${fmtDate(d._keyDate)}</td>
+      <td class="num">${escapeHtml(d.deviceOwnership||"—")}</td>
+    </tr>`;
+  }).join("");
+}
+
 function renderUsers(rows){
   const total = rows.length;
   view = applyUserFilters(rows).sort((a,b)=> b._inactive - a._inactive);
@@ -1223,26 +1383,42 @@ el("btnRefresh").onclick = ()=>{
   else if(tab==="ca"){ caLoaded=false; loadCa(); }
   else if(tab==="license"){ skusLoaded=false; loadSkus(); }
   else if(tab==="health"){ healthLoaded=false; loadHealth(); }
+  else if(tab==="bitlocker"){ bitlockerLoaded=false; loadBitlocker(); }
   else { loadDirectory(); }
 };
 
 /* filter-bar wiring — re-render on any filter change (every view's own fields) */
 ["fSearch"].forEach(id=> el(id).oninput = render);
 ["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
- "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus"].forEach(id=> el(id).onchange = render);
+ "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
-   "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus"].forEach(id=> el(id).value="");
+   "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc"].forEach(id=> el(id).value="");
   render();
 };
 
-/* left-nav: collapsible section headers (Dormant Status / Security) */
-document.querySelectorAll(".navhead").forEach(h=> h.onclick = ()=> h.closest(".navgroup").classList.toggle("collapsed"));
+/* left-nav: collapsible section headers (Dormant Status / Security / Compliance),
+   with collapsed/expanded state remembered across reloads */
+const LS_NAV = "tenantguard.navCollapsed";
+function saveNavState(){
+  const collapsed = [...document.querySelectorAll(".navgroup.collapsed")].map(g=>g.dataset.group);
+  localStorage.setItem(LS_NAV, JSON.stringify(collapsed));
+}
+function loadNavState(){
+  let collapsed = [];
+  try{ collapsed = JSON.parse(localStorage.getItem(LS_NAV)||"[]"); }catch{}
+  document.querySelectorAll(".navgroup").forEach(g=> g.classList.toggle("collapsed", collapsed.includes(g.dataset.group)));
+}
+document.querySelectorAll(".navhead").forEach(h=> h.onclick = ()=>{
+  h.closest(".navgroup").classList.toggle("collapsed");
+  saveNavState();
+});
+loadNavState();
 
 /* left-nav: view switching */
 const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>riskyLoaded, loadRisky],
   mfa:[()=>mfaLoaded, loadMfa], ca:[()=>caLoaded, loadCa], license:[()=>skusLoaded, loadSkus],
-  health:[()=>healthLoaded, loadHealth] };
+  health:[()=>healthLoaded, loadHealth], bitlocker:[()=>bitlockerLoaded, loadBitlocker] };
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); tab=t.dataset.tab;
@@ -1286,6 +1462,13 @@ el("btnCsv").onclick = ()=>{
   } else if(tab==="health"){
     head = ["title","service","classification","status","isResolved","lastModifiedDateTime","id"];
     rows = view.map(h=>[h.title,h.service,h.classification,h.status,h.isResolved,h.lastModifiedDateTime,h.id]
+      .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="bitlocker"){
+    head = ["displayName","operatingSystem","operatingSystemVersion","bitlockerKey","encrypted","keyEscrowed","deviceOwnership","deviceId"];
+    rows = view.map(d=>[d.displayName, d.operatingSystem||"", d.operatingSystemVersion||"",
+      (d._hasKey?"Yes":(d._isWin?"No":"N/A")),
+      (d._encrypted===true?"Yes":(d._encrypted===false?"No":"Unknown")),
+      d._keyDate||"", d.deviceOwnership||"", d.deviceId]
       .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
   } else {
     head = ["displayName","userPrincipalName","userType","licenseAssigned","accountEnabled","lastInteractive","lastNonInteractive","lastSuccessful","lastActivity","daysInactive","id"];
