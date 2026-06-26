@@ -310,7 +310,7 @@
 
   /* ---- table polish + severity row accent ---- */
   .tablewrap{box-shadow:var(--elev-1);border-radius:var(--r-md)}
-  thead th{position:sticky;top:64px;z-index:1;backdrop-filter:blur(6px);background:rgba(27,34,44,.92)}
+  thead th{position:sticky;top:0;z-index:2;backdrop-filter:none;background:var(--panel-2);box-shadow:0 1px 0 var(--border)}
   tbody tr{transition:background .12s}
   tbody tr.clickrow td:first-child{border-left:3px solid transparent;transition:border-color .15s}
   tbody tr[data-accent="critical"] td:first-child{border-left-color:#ff5b6a}
