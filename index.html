@@ -238,7 +238,7 @@
         <li><span class="dot-tick">●</span><div><code>Directory.Read.All</code> — read tenant license state (required for sign-in activity)</div></li>
         <li><span class="dot-tick">●</span><div><code>Device.Read.All</code> — read registered devices and their last sign-in</div></li>
         <li><span class="dot-tick">●</span><div><code>IdentityRiskyUser.Read.All</code>, <code>Policy.Read.All</code>, <code>UserAuthenticationMethod.Read.All</code>, <code>ServiceHealth.Read.All</code> — security views (risky users, Conditional Access, MFA, service health)</div></li>
-        <li><span class="dot-tick">●</span><div><code>BitlockerKey.ReadBasic.All</code> &amp; <code>DeviceManagementManagedDevices.Read.All</code> — compliance &amp; antivirus views: BitLocker recovery-key metadata (no key material), Intune encryption status, Defender antivirus health, and active-malware reporting</div></li>
+        <li><span class="dot-tick">●</span><div><code>BitlockerKey.ReadBasic.All</code>, <code>DeviceLocalCredential.ReadBasic.All</code> &amp; <code>DeviceManagementManagedDevices.Read.All</code> — compliance &amp; antivirus views: BitLocker recovery-key and Windows LAPS metadata (no key/password material), Intune encryption status, Defender antivirus health, and active-malware reporting</div></li>
         <li><span class="dot-tick">●</span><div><code>User.ReadWrite.All</code> — delete selected user accounts (soft-delete, recoverable 30 days)</div></li>
         <li><span class="dot-tick">●</span><div><code>Directory.AccessAsUser.All</code> — requested only at the moment you delete a device (Graph has no narrower delegated permission for that operation); permanent, no recovery</div></li>
         <li><span class="dot-tick">●</span><div>Needs an <b>Entra ID P1/P2</b> license. Deleting users needs User Administrator or Global Administrator; deleting devices needs Cloud Device Administrator, Intune Administrator, or Global Administrator.</div></li>
@@ -314,13 +314,14 @@
           <button class="tab" data-tab="ca">Conditional Access <span class="cnt" id="cntCa">—</span></button>
           <button class="tab" data-tab="license">Licenses <span class="cnt" id="cntLicense">—</span></button>
           <button class="tab" data-tab="health">Service health <span class="cnt" id="cntHealth">—</span></button>
-          <button class="tab" data-tab="antivirus">Antivirus <span class="cnt" id="cntAntivirus">—</span></button>
         </div>
       </div>
       <div class="navgroup" data-group="compliance">
         <button class="navhead" data-grouphead="compliance"><span class="caret">▾</span> Compliance</button>
         <div class="navitems">
+          <button class="tab" data-tab="antivirus">Antivirus <span class="cnt" id="cntAntivirus">—</span></button>
           <button class="tab" data-tab="bitlocker">BitLocker key <span class="cnt" id="cntBitlocker">—</span></button>
+          <button class="tab" data-tab="laps">LAPS key <span class="cnt" id="cntLaps">—</span></button>
           <button class="tab" data-tab="patching">Patching status <span class="cnt" id="cntPatching">—</span></button>
         </div>
       </div>
@@ -439,6 +440,15 @@
           <label>Encrypted</label>
           <select id="fBlEnc"><option value="">All</option><option value="yes">Encrypted</option><option value="no">Not encrypted</option><option value="unknown">Unknown</option></select>
         </div>
+        <!-- compliance: laps -->
+        <div class="field hide" id="wrapLapsOs">
+          <label>Operating system</label>
+          <select id="fLapsOs"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapLapsStatus">
+          <label>LAPS key</label>
+          <select id="fLapsStatus"><option value="">All</option><option value="missing">Missing key</option><option value="has">Has key</option><option value="na">Not applicable</option></select>
+        </div>
         <!-- compliance: patching status -->
         <div class="field hide" id="wrapPatchRel">
           <label>Windows release</label>
@@ -550,7 +560,7 @@ const GRAPH = "https://graph.microsoft.com/v1.0";
 const GRAPH_BETA = "https://graph.microsoft.com/beta";
 const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All",
   "IdentityRiskyUser.Read.All","Policy.Read.All","UserAuthenticationMethod.Read.All","ServiceHealth.Read.All",
-  "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All"];
+  "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All","DeviceLocalCredential.ReadBasic.All"];
 const WRITE_SCOPES = ["User.ReadWrite.All"];
 // Device.ReadWrite.All is application-only and cannot be granted to a SPA.
 // The only delegated permission that can delete a device is Directory.AccessAsUser.All —
@@ -580,11 +590,12 @@ let allManagedDevices = []; let intuneAvailable = false;   // Intune encryption 
 let avOverview = null;      let avEndpoints = [];  let avEndpointsAvailable = true;   // antivirus / Defender health
 let avMalware = [];         let avMalwareCols = []; let avMalwareAvailable = true;
 let avLoaded = false;
+let allLaps = [];           let lapsLoaded = false; let lapsAvailable = true;   // Windows LAPS backups
 let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
 
-const INFO_TABS = ["risky","mfa","ca","license","health","antivirus","bitlocker","patching"];
+const INFO_TABS = ["risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
 
@@ -849,13 +860,6 @@ async function loadBitlocker(){
   try{
     const tok = await token(READ_SCOPES);
     if(!tok) return;
-    if(!devicesLoaded){
-      const dsel = "id,displayName,deviceId,operatingSystem,operatingSystemVersion,deviceOwnership,accountEnabled,createdDateTime,approximateLastSignInDateTime";
-      let durl = `${GRAPH}/devices?$select=${dsel}&$top=500&$count=true`;
-      allDevices = [];
-      while(durl){ const page = await gget(durl, tok); allDevices.push(...(page.value||[])); durl = page["@odata.nextLink"]||null; }
-      devicesLoaded = true; populateDeviceFilters();
-    }
     let url = `${GRAPH}/informationProtection/bitlocker/recoveryKeys?$select=id,deviceId,createdDateTime,volumeType&$top=200`;
     allBitlockerKeys = [];
     while(url){
@@ -866,7 +870,7 @@ async function loadBitlocker(){
     // Intune encryption status — best-effort. A 403/feature-off here must NOT fail the
     // whole compliance view, so it's caught separately and the column degrades to "—".
     try{
-      let murl = `${GRAPH}/deviceManagement/managedDevices?$select=id,deviceName,azureADDeviceId,isEncrypted,complianceState,operatingSystem&$top=200`;
+      let murl = `${GRAPH}/deviceManagement/managedDevices?$select=id,deviceName,azureADDeviceId,isEncrypted,complianceState,operatingSystem,osVersion,managedDeviceOwnerType&$top=200`;
       allManagedDevices = [];
       while(murl){
         const page = await gget(murl, tok);
@@ -878,7 +882,40 @@ async function loadBitlocker(){
       intuneAvailable = false; allManagedDevices = [];
     }
     bitlockerLoaded = true;
-    fillSelect("fBlOs", [...new Set(allDevices.map(d=>d.operatingSystem).filter(Boolean))].sort());
+    fillSelect("fBlOs", [...new Set(allManagedDevices.map(d=>d.operatingSystem).filter(Boolean))].sort());
+    render();
+  }catch(e){ handleGraphError(e); }
+}
+
+/* ========
+   GRAPH — Windows LAPS (Local Admin Password Solution)
+   Same shape as BitLocker: scope to Intune-managed devices and flag Windows devices whose
+   local-admin password is NOT backed up to Entra. /directory/deviceLocalCredentials returns
+   metadata only (no passwords). Its `id` is the device's deviceId (= managedDevice.azureADDeviceId).
+   Needs DeviceLocalCredential.ReadBasic.All + a privileged role; Windows-only (LAPS).
+   ======== */
+async function loadLaps(){
+  el("tbody").innerHTML = `<tr><td colspan="5" class="loadrow"><span class="spin"></span> Reading LAPS backups &amp; managed devices…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES);
+    if(!tok) return;
+    // Intune-managed devices (same source as BitLocker)
+    if(!allManagedDevices.length){
+      try{
+        let murl = `${GRAPH}/deviceManagement/managedDevices?$select=id,deviceName,azureADDeviceId,operatingSystem,osVersion,managedDeviceOwnerType&$top=200`;
+        allManagedDevices = [];
+        while(murl){ const page = await gget(murl, tok); allManagedDevices.push(...(page.value||[])); murl = page["@odata.nextLink"]||null; }
+        intuneAvailable = true;
+      }catch(e){ intuneAvailable = false; allManagedDevices = []; }
+    }
+    // LAPS backups (metadata only — no passwords)
+    allLaps = []; lapsAvailable = true;
+    try{
+      let url = `${GRAPH}/directory/deviceLocalCredentials?$select=id,deviceName,lastBackupDateTime,refreshDateTime&$top=500`;
+      while(url){ const page = await gget(url, tok); allLaps.push(...(page.value||[])); url = page["@odata.nextLink"]||null; }
+    }catch(e){ lapsAvailable = false; allLaps = []; }
+    lapsLoaded = true;
+    fillSelect("fLapsOs", [...new Set(allManagedDevices.map(d=>d.operatingSystem).filter(Boolean))].sort());
     render();
   }catch(e){ handleGraphError(e); }
 }
@@ -1081,7 +1118,7 @@ function fillSelect(id, values){
 const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatus","wrapRisk","wrapRiskState",
   "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
   "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc",
-  "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth"];
+  "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth","wrapLapsOs","wrapLapsStatus"];
 const FILTERS_BY_TAB = {
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
@@ -1093,12 +1130,13 @@ const FILTERS_BY_TAB = {
   health:["wrapHealthSvc","wrapHealthClass","wrapHealthStatus"],
   antivirus:["wrapAvMode","wrapAvHealth"],
   bitlocker:["wrapBlOs","wrapBlStatus","wrapBlEnc"],
+  laps:["wrapLapsOs","wrapLapsStatus"],
   patching:["wrapPatchRel","wrapPatchStatus"]
 };
 const SEARCH_PLACEHOLDER = {
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
   ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…",
-  patching:"device name or build…", antivirus:"device or malware…"
+  patching:"device name or build…", antivirus:"device or malware…", laps:"device name…"
 };
 
 function syncFilterBar(){
@@ -1122,6 +1160,7 @@ const HEAD_CA      = `<th>Policy</th><th>State</th><th class="opt">Created</th><
 const HEAD_LICENSE = `<th>SKU</th><th>Enabled</th><th>Consumed</th><th>Available</th><th>Status</th>`;
 const HEAD_HEALTH  = `<th>Issue</th><th>Service</th><th>Classification</th><th>Status</th><th>Last updated</th>`;
 const HEAD_BITLOCKER = `<th>Device</th><th>OS</th><th>BitLocker key</th><th>Encrypted</th><th class="opt">Key escrowed</th><th>Ownership</th>`;
+const HEAD_LAPS = `<th>Device</th><th>OS</th><th>LAPS key</th><th class="opt">Last backup</th><th>Ownership</th>`;
 const HEAD_PATCHING  = `<th>Device</th><th>Current OS</th><th>Current build</th><th>Target build</th><th>Patch status</th><th class="opt">Last active</th>`;
 const HEAD_AV_ENDPOINTS = `<th>Device</th><th>Managed by</th><th>Malware protection</th><th>State</th><th>Real-time</th><th>Network</th><th>Signature</th><th>Tamper</th><th class="opt">Product status</th><th class="opt">Reboot</th>`;
 
@@ -1146,6 +1185,7 @@ function render(){
   if(healthLoaded) el("cntHealth").textContent = allHealthIssues.filter(h=>!h.isResolved).length;
   if(avLoaded){ const o=avOverview||{}; el("cntAntivirus").textContent = Math.max(0,(o.totalReportedDeviceCount||0)-(o.cleanDeviceCount||0)); }
   if(bitlockerLoaded) el("cntBitlocker").textContent = bitlockerRows().filter(d=>d._status==="missing").length;
+  if(lapsLoaded)      el("cntLaps").textContent = lapsRows().filter(d=>d._status==="missing").length;
   if(devicesLoaded)   el("cntPatching").textContent = patchingRows().filter(d=>d._status==="behind").length;
 
   // KPI cards are scoped to the ACTIVE dormant view, not the whole tenant
@@ -1154,10 +1194,10 @@ function render(){
   // antivirus sets its own header (per sub-mode) inside renderAntivirus
   if(tab==="antivirus"){ renderAntivirus(); return; }
 
-  const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, patching:HEAD_PATCHING };
+  const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING };
   if(heads[tab]){
     el("theadRow").innerHTML = heads[tab];
-    ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, patching:renderPatching })[tab]();
+    ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
     renderUsers(tab==="member"?members:guests);
@@ -1333,19 +1373,22 @@ function bitlockerRows(){
     const t = k.createdDateTime ? new Date(k.createdDateTime).getTime() : 0;
     if(!(k.deviceId in latest) || t > latest[k.deviceId]) latest[k.deviceId] = t;
   }
-  // Intune encryption status keyed by Azure AD device id (matches Entra device.deviceId)
-  const encMap = new Map();
-  for(const m of allManagedDevices){
-    if(m.azureADDeviceId && typeof m.isEncrypted === "boolean") encMap.set(m.azureADDeviceId, m.isEncrypted);
-  }
-  return allDevices.map(d=>{
-    const isWin = /windows/i.test(d.operatingSystem||"");
-    const hasKey = keyed.has(d.deviceId);
+  // Scope strictly to Intune-managed devices, joined to BitLocker keys by Azure AD device id.
+  return allManagedDevices.map(m=>{
+    const adId = m.azureADDeviceId || "";
+    const os = m.operatingSystem || "";
+    const isWin = /windows/i.test(os);
+    const hasKey = adId ? keyed.has(adId) : false;
     const status = hasKey ? "has" : (isWin ? "missing" : "na");
-    const kd = latest[d.deviceId] ? new Date(latest[d.deviceId]).toISOString() : null;
-    const enc = encMap.has(d.deviceId) ? encMap.get(d.deviceId) : null;   // true / false / null(unknown)
+    const kd = (adId && latest[adId]) ? new Date(latest[adId]).toISOString() : null;
+    const enc = (typeof m.isEncrypted === "boolean") ? m.isEncrypted : null;   // true / false / null(unknown)
     const encStatus = enc===true ? "yes" : (enc===false ? "no" : "unknown");
-    return { ...d, _isWin:isWin, _hasKey:hasKey, _status:status, _keyDate:kd, _encrypted:enc, _encStatus:encStatus };
+    return {
+      id:m.id, displayName:m.deviceName, deviceId:adId,
+      operatingSystem:os, operatingSystemVersion:m.osVersion || "",
+      deviceOwnership:m.managedDeviceOwnerType || "",
+      _isWin:isWin, _hasKey:hasKey, _status:status, _keyDate:kd, _encrypted:enc, _encStatus:encStatus
+    };
   });
 }
 function applyBitlockerFilters(rows){
@@ -1369,7 +1412,7 @@ function renderBitlocker(){
   setInfoCards("Windows devices", win.length, "Key escrowed", withKey, "Missing key", missing, "Coverage", cov+"%");
   const tb = el("tbody");
   if(!view.length){
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">${all.length?"No matches":"No devices"}</div>${all.length?"No rows match the current filters.":"No registered devices found, or BitLocker key access wasn't granted (needs BitlockerKey.ReadBasic.All and a privileged role)."}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">${all.length?"No matches":"No managed devices"}</div>${all.length?"No rows match the current filters.":"No Intune-managed devices found — this view reflects Intune managed devices only (needs an Intune licence, DeviceManagementManagedDevices.Read.All, and BitlockerKey.ReadBasic.All)."}</td></tr>`;
     return;
   }
   tb.innerHTML = view.map(d=>{
@@ -1384,6 +1427,66 @@ function renderBitlocker(){
       <td>${keyPill}</td>
       <td>${encPill}</td>
       <td class="num opt">${fmtDate(d._keyDate)}</td>
+      <td class="num">${escapeHtml(d.deviceOwnership||"—")}</td>
+    </tr>`;
+  }).join("");
+}
+
+/* ---------- LAPS key (Compliance) ---------- */
+/* join Intune-managed devices with the set of devices that have a LAPS backup in Entra.
+   has = backed up · missing = Windows managed device with no backup · na = non-Windows (LAPS n/a) */
+function lapsRows(){
+  const backed = new Set(allLaps.map(l=>l.id).filter(Boolean));
+  const last = {};
+  for(const l of allLaps){ if(l.id) last[l.id] = l.lastBackupDateTime || null; }
+  return allManagedDevices.map(m=>{
+    const adId = m.azureADDeviceId || "";
+    const os = m.operatingSystem || "";
+    const isWin = /windows/i.test(os);
+    const hasKey = adId ? backed.has(adId) : false;
+    const status = hasKey ? "has" : (isWin ? "missing" : "na");
+    const bk = (hasKey && last[adId]) ? last[adId] : null;
+    return {
+      id:m.id, displayName:m.deviceName, deviceId:adId,
+      operatingSystem:os, operatingSystemVersion:m.osVersion || "",
+      deviceOwnership:m.managedDeviceOwnerType || "",
+      _isWin:isWin, _hasKey:hasKey, _status:status, _backup:bk
+    };
+  });
+}
+function applyLapsFilters(rows){
+  const q=searchVal(), os=v("fLapsOs"), st=v("fLapsStatus");
+  return rows.filter(d=>{
+    if(q && !((d.displayName||"")+" "+(d.operatingSystem||"")).toLowerCase().includes(q)) return false;
+    if(os && (d.operatingSystem||"")!==os) return false;
+    if(st && d._status!==st) return false;
+    return true;
+  });
+}
+function renderLaps(){
+  const all = lapsRows();
+  view = applyLapsFilters(all).sort((a,b)=> (a._status==="missing"?0:1) - (b._status==="missing"?0:1));
+  setFilterCount(view.length, all.length);
+  const win = all.filter(d=>d._isWin);
+  const withKey = win.filter(d=>d._hasKey).length;
+  const missing = win.filter(d=>!d._hasKey).length;
+  const cov = win.length ? Math.round((withKey/win.length)*100) : 0;
+  setInfoCards("Windows devices", win.length, "LAPS backed up", withKey, "Missing LAPS", missing, "Coverage", cov+"%");
+  const tb = el("tbody");
+  if(!all.length){
+    tb.innerHTML = `<tr><td colspan="5" class="empty"><div class="big">${lapsAvailable===false?"LAPS unavailable":"No managed devices"}</div>${lapsAvailable===false?"LAPS access wasn't granted — needs DeviceLocalCredential.ReadBasic.All and a privileged role (Cloud Device / Helpdesk / Intune / Security Reader).":"No Intune-managed devices found — this view reflects Intune managed devices only."}</td></tr>`;
+    return;
+  }
+  if(!view.length){ tb.innerHTML = `<tr><td colspan="5" class="empty"><div class="big">No matches</div>No rows match the current filters.</td></tr>`; return; }
+  tb.innerHTML = view.map(d=>{
+    const osPill = `<span class="pill member">${escapeHtml(d.operatingSystem||"—")}</span>`;
+    const keyPill = d._hasKey ? `<span class="pill lic-yes">Yes</span>`
+      : (d._isWin ? `<span class="pill miss">No</span>` : `<span class="pill off">N/A</span>`);
+    return `<tr>
+      <td><div class="uname">${escapeHtml(d.displayName||"—")}</div><div class="upn">${escapeHtml(d.operatingSystemVersion||"")}</div></td>
+      <td>${osPill}</td>
+      <td>${keyPill}</td>
+      <td class="num opt">${fmtDate(d._backup)}</td>
       <td class="num">${escapeHtml(d.deviceOwnership||"—")}</td>
     </tr>`;
   }).join("");
@@ -1701,6 +1804,7 @@ el("btnRefresh").onclick = ()=>{
   else if(tab==="health"){ healthLoaded=false; loadHealth(); }
   else if(tab==="antivirus"){ avLoaded=false; loadAntivirus(); }
   else if(tab==="bitlocker"){ bitlockerLoaded=false; loadBitlocker(); }
+  else if(tab==="laps"){ lapsLoaded=false; loadLaps(); }
   else if(tab==="patching"){ devicesLoaded=false; loadDevices(); }
   else { loadDirectory(); }
 };
@@ -1709,11 +1813,11 @@ el("btnRefresh").onclick = ()=>{
 ["fSearch"].forEach(id=> el(id).oninput = render);
 ["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
  "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
- "fPatchRel","fPatchStatus","fAvMode","fAvHealth"].forEach(id=> el(id).onchange = render);
+ "fPatchRel","fPatchStatus","fAvMode","fAvHealth","fLapsOs","fLapsStatus"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
    "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
-   "fPatchRel","fPatchStatus"].forEach(id=> el(id).value="");
+   "fPatchRel","fPatchStatus","fLapsOs","fLapsStatus"].forEach(id=> el(id).value="");
   el("fAvMode").value="endpoints"; el("fAvHealth").value="unhealthy";   // antivirus keeps sensible defaults
   render();
 };
@@ -1740,7 +1844,8 @@ loadNavState();
 const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>riskyLoaded, loadRisky],
   mfa:[()=>mfaLoaded, loadMfa], ca:[()=>caLoaded, loadCa], license:[()=>skusLoaded, loadSkus],
   health:[()=>healthLoaded, loadHealth], bitlocker:[()=>bitlockerLoaded, loadBitlocker],
-  patching:[()=>devicesLoaded, loadDevices], antivirus:[()=>avLoaded, loadAntivirus] };
+  patching:[()=>devicesLoaded, loadDevices], antivirus:[()=>avLoaded, loadAntivirus],
+  laps:[()=>lapsLoaded, loadLaps] };
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); tab=t.dataset.tab;
@@ -1815,6 +1920,11 @@ el("btnCsv").onclick = ()=>{
       (d._hasKey?"Yes":(d._isWin?"No":"N/A")),
       (d._encrypted===true?"Yes":(d._encrypted===false?"No":"Unknown")),
       d._keyDate||"", d.deviceOwnership||"", d.deviceId]
+      .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="laps"){
+    head = ["displayName","operatingSystem","operatingSystemVersion","lapsKey","lastBackup","deviceOwnership","deviceId"];
+    rows = view.map(d=>[d.displayName, d.operatingSystem||"", d.operatingSystemVersion||"",
+      (d._hasKey?"Yes":(d._isWin?"No":"N/A")), d._backup||"", d.deviceOwnership||"", d.deviceId]
       .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
   } else if(tab==="patching"){
     head = ["displayName","currentOS","currentBuild","targetBuild","patchStatus","operatingSystemVersion","lastActive","deviceId"];
