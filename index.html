@@ -88,7 +88,7 @@
   .chk input{accent-color:var(--accent);width:15px;height:15px}
 
   /* ---------- summary cards ---------- */
-  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
   .card .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:600}
   .card .v{font-family:'Space Grotesk';font-weight:700;font-size:26px;margin-top:6px;letter-spacing:-.01em}
@@ -216,8 +216,10 @@
       <ul>
         <li><span class="dot-tick">●</span><div><code>User.Read.All</code> &amp; <code>AuditLog.Read.All</code> — read users and their sign-in activity</div></li>
         <li><span class="dot-tick">●</span><div><code>Directory.Read.All</code> — read tenant license state (required for sign-in activity)</div></li>
-        <li><span class="dot-tick">●</span><div><code>User.ReadWrite.All</code> — delete selected accounts (soft-delete, recoverable 30 days)</div></li>
-        <li><span class="dot-tick">●</span><div>Needs an <b>Entra ID P1/P2</b> license in the tenant and a signed-in admin (User Administrator or Global Administrator to delete).</div></li>
+        <li><span class="dot-tick">●</span><div><code>Device.Read.All</code> — read registered devices and their last sign-in</div></li>
+        <li><span class="dot-tick">●</span><div><code>User.ReadWrite.All</code> — delete selected user accounts (soft-delete, recoverable 30 days)</div></li>
+        <li><span class="dot-tick">●</span><div><code>Directory.AccessAsUser.All</code> — requested only at the moment you delete a device (Graph has no narrower delegated permission for that operation); permanent, no recovery</div></li>
+        <li><span class="dot-tick">●</span><div>Needs an <b>Entra ID P1/P2</b> license. Deleting users needs User Administrator or Global Administrator; deleting devices needs Cloud Device Administrator, Intune Administrator, or Global Administrator.</div></li>
       </ul>
     </div>
   </div>
@@ -256,6 +258,7 @@
     <div class="tabset">
       <button class="tab active" data-tab="member">Dormant members <span class="cnt" id="cntMember">—</span></button>
       <button class="tab" data-tab="guest">Dormant guests <span class="cnt" id="cntGuest">—</span></button>
+      <button class="tab" data-tab="device">Stale devices <span class="cnt" id="cntDevice">—</span></button>
     </div>
     <div class="field">
       <label>Inactive for at least</label>
@@ -280,6 +283,7 @@
     <div class="card"><div class="k">Users scanned</div><div class="v" id="cScanned">—</div></div>
     <div class="card warn"><div class="k">Dormant members</div><div class="v" id="cMember">—</div></div>
     <div class="card warn"><div class="k">Dormant guests</div><div class="v" id="cGuest">—</div></div>
+    <div class="card warn"><div class="k">Stale devices</div><div class="v" id="cDevice">—</div></div>
     <div class="card accent"><div class="k">Premium / license</div><div class="v" id="cLic" style="font-size:18px;padding-top:6px">—</div></div>
   </div>
 
@@ -293,7 +297,7 @@
   <div class="tablewrap">
     <table>
       <thead>
-        <tr>
+        <tr id="theadRow">
           <th style="width:34px"></th>
           <th>User</th>
           <th>Type</th>
@@ -314,9 +318,9 @@
 <div class="scrim" id="scrim">
   <div class="modal">
     <div id="mConfirm">
-      <h2>⚠ Delete <span id="mCount">0</span> account(s)</h2>
-      <p>These accounts will be deleted from Entra ID via Microsoft Graph.</p>
-      <div class="warnbox">
+      <h2>⚠ Delete <span id="mCount">0</span> <span id="mNoun">account(s)</span></h2>
+      <p id="mLead">These accounts will be deleted from Entra ID via Microsoft Graph.</p>
+      <div class="warnbox" id="mWarn">
         Deletion is a <b>soft-delete</b>: accounts are recoverable for 30 days from <span class="mono">Deleted users</span>,
         after which removal is permanent. Your own account is automatically excluded.
       </div>
@@ -324,7 +328,7 @@
       <input class="confirm mono" id="confirmInput" placeholder="DELETE" autocomplete="off" />
       <div class="foot">
         <button class="btn ghost" id="mCancel">Cancel</button>
-        <button class="btn danger" id="mGo" disabled>Delete accounts</button>
+        <button class="btn danger" id="mGo" disabled>Delete <span id="mGoNoun">accounts</span></button>
       </div>
     </div>
     <div id="mRunning" class="hide">
@@ -351,8 +355,13 @@
 const DEFAULT_CLIENT_ID = "63aad37d-5338-46cd-9790-2651f0af3233";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
-const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All"];
+const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All"];
 const WRITE_SCOPES = ["User.ReadWrite.All"];
+// Device.ReadWrite.All is application-only and cannot be granted to a SPA.
+// The only delegated permission that can delete a device is Directory.AccessAsUser.All —
+// broad (acts as the signed-in admin across the directory), so it's split out and only
+// requested at the moment a device delete is attempted, not at every sign-in.
+const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
 const ALL_SCOPES   = [...READ_SCOPES, ...WRITE_SCOPES];
 
 // redirect URI = this page, no query/hash. Register this exact value as a SPA platform.
@@ -364,9 +373,12 @@ function authority(){ return localStorage.getItem(LS_AUTH) || "https://login.mic
 
 let msalApp, account = null;
 let allUsers = [];          // raw graph users
+let allDevices = [];        // raw graph devices
+let devicesLoaded = false;
 let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
+function entityType(){ return tab==="device" ? "device" : "user"; }
 
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
@@ -396,7 +408,23 @@ async function initAuth(){
   const resp = await msalApp.handleRedirectPromise();
   if(resp && resp.account) account = resp.account;
   else { const accs = msalApp.getAllAccounts(); if(accs.length) account = accs[0]; }
-  if(account){ enterApp(); }
+  if(account){ enterApp(); resumeDeviceDeleteIfPending(); }
+}
+
+const LS_PENDING_DEVICE_DELETE = "tenantguard.pendingDeviceDelete";
+function resumeDeviceDeleteIfPending(){
+  const raw = sessionStorage.getItem(LS_PENDING_DEVICE_DELETE);
+  if(!raw) return;
+  sessionStorage.removeItem(LS_PENDING_DEVICE_DELETE);
+  let ids; try{ ids = JSON.parse(raw); }catch{ return; }
+  if(!ids || !ids.length) return;
+  // Directory.AccessAsUser.All was just consented via redirect. Re-show the confirm
+  // modal (don't auto-delete) so the admin still has to explicitly confirm.
+  document.querySelector('.tab[data-tab="device"]').click();
+  setTimeout(()=>{
+    pendingDelete = ids.filter(id => allDevices.some(d=>d.id===id));
+    if(pendingDelete.length) openDeleteModal();
+  }, 600); // brief wait for devices to load after the tab switch
 }
 
 el("btnSignin").onclick = () => {
@@ -478,6 +506,31 @@ function handleGraphError(e){
 }
 
 /* ============================================================
+   GRAPH — fetch all devices with approximateLastSignInDateTime
+   ============================================================ */
+async function loadDevices(){
+  el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Reading registered devices…</td></tr>`;
+  el("cDevice").textContent="—";
+  try{
+    const tok = await token(READ_SCOPES);
+    if(!tok) return; // redirect in flight
+    const select = "id,displayName,deviceId,operatingSystem,operatingSystemVersion,deviceOwnership,accountEnabled,createdDateTime,approximateLastSignInDateTime";
+    let url = `${GRAPH}/devices?$select=${select}&$top=500&$count=true`;
+    allDevices = [];
+    while(url){
+      const page = await gget(url, tok);
+      allDevices.push(...(page.value||[]));
+      url = page["@odata.nextLink"] || null;
+      el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Loaded ${allDevices.length} devices…</td></tr>`;
+    }
+    devicesLoaded = true;
+    render();
+  }catch(e){
+    handleGraphError(e);
+  }
+}
+
+/* ============================================================
    FILTER + RENDER
    ============================================================ */
 function computeDormant(){
@@ -503,7 +556,33 @@ function computeDormant(){
   return out;
 }
 
+function computeStaleDevices(){
+  const thr = +el("thresh").value;
+  const includeNever = el("optNever").checked;
+  const includeDisabled = el("optDisabled").checked;
+  const out = [];
+  for(const d of allDevices){
+    if(!includeDisabled && d.accountEnabled === false) continue;
+    const la = d.approximateLastSignInDateTime || null;
+    let inactive;
+    if(la){ inactive = daysSince(la); if(inactive===null){ if(!includeNever) continue; inactive = daysSince(d.createdDateTime); } }
+    else {
+      if(!includeNever) continue;
+      inactive = daysSince(d.createdDateTime);
+      if(inactive===null) continue;
+    }
+    if(inactive >= thr){
+      out.push({ ...d, _last:la, _inactive:inactive, _never:!la });
+    }
+  }
+  return out;
+}
+
+const HEAD_USERS  = `<th style="width:34px"></th><th>User</th><th>Type</th><th class="opt">Last interactive</th><th class="opt">Last non-interactive</th><th>Last activity</th><th>Inactive</th>`;
+const HEAD_DEVICES= `<th style="width:34px"></th><th>Device</th><th>OS</th><th class="opt">Ownership</th><th class="opt">Registered</th><th>Last sign-in</th><th>Inactive</th>`;
+
 function render(){
+  // refresh member/guest counts regardless of active tab, so switching tabs shows fresh numbers
   const dorm = computeDormant();
   const members = dorm.filter(u => (u.userType||"Member")!=="Guest");
   const guests  = dorm.filter(u => (u.userType||"Member")==="Guest");
@@ -511,8 +590,18 @@ function render(){
   el("cntGuest").textContent  = guests.length;
   el("cMember").textContent   = members.length.toLocaleString();
   el("cGuest").textContent    = guests.length.toLocaleString();
+  if(devicesLoaded){
+    const stale = computeStaleDevices();
+    el("cntDevice").textContent = stale.length;
+    el("cDevice").textContent   = stale.length.toLocaleString();
+  }
 
-  view = (tab==="member"?members:guests).sort((a,b)=> b._inactive - a._inactive);
+  if(tab==="device"){ el("theadRow").innerHTML = HEAD_DEVICES; renderDevices(); }
+  else { el("theadRow").innerHTML = HEAD_USERS; renderUsers(tab==="member"?members:guests); }
+}
+
+function renderUsers(rows){
+  view = rows.sort((a,b)=> b._inactive - a._inactive);
   const thr = +el("thresh").value;
   const tb = el("tbody");
   if(!view.length){
@@ -543,6 +632,35 @@ function render(){
   el("selAll").checked=false; updateSelection();
 }
 
+function renderDevices(){
+  view = computeStaleDevices().sort((a,b)=> b._inactive - a._inactive);
+  const thr = +el("thresh").value;
+  const tb = el("tbody");
+  if(!view.length){
+    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="big">Nothing stale here</div>No devices inactive beyond ${thr} days.</td></tr>`;
+    el("selAll").checked=false; updateSelection(); return;
+  }
+  tb.innerHTML = view.map(d=>{
+    const over = Math.min(100, Math.round(((d._inactive - thr)/thr)*100)+18);
+    const daysCell = d._never
+      ? `<span class="never">never${d.accountEnabled===false?" · off":""}</span>`
+      : `${d._inactive}d`;
+    const osPill = `<span class="pill member">${escapeHtml(d.operatingSystem||"—")}</span>`;
+    const offPill = d.accountEnabled===false ? ` <span class="pill off">disabled</span>` : "";
+    return `<tr data-id="${d.id}">
+      <td><input type="checkbox" class="rowchk" data-id="${d.id}"></td>
+      <td><div class="uname">${escapeHtml(d.displayName||"—")}</div><div class="upn">${escapeHtml(d.operatingSystemVersion||"")}</div></td>
+      <td>${osPill}${offPill}</td>
+      <td class="num opt">${escapeHtml(d.deviceOwnership||"—")}</td>
+      <td class="num opt">${fmtDate(d.createdDateTime)}</td>
+      <td class="num">${fmtDate(d._last)}</td>
+      <td class="days">${daysCell}<div class="decay"><i style="width:${over}%"></i></div></td>
+    </tr>`;
+  }).join("");
+  tb.querySelectorAll(".rowchk").forEach(c=> c.onchange=onRowToggle);
+  el("selAll").checked=false; updateSelection();
+}
+
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
 
 /* ---------- selection ---------- */
@@ -566,10 +684,11 @@ el("thresh").oninput = ()=>{ el("threshVal").textContent = el("thresh").value+" 
 el("thresh").onchange = render;
 el("optNever").onchange = render;
 el("optDisabled").onchange = render;
-el("btnRefresh").onclick = loadDirectory;
+el("btnRefresh").onclick = ()=>{ if(tab==="device"){ devicesLoaded=false; loadDevices(); } else { loadDirectory(); } };
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-  t.classList.add("active"); tab=t.dataset.tab; render();
+  t.classList.add("active"); tab=t.dataset.tab;
+  if(tab==="device" && !devicesLoaded){ loadDevices(); } else { render(); }
 });
 el("btnSettings").onclick = ()=> el("settingsPanel").classList.toggle("hide");
 el("cfgSave").onclick = ()=>{
@@ -581,12 +700,21 @@ el("cfgSave").onclick = ()=>{
 /* ---------- CSV ---------- */
 el("btnCsv").onclick = ()=>{
   if(!view.length) return toast("Nothing to export.");
-  const head = ["displayName","userPrincipalName","userType","accountEnabled","lastInteractive","lastNonInteractive","lastSuccessful","lastActivity","daysInactive","id"];
-  const rows = view.map(u=>{ const a=u.signInActivity||{}; return [
-    u.displayName, u.userPrincipalName, u.userType||"Member", u.accountEnabled,
-    a.lastSignInDateTime||"", a.lastNonInteractiveSignInDateTime||"", a.lastSuccessfulSignInDateTime||"",
-    u._last||"never", u._never?"never":u._inactive, u.id
-  ].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","); });
+  let head, rows;
+  if(tab==="device"){
+    head = ["displayName","deviceId","operatingSystem","operatingSystemVersion","deviceOwnership","accountEnabled","registered","lastSignIn","daysInactive","id"];
+    rows = view.map(d=>[
+      d.displayName, d.deviceId, d.operatingSystem||"", d.operatingSystemVersion||"", d.deviceOwnership||"",
+      d.accountEnabled, d.createdDateTime||"", d._last||"never", d._never?"never":d._inactive, d.id
+    ].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else {
+    head = ["displayName","userPrincipalName","userType","accountEnabled","lastInteractive","lastNonInteractive","lastSuccessful","lastActivity","daysInactive","id"];
+    rows = view.map(u=>{ const a=u.signInActivity||{}; return [
+      u.displayName, u.userPrincipalName, u.userType||"Member", u.accountEnabled,
+      a.lastSignInDateTime||"", a.lastNonInteractiveSignInDateTime||"", a.lastSuccessfulSignInDateTime||"",
+      u._last||"never", u._never?"never":u._inactive, u.id
+    ].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","); });
+  }
   const blob = new Blob([head.join(",")+"\n"+rows.join("\n")], {type:"text/csv"});
   const url = URL.createObjectURL(blob);
   const a=document.createElement("a"); a.href=url; a.download=`tenantguard-${tab}-${new Date().toISOString().slice(0,10)}.csv`; a.click();
@@ -597,30 +725,61 @@ el("btnCsv").onclick = ()=>{
    DELETE  (Graph $batch, chunks of 20, 429-aware)
    ============================================================ */
 let pendingDelete = [];
-el("btnDelete").onclick = ()=>{
-  pendingDelete = selectedIds();
+function openDeleteModal(){
+  const isDevice = tab==="device";
   el("mCount").textContent = pendingDelete.length;
+  el("mNoun").textContent = isDevice ? "device(s)" : "account(s)";
+  el("mGoNoun").textContent = isDevice ? "devices" : "accounts";
+  el("mLead").textContent = isDevice
+    ? "These devices will be removed from Entra ID via Microsoft Graph."
+    : "These accounts will be deleted from Entra ID via Microsoft Graph.";
+  el("mWarn").innerHTML = isDevice
+    ? `Device deletion is <b>permanent</b> — there is no 30-day recovery window. Requires Cloud Device Administrator, Intune Administrator, or Global Administrator, and uses the broad <span class="mono">Directory.AccessAsUser.All</span> permission (the only delegated permission Graph supports for this operation). A removed device must re-register to come back.`
+    : `Deletion is a <b>soft-delete</b>: accounts are recoverable for 30 days from <span class="mono">Deleted users</span>, after which removal is permanent. Your own account is automatically excluded.`;
   el("mConfirm").classList.remove("hide");
   el("mRunning").classList.add("hide");
   el("confirmInput").value=""; el("mGo").disabled=true;
   el("scrim").classList.add("show");
   el("confirmInput").focus();
-};
+}
+el("btnDelete").onclick = ()=>{ pendingDelete = selectedIds(); openDeleteModal(); };
 el("confirmInput").oninput = e=>{ el("mGo").disabled = e.target.value.trim().toUpperCase()!=="DELETE"; };
 el("mCancel").onclick = ()=> el("scrim").classList.remove("show");
 
 el("mGo").onclick = async ()=>{
+  const isDevice = tab==="device";
+  const ids = pendingDelete.slice();
+
+  // Device deletion needs Directory.AccessAsUser.All, which most tenants won't have
+  // consented to yet (it's deliberately not requested at sign-in — see DEVICE_DELETE_SCOPES
+  // above). Try silently first; if that fails, persist intent and redirect through consent,
+  // then resumeDeviceDeleteIfPending() re-opens this same modal after the user returns.
+  let tok;
+  if(isDevice){
+    try{
+      const r = await msalApp.acquireTokenSilent({ scopes: DEVICE_DELETE_SCOPES, account });
+      tok = r.accessToken;
+    }catch(e){
+      sessionStorage.setItem(LS_PENDING_DEVICE_DELETE, JSON.stringify(ids));
+      el("scrim").classList.remove("show");
+      toast("Requesting device-delete permission — you'll return here after consenting.");
+      await msalApp.acquireTokenRedirect({ scopes: DEVICE_DELETE_SCOPES, account, redirectUri: REDIRECT });
+      return; // page is navigating away
+    }
+  } else {
+    tok = await token(WRITE_SCOPES);
+  }
+
   el("mConfirm").classList.add("hide");
   el("mRunning").classList.remove("hide");
   const log = el("resLog"); log.innerHTML=""; el("progFill").style.width="0%";
-  const ids = pendingDelete.slice();
-  const tok = await token(WRITE_SCOPES);
+  const path = isDevice ? "devices" : "users";
   let done=0, ok=0, fail=0;
-  const byId = Object.fromEntries(allUsers.map(u=>[u.id,u]));
+  const byId = Object.fromEntries((isDevice?allDevices:allUsers).map(x=>[x.id,x]));
 
   for(let i=0;i<ids.length;i+=20){
     const chunk = ids.slice(i,i+20);
-    const reqs = chunk.map((id,j)=>({ id:String(j), method:"DELETE", url:`/users/${id}` }));
+    const reqs = chunk.map((id,j)=>({ id:String(j), method:"DELETE", url:`/${path}/${id}` }));
     let r;
     try{
       r = await fetch(`${GRAPH}/$batch`, {
@@ -638,23 +797,22 @@ el("mGo").onclick = async ()=>{
         const wait = (res.headers && (res.headers["Retry-After"]||res.headers["retry-after"])) || 3;
         logLine(log,byId[id],false,`throttled, retrying in ${wait}s`);
         await sleep(wait*1000);
-        const retry = await retryDelete(id, tok);
+        const retry = await retryDelete(path, id, tok);
         if(retry){ ok++; logLine(log,byId[id],true," (retried)"); } else { fail++; }
       }
       else { fail++; logLine(log,byId[id],false,`HTTP ${res.status}`); }
       done++; tickProg(done,ids.length);
     }
   }
-  // drop deleted from local cache
-  const okSet = new Set();
-  log.querySelectorAll(".ok").forEach(()=>{}); // ids tracked below
-  allUsers = allUsers.filter(u=> !ids.includes(u.id) ? true : false); // optimistic: re-fetch is safer
+  // drop deleted from the relevant local cache
+  if(isDevice){ allDevices = allDevices.filter(d=> !ids.includes(d.id)); }
+  else { allUsers = allUsers.filter(u=> !ids.includes(u.id)); }
   logLine(log, null, true, `\nFinished — ${ok} deleted, ${fail} failed.`);
   el("mDone").classList.remove("hide");
-  el("mDone").onclick = ()=>{ el("scrim").classList.remove("show"); loadDirectory(); };
+  el("mDone").onclick = ()=>{ el("scrim").classList.remove("show"); if(isDevice){ devicesLoaded=false; loadDevices(); } else { loadDirectory(); } };
 };
-async function retryDelete(id, tok){
-  const r = await fetch(`${GRAPH}/users/${id}`, { method:"DELETE", headers:{ Authorization:"Bearer "+tok } });
+async function retryDelete(path, id, tok){
+  const r = await fetch(`${GRAPH}/${path}/${id}`, { method:"DELETE", headers:{ Authorization:"Bearer "+tok } });
   return r.status>=200 && r.status<300;
 }
 function tickProg(done,total){ el("progFill").style.width = Math.round(done/total*100)+"%"; }
