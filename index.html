@@ -336,7 +336,6 @@
           <button class="tab" data-tab="legacyauth">Legacy auth <span class="cnt" id="cntLegacy">—</span></button>
           <button class="tab" data-tab="appcreds">App credentials <span class="cnt" id="cntAppCreds">—</span></button>
           <button class="tab" data-tab="oauth">OAuth consents <span class="cnt" id="cntOauth">—</span></button>
-          <button class="tab" data-tab="baseline">Microsoft security baseline <span class="cnt" id="cntBaseline">—</span></button>
         </div>
       </div>
     </aside>
@@ -519,14 +518,6 @@
           <label>Consent</label>
           <select id="fOaConsent"><option value="">All</option><option value="AllPrincipals">Tenant-wide</option><option value="Principal">User</option></select>
         </div>
-        <div class="field hide" id="wrapBaselineArea">
-          <label>Baseline area</label>
-          <select id="fBaselineArea"><option value="">All</option></select>
-        </div>
-        <div class="field hide" id="wrapBaselineStatus">
-          <label>Baseline status</label>
-          <select id="fBaselineStatus"><option value="">All</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="manual">Manual</option><option value="notset">Not set</option><option value="unknown">Unknown</option></select>
-        </div>
         <span class="grow"></span>
         <span class="count" id="filterCount"></span>
         <button class="btn ghost" id="fClear">Clear filters</button>
@@ -659,13 +650,12 @@ let secScore = null;        let secLoaded = false;                              
 let legacySignins = [];     let legacyLoaded = false; let legacyAvailable = true; // legacy auth sign-ins
 let appCreds = [];          let appCredsLoaded = false; let appCredsAvailable = true; // app secrets/certs
 let oauthGrants = [];       let oauthLoaded = false;                            // OAuth consent grants
-let baselineRowsCache = [];  let baselineLoaded = false;                         // Microsoft security baseline overview
 let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
 
 const INFO_TABS = ["risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching",
-  "devcompliance","privileged","securescore","jailbroken","legacyauth","appcreds","oauth","baseline"];
+  "devcompliance","privileged","securescore","jailbroken","legacyauth","appcreds","oauth"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
 
@@ -1298,7 +1288,7 @@ const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatu
   "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
   "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc",
   "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth","wrapLapsOs","wrapLapsStatus","wrapPatchView",
-  "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent","wrapBaselineArea","wrapBaselineStatus"];
+  "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent"];
 const FILTERS_BY_TAB = {
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
@@ -1318,15 +1308,14 @@ const FILTERS_BY_TAB = {
   securescore:["wrapSecCat"],
   legacyauth:[],
   appcreds:["wrapAcStatus","wrapAcType"],
-  oauth:["wrapOaConsent"],
-  baseline:["wrapBaselineArea","wrapBaselineStatus"]
+  oauth:["wrapOaConsent"]
 };
 const SEARCH_PLACEHOLDER = {
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
   ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…",
   patching:"device name or build…", antivirus:"device or malware…", laps:"device name…",
   devcompliance:"device or OS…", jailbroken:"device or OS…", privileged:"name, UPN or role…",
-  securescore:"control…", legacyauth:"user, app or client…", appcreds:"app or secret…", oauth:"app, resource or scope…", baseline:"baseline, evidence or area…"
+  securescore:"control…", legacyauth:"user, app or client…", appcreds:"app or secret…", oauth:"app, resource or scope…"
 };
 
 function syncFilterBar(){
@@ -1358,7 +1347,6 @@ const HEAD_SEC     = `<th>Control</th><th>Category</th><th>Score</th><th class="
 const HEAD_LEGACY  = `<th>User</th><th>App</th><th>Client</th><th>Result</th><th class="opt">IP</th><th>When</th>`;
 const HEAD_APPCREDS= `<th>Application</th><th>Type</th><th>Expires</th><th>Time left</th><th>Status</th>`;
 const HEAD_OAUTH   = `<th>Client app</th><th>Resource</th><th class="opt">Scopes</th><th>Consent</th>`;
-const HEAD_BASELINE = `<th>Area</th><th>ID</th><th>Microsoft Security Baseline</th><th>Status</th><th>Severity</th><th class="opt">Tenant evidence / finding</th>`;
 const HEAD_PATCHING  = `<th>Device</th><th>Current OS</th><th>Current build</th><th>Target build</th><th>Patch status</th><th class="opt">Last active</th>`;
 const HEAD_AV_ENDPOINTS = `<th>Device</th><th>Managed by</th><th>Malware protection</th><th>State</th><th>Real-time</th><th>Network</th><th>Signature</th><th>Tamper</th><th class="opt">Product status</th><th class="opt">Reboot</th>`;
 
@@ -1392,7 +1380,6 @@ function render(){
   if(legacyLoaded)    el("cntLegacy").textContent = legacyAvailable ? legacySignins.length : "0";
   if(appCredsLoaded)  el("cntAppCreds").textContent = appCreds.filter(c=>c._status==="expired"||c._status==="expiring").length;
   if(oauthLoaded)     el("cntOauth").textContent = oauthGrants.filter(g=>g.consentType==="AllPrincipals").length;
-  if(baselineLoaded)  el("cntBaseline").textContent = baselineRowsCache.filter(r=>r.status==="failed").length;
 
   // KPI cards are scoped to the ACTIVE dormant view, not the whole tenant
   if(!isInfoTab()) setDormantCards(members, guests, stale);
@@ -1401,11 +1388,11 @@ function render(){
   if(tab==="antivirus"){ renderAntivirus(); return; }
 
   const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
-    devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH, baseline:HEAD_BASELINE };
+    devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH };
   if(heads[tab]){
     el("theadRow").innerHTML = heads[tab];
     ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching,
-       devcompliance:renderDevCompliance, jailbroken:renderJailbroken, privileged:renderPrivileged, securescore:renderSecScore, legacyauth:renderLegacyAuth, appcreds:renderAppCreds, oauth:renderOauth, baseline:renderBaseline })[tab]();
+       devcompliance:renderDevCompliance, jailbroken:renderJailbroken, privileged:renderPrivileged, securescore:renderSecScore, legacyauth:renderLegacyAuth, appcreds:renderAppCreds, oauth:renderOauth })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
     renderUsers(tab==="member"?members:guests);
@@ -1804,177 +1791,6 @@ function renderOauth(){
       <td>${escapeHtml(g.resource||"—")}</td>
       <td class="num opt">${escapeHtml(g.scope||"—")}</td>
       <td>${g.consentType==="AllPrincipals"?`<span class="pill guest">Tenant-wide</span>`:`<span class="pill member">User</span>`}</td>
-    </tr>`).join("");
-}
-
-
-/* ---------- Microsoft Security Baseline (from attached Cloud Assessment report) ---------- */
-function bStatusPill(s){
-  const cls = s==="passed" ? "lic-yes" : (s==="failed" ? "miss" : (s==="manual" ? "guest" : "off"));
-  return `<span class="pill ${cls}">${escapeHtml(humanize(s))}</span>`;
-}
-function baselineRow(area,id,baseline,status,severity,evidence){ return { area,id,baseline,status,severity:severity||"",evidence:evidence||"" }; }
-function caHas(words){
-  const w = words.map(x=>String(x).toLowerCase());
-  return allCaPolicies.some(p=>{
-    if(p.state!=="enabled" && p.state!=="enabledForReportingButNotEnforced") return false;
-    const txt = JSON.stringify(p).toLowerCase();
-    return w.every(x=>txt.includes(x));
-  });
-}
-function secureScoreHas(words){
-  const controls = (secScore && secScore.controlScores) || [];
-  const w = words.map(x=>String(x).toLowerCase());
-  return controls.some(c=> w.every(x=>((c.controlName||"")+" "+(c.description||"")).toLowerCase().includes(x)) && (c.score||0)>0);
-}
-async function loadBaseline(){
-  el("tbody").innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Reading tenant configuration and matching Microsoft Security Baseline…</td></tr>`;
-  try{
-    const tok = await token(READ_SCOPES); if(!tok) return;
-    // Load reusable data directly so this tab works even if the user has not opened other tabs first.
-    if(!allUsers.length){
-      const select = "id,displayName,userPrincipalName,userType,accountEnabled,createdDateTime,signInActivity,assignedLicenses";
-      let url = `${GRAPH}/users?$select=${select}&$top=500&$count=true`; allUsers=[];
-      while(url){ const p=await gget(url,tok); allUsers.push(...(p.value||[])); url=p["@odata.nextLink"]||null; }
-    }
-    if(!devicesLoaded){
-      const select = "id,displayName,deviceId,operatingSystem,operatingSystemVersion,deviceOwnership,accountEnabled,createdDateTime,approximateLastSignInDateTime";
-      let url = `${GRAPH}/devices?$select=${select}&$top=500&$count=true`; allDevices=[];
-      while(url){ const p=await gget(url,tok); allDevices.push(...(p.value||[])); url=p["@odata.nextLink"]||null; }
-      devicesLoaded=true; populateDeviceFilters();
-    }
-    if(!caLoaded){ try{ const r=await gget(`${GRAPH}/identity/conditionalAccess/policies`,tok); allCaPolicies=r.value||[]; caLoaded=true; }catch(e){ allCaPolicies=[]; caLoaded=true; } }
-    if(!mfaLoaded){ try{ let url=`${GRAPH}/reports/authenticationMethods/userRegistrationDetails?$top=200`; allRegDetails=[]; while(url){ const p=await gget(url,tok); allRegDetails.push(...(p.value||[])); url=p["@odata.nextLink"]||null; } mfaLoaded=true; }catch(e){ allRegDetails=[]; mfaLoaded=true; } }
-    if(!mdmLoaded){ try{ let url=`${GRAPH}/deviceManagement/managedDevices?$select=id,deviceName,azureADDeviceId,operatingSystem,osVersion,complianceState,managedDeviceOwnerType,lastSyncDateTime,jailBroken,isEncrypted&$top=200`; mdmDevices=[]; allManagedDevices=[]; while(url){ const p=await gget(url,tok); mdmDevices.push(...(p.value||[])); url=p["@odata.nextLink"]||null; } allManagedDevices=mdmDevices; mdmLoaded=true; intuneAvailable=true; }catch(e){ mdmDevices=[]; allManagedDevices=[]; mdmLoaded=true; intuneAvailable=false; } }
-    if(!secLoaded){ try{ const r=await gget(`${GRAPH}/security/secureScores?$top=1`,tok); secScore=(r.value||[])[0]||null; secLoaded=true; }catch(e){ secScore=null; secLoaded=true; } }
-    if(!oauthLoaded){ try{ let url=`${GRAPH}/oauth2PermissionGrants?$top=200`; const grants=[]; while(url){ const p=await gget(url,tok); grants.push(...(p.value||[])); url=p["@odata.nextLink"]||null; } oauthGrants=grants.map(g=>({client:g.clientId,resource:g.resourceId,scope:g.scope||"",consentType:g.consentType})); oauthLoaded=true; }catch(e){ oauthGrants=[]; oauthLoaded=true; } }
-    // Optional BitLocker/LAPS/AV, best effort.
-    if(!bitlockerLoaded){ try{ let url=`${GRAPH}/informationProtection/bitlocker/recoveryKeys?$select=id,deviceId,createdDateTime,volumeType&$top=200`; allBitlockerKeys=[]; while(url){ const p=await gget(url,tok); allBitlockerKeys.push(...(p.value||[])); url=p["@odata.nextLink"]||null; } bitlockerLoaded=true; }catch(e){ allBitlockerKeys=[]; bitlockerLoaded=true; } }
-    if(!lapsLoaded){ try{ let url=`${GRAPH}/directory/deviceLocalCredentials?$select=id,deviceName,lastBackupDateTime,refreshDateTime&$top=500`; allLaps=[]; while(url){ const p=await gget(url,tok); allLaps.push(...(p.value||[])); url=p["@odata.nextLink"]||null; } lapsLoaded=true; lapsAvailable=true; }catch(e){ allLaps=[]; lapsLoaded=true; lapsAvailable=false; } }
-    if(!avLoaded){ try{ avOverview=await gget(`${GRAPH}/deviceManagement/deviceProtectionOverview`,tok); avLoaded=true; }catch(e){ avOverview=null; avLoaded=true; } }
-
-    baselineRowsCache = buildBaselineRows();
-    baselineLoaded = true;
-    fillSelect("fBaselineArea", [...new Set(baselineRowsCache.map(r=>r.area))].sort());
-    render();
-  }catch(e){ handleGraphError(e); }
-}
-function buildBaselineRows(){
-  const rows=[];
-  const mfaNotReg = allRegDetails.filter(r=>r.isMfaRegistered===false).length;
-  const globalAdminRole = privRoles && privRoles.length ? privRoles : [];
-  const stale45 = allDevices.filter(d=>{ const la=d.approximateLastSignInDateTime; const ds=la?daysSince(la):daysSince(d.createdDateTime); return ds!=null && ds>=45; }).length;
-  const dormant45 = allUsers.filter(u=>{ const la=lastActivity(u); const ds=la?daysSince(la):daysSince(u.createdDateTime); return u.accountEnabled!==false && ds!=null && ds>=45; }).length;
-  const nonCompliant = mdmDevices.filter(d=>d.complianceState==="noncompliant").length;
-  const notEncrypted = mdmDevices.filter(d=>d.isEncrypted===false).length;
-  const patchBehind = patchingRows().filter(d=>d._status==="behind").length;
-  const bitMissing = bitlockerRows().filter(d=>d._status==="missing").length;
-  const lapsMissing = lapsRows().filter(d=>d._status==="missing").length;
-  const avUnhealthyCount = avOverview ? Math.max(0,(avOverview.totalReportedDeviceCount||0)-(avOverview.cleanDeviceCount||0)) : null;
-  const tenantWideOauth = oauthGrants.filter(g=>g.consentType==="AllPrincipals").length;
-
-  rows.push(baselineRow("Entra ID","1.1","Multi-factor authentication is enforced for all users", mfaNotReg===0 && caHas(["mfa"])?"passed":"failed", mfaNotReg?"critical":"", mfaNotReg?`${mfaNotReg} users are not MFA registered or covered data is incomplete.`:"MFA registration report and Conditional Access indicate coverage."));
-  rows.push(baselineRow("Entra ID","1.2","MFA is required for all Admins", caHas(["mfa","role"])?"passed":"unknown", "", caHas(["mfa","role"])?"Conditional Access policy appears to enforce MFA for privileged roles.":"No enabled CA policy explicitly matching MFA + role was detected by this browser tool."));
-  rows.push(baselineRow("Entra ID","1.3","Legacy Authentication is blocked", caHas(["legacy"])||caHas(["exchange activesync"])?"passed":"failed", "", caHas(["legacy"])?"Conditional Access appears to block legacy clients.":"No enabled Conditional Access policy matching legacy authentication was detected."));
-  rows.push(baselineRow("Entra ID","1.4","Break Glass users are created for emergency access", "manual", "", "Manual validation required."));
-  rows.push(baselineRow("Entra ID","1.5","Ensure that between two and four global admins are designated", "manual", "high", "Directory role member count requires role assignment expansion; validate in Entra roles."));
-  rows.push(baselineRow("Entra ID","1.6","Highly privileged accounts shall be cloud-only", "manual", "", "Manual validation required against synced/admin accounts."));
-  rows.push(baselineRow("Entra ID","1.7","Non-admin users shall be prevented from providing consent to 3rd party applications", tenantWideOauth>0?"unknown":"passed", "", tenantWideOauth?`${tenantWideOauth} tenant-wide OAuth grants detected; review user consent settings.`:"No tenant-wide OAuth grants detected in this view."));
-  rows.push(baselineRow("Entra ID","1.8","Guest users have limited access to properties and memberships of directory objects", "manual", "", "Manual validation required for external collaboration settings."));
-  rows.push(baselineRow("Entra ID","1.9","Passwords shall not expire", secureScoreHas(["password","expire"])?"passed":"unknown", "", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Entra ID","1.10","MFA shall be required to enroll devices to Azure AD / Entra ID", caHas(["mfa","device"])?"passed":"failed", "low", caHas(["mfa","device"])?"CA policy appears to require MFA for device-related flow.":"No CA policy matching MFA + device enrollment was detected."));
-  rows.push(baselineRow("Entra ID","1.11","Local Administrator settings are configured for device joins", "manual", "", "Manual validation required in Entra device settings."));
-  rows.push(baselineRow("Entra ID","1.12","Dormant Accounts are disabled with 45 days of Inactivity", dormant45===0?"passed":"failed", "medium", `${dormant45} enabled accounts have no activity for 45+ days.`));
-  rows.push(baselineRow("Entra ID","1.13","Browser Sessions are limited for Privileged Users", caHas(["persistent browser"])||caHas(["sign-in frequency"])?"passed":"failed", "", "Checked Conditional Access session controls by policy text."));
-  rows.push(baselineRow("Entra ID","1.14","Devices shall be deleted that haven't checked in for over 30 / 45 days", stale45===0?"passed":"failed", "medium", `${stale45} devices have not checked in for 45+ days.`));
-  rows.push(baselineRow("Entra ID","1.15","All corporate approved applications are cataloged and periodically reviewed", "manual", "", "Manual periodic review required."));
-  rows.push(baselineRow("Entra ID","1.16","Dynamic Groups are leveraged for automated group management", "manual", "", "Manual validation required for group strategy."));
-  rows.push(baselineRow("Entra ID","1.17","MFA Shall be required for Intune Enrollment", caHas(["mfa","intune"])?"passed":"failed", "low", "Checked Conditional Access policies for MFA + Intune references."));
-  rows.push(baselineRow("Entra ID","1.18","Require Managed Devices for Sign in", caHas(["compliant device"])||caHas(["hybrid azure ad joined"])?"passed":"failed", "medium", "Checked Conditional Access grant controls."));
-  rows.push(baselineRow("Entra ID","1.19","Device Compliance is required for access to resources", caHas(["compliant device"])?"passed":"failed", "medium", "Checked Conditional Access grant controls for compliant device requirement."));
-  rows.push(baselineRow("Entra ID","1.20","Require Phishing Resistant MFA for Admins", caHas(["phishing-resistant"])||caHas(["fido2"])?"passed":"failed", "low", "Checked Conditional Access policy text for phishing-resistant/FIDO2 references."));
-  rows.push(baselineRow("Entra ID","1.21","High risk users and sign-ins are blocked", caHas(["sign-in risk"])||caHas(["user risk"])?"passed":"failed", "", "Checked Conditional Access risk-based policy references."));
-  rows.push(baselineRow("Entra ID","1.22","Privileged Identity Management (PIM) is configured for JIT access", "notset", "", "Not assessed by current delegated Graph scopes; validate in Entra PIM."));
-  rows.push(baselineRow("Entra ID","1.23","Microsoft Sentinel is configured to ingest logs from Entra and Defender", "manual", "", "Manual validation required in Sentinel."));
-  rows.push(baselineRow("Entra ID","1.24","Ensure the device code sign-in flow is blocked", caHas(["device code"])?"passed":"failed", "medium", "Checked Conditional Access policy text for device code flow."));
-  rows.push(baselineRow("Entra ID","1.25","Require App Protection", caHas(["app protection"])?"passed":"failed", "medium", "Checked Conditional Access policy text for app protection."));
-
-  rows.push(baselineRow("Exchange","2.1","SPF, DKIM, and DMARC records are set up for every domain", "manual", "", "Exchange/DNS validation is outside this SPA's current Graph scopes."));
-  rows.push(baselineRow("Exchange","2.2","Anti-spam policies are configured", secureScoreHas(["anti-spam"])?"passed":"manual", "", "Matched using Secure Score where available; otherwise validate in Defender portal."));
-  rows.push(baselineRow("Exchange","2.3","Anti-phishing policies are configured", secureScoreHas(["anti-phishing"])?"passed":"failed", "medium", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Exchange","2.4","Anti-malware policies are configured", secureScoreHas(["anti-malware"])?"passed":"manual", "", "Matched using Secure Score where available."));
-  rows.push(baselineRow("Exchange","2.5","Automatic forwarding to external domains SHALL be disabled", secureScoreHas(["forwarding"])?"passed":"failed", "high", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Exchange","2.6","Mailbox Auditing SHALL Be Enabled", secureScoreHas(["mailbox","audit"])?"passed":"manual", "", "Validate Exchange organization AuditDisabled setting."));
-  rows.push(baselineRow("Exchange","2.7","Calendar and Contact Sharing Shall Be Restricted", "manual", "", "Validate Exchange sharing policies."));
-  rows.push(baselineRow("Exchange","2.8","External Sender Warnings are Implemented", "manual", "", "Validate Exchange external sender identification setting."));
-  rows.push(baselineRow("Exchange","2.9","Ensure Direct Send submissions are rejected", "manual", "low", "Validate Exchange transport/authenticated SMTP controls."));
-
-  rows.push(baselineRow("Teams","3.1","External User Access SHALL Be Restricted", "manual", "", "Validate Teams external access domains."));
-  rows.push(baselineRow("Teams","3.2","External Participants SHOULD NOT Be Enabled to Request Control", "manual", "low", "Validate Teams meeting policy."));
-  rows.push(baselineRow("Teams","3.3","Anonymous Users SHALL NOT Be Enabled to Start Meetings", "manual", "", "Validate Teams meeting policy."));
-  rows.push(baselineRow("Teams","3.4","Automatic Admittance to Meetings SHOULD Be Restricted", "manual", "", "Validate lobby bypass policy."));
-  rows.push(baselineRow("Teams","3.5","Unmanaged users SHALL NOT initiate contact with internal users", "manual", "low", "Validate Teams federation/external access settings."));
-  rows.push(baselineRow("Teams","3.6","Contact with Skype Users SHALL Be Blocked", "manual", "", "Validate Teams external access settings."));
-  rows.push(baselineRow("Teams","3.7","File Sharing and File Storage Options shall be blocked", "manual", "", "Validate Teams files policy and third-party storage settings."));
-
-  rows.push(baselineRow("Intune","4.1","Automated patching is performed on all devices", patchBehind===0?"passed":"failed", patchBehind?"critical":"", `${patchBehind} Windows devices are behind the computed patch target.`));
-  rows.push(baselineRow("Intune","4.2","Managed devices are enrolled in MDM", mdmDevices.length>0?"passed":"manual", "", `${mdmDevices.length} Intune managed devices detected.`));
-  rows.push(baselineRow("Intune","4.3","Personal Devices should be restricted from enrolling into MDM", "manual", "low", "Validate Intune enrollment restrictions."));
-  rows.push(baselineRow("Intune","4.4","Security Baselines should be configured for Windows Devices", secureScoreHas(["security baseline"])?"passed":"failed", "", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Intune","4.5","Device compliance policies shall be configured for every supported platform", nonCompliant===0 && mdmDevices.length>0?"passed":"failed", "low", `${nonCompliant} Intune devices are non-compliant.`));
-  rows.push(baselineRow("Intune","4.6","All devices have drive encryption applied", notEncrypted===0 && bitMissing===0?"passed":"failed", notEncrypted||bitMissing?"high":"", `${notEncrypted} managed devices report not encrypted; ${bitMissing} Windows devices missing BitLocker key metadata.`));
-  rows.push(baselineRow("Intune","4.7","Lockout screen and password settings shall be configured", "manual", "", "Validate Intune configuration/compliance policies."));
-  rows.push(baselineRow("Intune","4.8","App Protection policies should be created for mobile devices", "manual", "", "Validate Intune app protection policies."));
-  rows.push(baselineRow("Intune","4.9","Approved 3rd party applications are deployed and patched", "manual", "", "Validate Intune app inventory and vulnerability management."));
-  rows.push(baselineRow("Intune","4.10","Local Administrators passwords are managed with LAPS", lapsMissing===0 && lapsAvailable?"passed":"failed", "medium", lapsAvailable?`${lapsMissing} Windows devices are missing LAPS backup metadata.`:"LAPS metadata unavailable or not consented."));
-  rows.push(baselineRow("Intune","4.11","OneDrive KFM is configured", "manual", "", "Validate OneDrive known folder move configuration profile."));
-
-  rows.push(baselineRow("SharePoint and OneDrive","5.1","Default sharing settings are set for New and Existing Guest", "manual", "", "Validate SharePoint tenant sharing settings."));
-  rows.push(baselineRow("SharePoint and OneDrive","5.2","Expiration Dates are set for Anyone links", "manual", "", "Validate SharePoint/OneDrive link expiration settings."));
-
-  rows.push(baselineRow("Defender","6.1","Security Awareness training is conducted at least once per year", "manual", "", "Manual evidence required."));
-  rows.push(baselineRow("Defender","6.2","Anti-virus protections are applied to all devices", avUnhealthyCount===null?"unknown":(avUnhealthyCount===0?"passed":"failed"), avUnhealthyCount?"high":"", avUnhealthyCount===null?"Defender device protection overview unavailable.":`${avUnhealthyCount} devices are not clean/healthy in Defender overview.`));
-  rows.push(baselineRow("Defender","6.3","Endpoint detection and response software is running on all devices", secureScoreHas(["endpoint detection"])?"passed":"manual", "", "Validate Defender for Endpoint enrollment count."));
-  rows.push(baselineRow("Defender","6.4","Firewall protections configured on devices", secureScoreHas(["firewall"])?"passed":"failed", "high", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Defender","6.5","Safe Links policies are configured", secureScoreHas(["safe links"])?"passed":"failed", "medium", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Defender","6.6","Safe Attachment policies are configured", secureScoreHas(["safe attachment"])?"passed":"manual", "", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Defender","6.7","Tamper Protection is configured", secureScoreHas(["tamper"])?"passed":"manual", "", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Defender","6.8","Attack Surface reduction rules are configured", secureScoreHas(["attack surface"])?"passed":"failed", "medium", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Defender","6.9","Defender for Cloud Apps is configured to monitor applications", secureScoreHas(["cloud apps"])?"passed":"manual", "", "Validate Defender for Cloud Apps discovery configuration."));
-
-  rows.push(baselineRow("Purview","7.1","Periodic backups are performed for email, files, and Servers", "manual", "", "Manual evidence required for third-party backups."));
-  rows.push(baselineRow("Purview","7.2","Audit Logging SHALL Be Enabled", secureScoreHas(["audit logging"])||secureScoreHas(["audit log"])?"passed":"manual", "", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Purview","7.3","Retention Polices are configured", "manual", "", "Validate Purview retention policies."));
-  rows.push(baselineRow("Purview","7.4","Sensitivity Labels are configured", secureScoreHas(["sensitivity label"])?"passed":"failed", "", "Matched using Secure Score controls when available."));
-  rows.push(baselineRow("Purview","7.5","Data Loss Prevention Policies are configured", secureScoreHas(["data loss prevention"])||secureScoreHas(["dlp"])?"passed":"manual", "", "Matched using Secure Score controls when available."));
-  return rows;
-}
-function applyBaselineFilters(rows){
-  const q=searchVal(), area=v("fBaselineArea"), st=v("fBaselineStatus");
-  return rows.filter(r=>{
-    if(q && !((r.area||"")+" "+(r.id||"")+" "+(r.baseline||"")+" "+(r.evidence||"")).toLowerCase().includes(q)) return false;
-    if(area && r.area!==area) return false;
-    if(st && r.status!==st) return false;
-    return true;
-  });
-}
-function renderBaseline(){
-  view = applyBaselineFilters(baselineRowsCache);
-  setFilterCount(view.length, baselineRowsCache.length);
-  const passed = baselineRowsCache.filter(r=>r.status==="passed").length;
-  const failed = baselineRowsCache.filter(r=>r.status==="failed").length;
-  const manual = baselineRowsCache.filter(r=>r.status==="manual"||r.status==="notset").length;
-  const pct = baselineRowsCache.length ? Math.round(passed/baselineRowsCache.length*100) : 0;
-  setInfoCards("Baselines", baselineRowsCache.length, "Passed", passed, "Failed", failed, "Pass rate", pct+"%");
-  const tb=el("tbody");
-  if(!view.length){ tb.innerHTML=`<tr><td colspan="6" class="empty"><div class="big">No matches</div>No Microsoft Security Baseline rows match the current filters.</td></tr>`; return; }
-  tb.innerHTML = view.map(r=>`<tr>
-      <td><span class="pill member">${escapeHtml(r.area)}</span></td>
-      <td class="num">${escapeHtml(r.id)}</td>
-      <td><div class="uname">${escapeHtml(r.baseline)}</div></td>
-      <td>${bStatusPill(r.status)}</td>
-      <td class="num">${escapeHtml(r.severity||"—")}</td>
-      <td class="num opt">${escapeHtml(r.evidence||"—")}</td>
     </tr>`).join("");
 }
 
@@ -2388,7 +2204,6 @@ el("btnRefresh").onclick = ()=>{
   else if(tab==="legacyauth"){ legacyLoaded=false; loadLegacyAuth(); }
   else if(tab==="appcreds"){ appCredsLoaded=false; loadAppCreds(); }
   else if(tab==="oauth"){ oauthLoaded=false; loadOauth(); }
-  else if(tab==="baseline"){ baselineLoaded=false; loadBaseline(); }
   else { loadDirectory(); }
 };
 
@@ -2397,12 +2212,12 @@ el("btnRefresh").onclick = ()=>{
 ["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
  "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
  "fPatchRel","fPatchStatus","fAvMode","fAvHealth","fLapsOs","fLapsStatus","fPatchView",
- "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent","fBaselineArea","fBaselineStatus"].forEach(id=> el(id).onchange = render);
+ "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
    "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
    "fPatchRel","fPatchStatus","fLapsOs","fLapsStatus",
-   "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent","fBaselineArea","fBaselineStatus"].forEach(id=> el(id).value="");
+   "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent"].forEach(id=> el(id).value="");
   el("fAvMode").value="endpoints"; el("fAvHealth").value="unhealthy";   // antivirus keeps sensible defaults
   el("fPatchView").value="devices";
   render();
@@ -2435,7 +2250,7 @@ const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>risk
   devcompliance:[()=>mdmLoaded, loadMdm], jailbroken:[()=>mdmLoaded, loadMdm],
   privileged:[()=>privLoaded, loadPrivileged], securescore:[()=>secLoaded, loadSecScore],
   legacyauth:[()=>legacyLoaded, loadLegacyAuth], appcreds:[()=>appCredsLoaded, loadAppCreds],
-  oauth:[()=>oauthLoaded, loadOauth], baseline:[()=>baselineLoaded, loadBaseline] };
+  oauth:[()=>oauthLoaded, loadOauth] };
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); tab=t.dataset.tab;
@@ -2537,9 +2352,6 @@ el("btnCsv").onclick = ()=>{
   } else if(tab==="oauth"){
     head = ["client","resource","scopes","consentType"];
     rows = view.map(g=>[g.client,g.resource,g.scope,g.consentType].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
-  } else if(tab==="baseline"){
-    head = ["area","id","microsoftSecurityBaseline","status","severity","evidence"];
-    rows = view.map(r=>[r.area,r.id,r.baseline,r.status,r.severity,r.evidence].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
   } else if(tab==="patching" && el("fPatchView").value==="coverage"){
     head = ["windowsRelease","devices","patched","behind","pctPatched"];
     rows = view.map(r=>[r.rel, r.total, r.patched, r.behind, r.pct==null?"":r.pct+"%"].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
