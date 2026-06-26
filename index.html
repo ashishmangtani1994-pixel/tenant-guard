@@ -237,6 +237,152 @@
     border:1px solid var(--border);border-radius:9px;padding:11px 18px;font-size:13px;z-index:80;
     box-shadow:0 12px 30px rgba(0,0,0,.4);display:none;max-width:90vw}
   .toast.show{display:block}
+
+  /* ========================================================================
+     ===============  PREMIUM REDESIGN — design system + dashboard  =========
+     ======================================================================== */
+  :root{
+    --pass:#34D399; --pass-dim:rgba(52,211,153,.14); --pass-deep:#0c2e25;
+    --fail:#F87171; --fail-dim:rgba(248,113,113,.14); --fail-deep:#3a1416;
+    --manual:#FBBF24; --manual-dim:rgba(251,191,36,.13); --manual-deep:#3a2c08;
+    --info:#60A5FA; --info-dim:rgba(96,165,250,.14);
+    --grad-accent:linear-gradient(135deg,#5BE0D3 0%,#2C9C93 100%);
+    --grad-surface:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0));
+    --elev-1:0 1px 2px rgba(0,0,0,.35);
+    --elev-2:0 10px 34px -8px rgba(0,0,0,.55);
+    --glow-accent:0 0 0 1px rgba(77,208,196,.35),0 8px 28px -10px rgba(77,208,196,.35);
+    --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:22px;
+  }
+  body{background:
+    radial-gradient(1100px 520px at 78% -8%, rgba(77,208,196,.07), transparent 60%),
+    radial-gradient(900px 500px at 5% 0%, rgba(96,165,250,.05), transparent 55%),
+    var(--bg);
+    background-attachment:fixed;}
+  ::selection{background:rgba(77,208,196,.28)}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-thumb{background:#2a323d;border-radius:8px;border:3px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:#3a444f}
+
+  /* headings / numerals */
+  .display{font-family:'Space Grotesk',sans-serif;font-weight:700;letter-spacing:-.01em}
+
+  /* ---- buttons ---- */
+  .btn{border-radius:var(--r-sm);transition:border-color .16s,background .16s,box-shadow .16s,transform .08s}
+  .btn:hover{box-shadow:var(--elev-1)}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:var(--grad-accent);box-shadow:0 6px 18px -8px rgba(77,208,196,.6)}
+  .btn.glow{border-color:var(--accent-dim);color:var(--accent)}
+  .btn.glow:hover{box-shadow:var(--glow-accent)}
+
+  /* ---- tabs ---- */
+  .tab{border-radius:7px;transition:background .15s,color .15s,box-shadow .15s}
+  .tab.active{background:linear-gradient(90deg,rgba(77,208,196,.16),rgba(77,208,196,.04));box-shadow:inset 2px 0 0 var(--accent)}
+  .cnt.pulse{animation:badgePulse .55s ease}
+  @keyframes badgePulse{0%{transform:scale(1)}35%{transform:scale(1.45);color:var(--accent)}100%{transform:scale(1)}}
+
+  /* ---- KPI / summary cards (used on EVERY tab) ---- */
+  .cards .card, .card{
+    background:var(--grad-surface),var(--panel);
+    border:1px solid var(--border); border-radius:var(--r-md);
+    box-shadow:var(--elev-1); transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;
+    position:relative; overflow:hidden;
+  }
+  .cards .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent;transition:background .2s}
+  .cards .card:hover{transform:translateY(-3px);border-color:#2e3744;box-shadow:var(--elev-2)}
+  .cards .card .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .cards .card .v{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;line-height:1.1;letter-spacing:-.02em;margin-top:6px}
+  .cards .card.warn::before{background:var(--manual)}
+  .cards .card.accent::before{background:var(--accent)}
+  .card.kpi-pass::before{background:var(--pass)!important}
+  .card.kpi-fail::before{background:var(--fail)!important}
+  .card.kpi-accent::before{background:var(--accent)!important}
+  .card.kpi-pass .v{color:var(--pass)} .card.kpi-fail .v{color:var(--fail)} .card.kpi-warn .v{color:var(--manual)}
+
+  /* ---- pills: unified status palette everywhere ---- */
+  .pill{border-radius:999px;font-weight:600;letter-spacing:.02em}
+  .pill.pass,.pill.lic-yes{background:var(--pass-dim);color:var(--pass)}
+  .pill.fail,.pill.miss{background:var(--fail-dim);color:var(--fail)}
+  .pill.manual{background:var(--manual-dim);color:var(--manual);border:1px solid rgba(251,191,36,.3)}
+  .pill.na{background:rgba(139,152,165,.10);color:var(--faint);border:1px solid var(--border)}
+  .srcchip.live{color:var(--accent);border-color:var(--accent-dim)}
+  .srcchip.securescore{color:var(--info);border-color:rgba(96,165,250,.4)}
+  .srcchip.manual{color:var(--manual);border-color:rgba(251,191,36,.4)}
+
+  /* ---- table polish + severity row accent ---- */
+  .tablewrap{box-shadow:var(--elev-1);border-radius:var(--r-md)}
+  thead th{position:sticky;top:64px;z-index:1;backdrop-filter:blur(6px);background:rgba(27,34,44,.92)}
+  tbody tr{transition:background .12s}
+  tbody tr.clickrow td:first-child{border-left:3px solid transparent;transition:border-color .15s}
+  tbody tr[data-accent="critical"] td:first-child{border-left-color:#ff5b6a}
+  tbody tr[data-accent="high"] td:first-child{border-left-color:var(--fail)}
+  tbody tr[data-accent="medium"] td:first-child{border-left-color:var(--manual)}
+  tbody tr[data-accent="low"] td:first-child{border-left-color:var(--info)}
+  tbody tr[data-accent="pass"] td:first-child{border-left-color:var(--pass)}
+  tbody tr[data-accent="manual"] td:first-child{border-left-color:var(--faint)}
+  tbody tr.clickrow:hover{background:linear-gradient(90deg,rgba(77,208,196,.06),transparent)}
+  a.rowlink{display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-size:11px;font-family:var(--mono);text-decoration:none;opacity:.8}
+  a.rowlink:hover{opacity:1;text-decoration:underline}
+
+  /* ---- content fade between tabs ---- */
+  .content.fade{animation:fadeUp .34s cubic-bezier(.2,.7,.2,1)}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* ---- skeleton loaders ---- */
+  .skelwrap{padding:10px 14px}
+  .skel{position:relative;overflow:hidden;background:var(--panel-2);border-radius:7px;height:38px;margin:9px 0}
+  .skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent);animation:shimmer 1.25s infinite}
+  @keyframes shimmer{100%{transform:translateX(100%)}}
+
+  /* ====================== BASELINE / CMMC DASHBOARD ====================== */
+  .bizdash{display:flex;flex-direction:column;gap:16px;margin-bottom:20px}
+  .bd-top{display:grid;grid-template-columns:300px 1fr 340px;gap:16px}
+  .bd-card{background:var(--grad-surface),var(--panel);border:1px solid var(--border);
+    border-radius:var(--r-lg);padding:18px 20px;box-shadow:var(--elev-1)}
+  .bd-h{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-bottom:12px}
+  .bd-gauge{display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .bd-gauge svg{width:230px;height:150px;display:block}
+  .gauge-val{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:46px;letter-spacing:-.02em}
+  .gauge-sub{font-size:12px;color:var(--muted);margin-top:-6px}
+  .bd-spark{margin-top:10px;width:100%;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .bd-spark svg{width:100%;max-width:230px;height:34px}
+  .bd-spark .lbl{font-size:11px;color:var(--faint)}
+  .bd-radar{display:flex;flex-direction:column;align-items:center}
+  .bd-radar svg{width:100%;max-width:380px;height:300px}
+  .bd-kpis{display:flex;flex-direction:column;gap:14px}
+  .bd-kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-md);padding:12px 14px;position:relative;overflow:hidden}
+  .kpi .kv{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;letter-spacing:-.02em}
+  .kpi .kk{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-top:2px}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+  .kpi.k-total::before{background:var(--accent)} .kpi.k-pass::before{background:var(--pass)}
+  .kpi.k-fail::before{background:var(--fail)} .kpi.k-att::before{background:var(--manual)}
+  .kpi.k-pass .kv{color:var(--pass)} .kpi.k-fail .kv{color:var(--fail)} .kpi.k-att .kv{color:var(--manual)}
+  /* severity heat strip */
+  .bd-sevstrip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .sevcell{border-radius:var(--r-sm);padding:10px 8px;text-align:center;cursor:pointer;border:1px solid transparent;transition:transform .12s,box-shadow .12s}
+  .sevcell:hover{transform:translateY(-2px);box-shadow:var(--elev-1)}
+  .sevcell .sc-n{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;line-height:1}
+  .sevcell .sc-l{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;margin-top:4px;opacity:.85}
+  .sevcell.s-critical{background:rgba(248,113,113,.16);border-color:rgba(248,113,113,.35);color:#ffb4ba}
+  .sevcell.s-high{background:rgba(248,113,113,.10);border-color:rgba(248,113,113,.25);color:#ff9aa2}
+  .sevcell.s-medium{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.3);color:#ffd97a}
+  .sevcell.s-low{background:rgba(96,165,250,.12);border-color:rgba(96,165,250,.3);color:#a9cdfb}
+  .sevcell.empty{opacity:.4}
+  /* category bars */
+  .catbar{display:grid;grid-template-columns:150px 1fr 92px;align-items:center;gap:12px;margin:9px 0}
+  .catbar .cb-name{font-size:12.5px;color:var(--text);font-weight:500}
+  .catbar .cb-track{height:14px;border-radius:7px;background:var(--panel-2);overflow:hidden;display:flex}
+  .catbar .cb-seg{height:100%;width:0;transition:width .7s cubic-bezier(.2,.7,.2,1)}
+  .cb-seg.pass{background:var(--pass)} .cb-seg.fail{background:var(--fail)} .cb-seg.manual{background:var(--manual)}
+  .catbar .cb-pct{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:right}
+  .bd-bars-legend{display:flex;gap:16px;margin-top:6px;font-size:11px;color:var(--muted)}
+  .bd-bars-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  /* gauge arc animation */
+  .gauge-prog{transition:stroke-dashoffset 1.1s cubic-bezier(.2,.7,.2,1)}
+  .radar-data{transform-origin:center;transition:transform .8s cubic-bezier(.2,.7,.2,1),opacity .8s}
+  @media(max-width:1100px){ .bd-top{grid-template-columns:1fr} .catbar{grid-template-columns:120px 1fr 78px} }
+  @media(max-width:560px){ .cards{grid-template-columns:1fr 1fr} .bd-kpi-grid{grid-template-columns:1fr 1fr} }
   .toast.err{border-color:var(--danger-dim);color:#f3a9ab}
   .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--border);
     border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
@@ -355,6 +501,7 @@
         <button class="navhead" data-grouphead="baseline"><span class="caret">▾</span> Microsoft Security Baseline</button>
         <div class="navitems">
           <button class="tab" data-tab="baseline">Baseline checks <span class="cnt" id="cntBaseline">—</span></button>
+          <button class="tab" data-tab="cmmc">CMMC Level 1 <span class="cnt" id="cntCmmc">—</span></button>
         </div>
       </div>
       <div class="navgroup" data-group="dormant">
@@ -416,8 +563,36 @@
           </div>
         </div>
         <span style="flex:1"></span>
+        <button class="btn glow hide" id="btnSummary">✦ Export summary</button>
         <button class="btn" id="btnRefresh">↻ Reload</button>
         <button class="btn" id="btnCsv">Export CSV</button>
+      </div>
+
+      <!-- ==== BASELINE / CMMC EXECUTIVE DASHBOARD (top of tab) ==== -->
+      <div class="bizdash hide" id="bizDash">
+        <div class="bd-top">
+          <div class="bd-card bd-gauge">
+            <div class="bd-h" style="align-self:flex-start">Overall posture</div>
+            <div id="bdGauge"></div>
+            <div class="bd-spark" id="bdSpark"></div>
+          </div>
+          <div class="bd-card bd-radar">
+            <div class="bd-h" style="align-self:flex-start">Coverage by category</div>
+            <div id="bdRadar"></div>
+          </div>
+          <div class="bd-card bd-kpis">
+            <div class="bd-kpi-grid" id="bdKpis"></div>
+            <div>
+              <div class="bd-h">Failing by severity — click to filter</div>
+              <div class="bd-sevstrip" id="bdSev"></div>
+            </div>
+          </div>
+        </div>
+        <div class="bd-card bd-bars">
+          <div class="bd-h">Result distribution by category</div>
+          <div id="bdBars"></div>
+          <div class="bd-bars-legend"><span><i style="background:var(--pass)"></i>Passed</span><span><i style="background:var(--fail)"></i>Failed</span><span><i style="background:var(--manual)"></i>Manual / needs attention</span></div>
+        </div>
       </div>
 
       <!-- ==== PER-VIEW COLUMN FILTERS — each view shows filters for its own fields ==== -->
@@ -589,6 +764,19 @@
           <label>Severity</label>
           <select id="fBaseSev"><option value="">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
         </div>
+        <!-- cmmc level 1 -->
+        <div class="field hide" id="wrapCmmcCat">
+          <label>Family</label>
+          <select id="fCmmcCat"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapCmmcStatus">
+          <label>Result</label>
+          <select id="fCmmcStatus"><option value="">All</option><option value="pass">Passed</option><option value="fail">Failed</option><option value="manual">Manual</option></select>
+        </div>
+        <div class="field hide" id="wrapCmmcSev">
+          <label>Severity</label>
+          <select id="fCmmcSev"><option value="">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+        </div>
         <span class="grow"></span>
         <span class="count" id="filterCount"></span>
         <button class="btn ghost" id="fClear">Clear filters</button>
@@ -608,6 +796,7 @@
         <div class="card warn"><div class="k" id="infoCard3k">—</div><div class="v" id="infoCard3v">—</div></div>
         <div class="card accent"><div class="k" id="infoCard4k">—</div><div class="v" id="infoCard4v" style="font-size:18px;padding-top:6px">—</div></div>
       </div>
+
 
       <div class="actionbar" id="actionbar">
         <label class="chk"><input type="checkbox" id="selAll" /> Select all (view)</label>
@@ -735,7 +924,7 @@ let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
 
-const INFO_TABS = ["baseline","risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching",
+const INFO_TABS = ["baseline","cmmc","risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching",
   "devcompliance","privileged","securescore","jailbroken","legacyauth","appcreds","oauth"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
@@ -1370,9 +1559,10 @@ const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatu
   "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc",
   "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth","wrapLapsOs","wrapLapsStatus","wrapPatchView",
   "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent",
-  "wrapBaseCat","wrapBaseStatus","wrapBaseSev"];
+  "wrapBaseCat","wrapBaseStatus","wrapBaseSev","wrapCmmcCat","wrapCmmcStatus","wrapCmmcSev"];
 const FILTERS_BY_TAB = {
   baseline:["wrapBaseCat","wrapBaseStatus","wrapBaseSev"],
+  cmmc:["wrapCmmcCat","wrapCmmcStatus","wrapCmmcSev"],
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
   device:["wrapOs","wrapOwn","wrapStatus"],
@@ -1395,6 +1585,7 @@ const FILTERS_BY_TAB = {
 };
 const SEARCH_PLACEHOLDER = {
   baseline:"control, check or finding…",
+  cmmc:"control, family or check…",
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
   ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…",
   patching:"device name or build…", antivirus:"device or malware…", laps:"device name…",
@@ -1404,6 +1595,7 @@ const SEARCH_PLACEHOLDER = {
 
 function syncFilterBar(){
   const info = isInfoTab();
+  const dash = (tab==="baseline"||tab==="cmmc");   // tabs that use the executive dashboard
   const show = FILTERS_BY_TAB[tab] || [];
   ALL_FILTER_WRAPS.forEach(id=> el(id).classList.toggle("hide", !show.includes(id)));
   el("fSearch").placeholder = SEARCH_PLACEHOLDER[tab] || "name or UPN…";
@@ -1412,7 +1604,9 @@ function syncFilterBar(){
   el("optionsField").classList.toggle("hide", info);
   el("actionbar").classList.toggle("hide", info);
   el("cards").classList.toggle("hide", info);
-  el("infoCards").classList.toggle("hide", !info);
+  el("infoCards").classList.toggle("hide", !info || dash);   // dashboard replaces the plain info cards
+  el("bizDash").classList.toggle("hide", !dash);
+  el("btnSummary").classList.toggle("hide", !dash);
 }
 
 const HEAD_USERS   = `<th style="width:34px"></th><th>User</th><th>Type</th><th>License</th><th class="opt">Last interactive</th><th class="opt">Last non-interactive</th><th>Last activity</th><th>Inactive</th>`;
@@ -1434,6 +1628,7 @@ const HEAD_OAUTH   = `<th>Client app</th><th>Resource</th><th class="opt">Scopes
 const HEAD_PATCHING  = `<th>Device</th><th>Current OS</th><th>Current build</th><th>Target build</th><th>Patch status</th><th class="opt">Last active</th>`;
 const HEAD_AV_ENDPOINTS = `<th>Device</th><th>Managed by</th><th>Malware protection</th><th>State</th><th>Real-time</th><th>Network</th><th>Signature</th><th>Tamper</th><th class="opt">Product status</th><th class="opt">Reboot</th>`;
 const HEAD_BASELINE = `<th>Result</th><th>Control</th><th>Microsoft Security Baseline</th><th>Category</th><th>Severity</th><th class="opt">Finding</th>`;
+const HEAD_CMMC = `<th>Result</th><th>Control</th><th>CMMC Level 1 Security Baseline</th><th>Family</th><th>Severity</th><th class="opt">Assessment</th>`;
 
 /* ========
    MICROSOFT SECURITY BASELINE
@@ -1598,7 +1793,8 @@ const BASELINE_DATA = [
 function render(){
   syncFilterBar();
   // refresh sidebar badge counts regardless of active tab, so switching tabs shows fresh numbers
-  el("cntBaseline").textContent = effectiveBaseline().filter(c=>c.status==="fail").length;  // report data, adjusted for live CA state
+  setCnt("cntBaseline", effectiveBaseline().filter(c=>c.status==="fail").length);
+  setCnt("cntCmmc", effectiveCMMC().filter(c=>c.status==="fail").length);
   const dorm = computeDormant();
   const members = dorm.filter(u => (u.userType||"Member")!=="Guest");
   const guests  = dorm.filter(u => (u.userType||"Member")==="Guest");
@@ -1633,11 +1829,11 @@ function render(){
   // antivirus sets its own header (per sub-mode) inside renderAntivirus
   if(tab==="antivirus"){ renderAntivirus(); return; }
 
-  const heads = { baseline:HEAD_BASELINE, device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
+  const heads = { baseline:HEAD_BASELINE, cmmc:HEAD_CMMC, device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
     devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH };
   if(heads[tab]){
     el("theadRow").innerHTML = heads[tab];
-    ({ baseline:renderBaseline, device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching,
+    ({ baseline:renderBaseline, cmmc:renderCMMC, device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching,
        devcompliance:renderDevCompliance, jailbroken:renderJailbroken, privileged:renderPrivileged, securescore:renderSecScore, legacyauth:renderLegacyAuth, appcreds:renderAppCreds, oauth:renderOauth })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
@@ -1678,6 +1874,12 @@ function entraLink(path){ return `https://entra.microsoft.com/#view/${path}`; }
 function setFilterCount(shown, total){
   el("filterCount").innerHTML = shown===total ? `<b>${total}</b> rows` : `<b>${shown}</b> of ${total} rows`;
 }
+/* set a sidebar count badge and pulse it when the value changes */
+function setCnt(id, val){
+  const e = el(id); if(!e) return; const s=String(val);
+  if(e.textContent!=="—" && e.textContent!==s){ e.classList.remove("pulse"); void e.offsetWidth; e.classList.add("pulse"); }
+  e.textContent = s;
+}
 
 /* ============================================================
    MICROSOFT SECURITY BASELINE — live assessment engine
@@ -1715,6 +1917,7 @@ async function ensureBaselineData(force){
         q(`${GRAPH}/groups?$count=true&$top=1&$filter=${dynFilter}`),
         q(`${GRAPH}/directoryRoles?$expand=members($select=id,displayName,userPrincipalName,accountEnabled,onPremisesSyncEnabled)`),
         devicesLoaded ? Promise.resolve(null) : q(`${GRAPH}/devices?$select=id,displayName,accountEnabled,approximateLastSignInDateTime&$top=500`),
+        mfaLoaded ? Promise.resolve(null) : q(`${GRAPH}/reports/authenticationMethods/userRegistrationDetails?$top=500`),
       ]);
       if(r[0]){ allCaPolicies = r[0].value||[]; caLoaded=true; }
       if(r[1]){ secScore = (r[1].value||[])[0]||null; secLoaded=true; }
@@ -1723,6 +1926,7 @@ async function ensureBaselineData(force){
       if(r[4]) bDynGroups = (r[4]["@odata.count"] ?? null);
       if(r[5]){ const ga=(r[5].value||[]).find(x=>/^global administrator$/i.test(x.displayName||"")); bGAs = ga ? (ga.members||[]).filter(m=>!m["@odata.type"]||/#microsoft\.graph\.user/i.test(m["@odata.type"])) : []; }
       if(r[6]){ allDevices = r[6].value||[]; devicesLoaded=true; }
+      if(r[7]){ allRegDetails = r[7].value||[]; mfaLoaded=true; }
     }
   }catch(e){ /* best effort — unresolved sources simply fall through to Manual */ }
   baselineDataLoaded=true; baselineLoading=false;
@@ -1813,9 +2017,8 @@ const SS_MAP = {
   "6.9":["defender for cloud apps","cloud app"], "7.2":["audit log","unified audit"],
   "7.3":["retention"], "7.4":["sensitivity label","information protection"], "7.5":["dlp","data loss prevention"]
 };
-function secureScoreFor(id){
-  if(!secLoaded || !secScore) return null;
-  const frags = SS_MAP[id]; if(!frags) return null;
+function secureScoreForFrags(frags){
+  if(!secLoaded || !secScore || !frags || !frags.length) return null;
   const list = secScore.controlScores||[];
   const hit = list.find(c=> frags.some(f=> (c.controlName||"").toLowerCase().includes(f) || (c.description||"").toLowerCase().includes(f)));
   if(!hit) return null;
@@ -1828,6 +2031,7 @@ function secureScoreFor(id){
     + (hit.score!=null?` (score ${Math.round(hit.score)})`:"") + ".";
   return {status: pass?"pass":"fail", evidence: ev, link:"https://security.microsoft.com/securescore"};
 }
+function secureScoreFor(id){ return secureScoreForFrags(SS_MAP[id]); }
 
 /* ---- resolve one control through the 3 tiers ---- */
 function resolveControl(c, ov){
@@ -1850,6 +2054,280 @@ function effectiveBaseline(){
   });
 }
 
+/* ============================================================
+   CMMC LEVEL 1 — same 3-tier engine, NIST 800-171 control families.
+   Each control aggregates several checks; each check resolves via
+   live Graph → Secure Score → Manual, then the control rolls up.
+   ============================================================ */
+const FAMILY_NAMES = { AC:"Access Control", IA:"Identification & Authentication", MP:"Media Protection",
+  PE:"Physical Protection", SC:"System & Communications Protection", SI:"System & Information Integrity" };
+const ROLE_LINK2 = entraLink("Microsoft_AAD_IAM/RolesManagementMenuBlade/~/AllRoles");
+const REL_LINK = entraLink("Microsoft_AAD_IAM/CompanyRelationshipsMenuBlade/~/Settings");
+/* reusable live checks (use the same globals ensureBaselineData populates) */
+const CMMC_CHECKS = {
+  "mfa-all":      ()=>caEval("mfa-all"),
+  "legacy-auth":  ()=>caEval("legacy-block"),
+  "managed-dev":  ()=>caEval("device-compliant"),
+  "mfa-enrolled": ()=>{ if(!mfaLoaded||!allRegDetails.length) return null; const n=allRegDetails.filter(r=>!r.isMfaRegistered).length; return {status:n===0?"pass":"fail", evidence:`${n} user(s) are not registered for MFA.`, link:entraLink("Microsoft_AAD_IAM/AuthenticationMethodsMenuBlade")}; },
+  "dormant":      ()=>{ if(!allUsers.length) return null; const n=bDormantCount(); return {status:n===0?"pass":"fail", evidence:`${n} enabled account(s) inactive for 45+ days.`, link:entraLink("Microsoft_AAD_UsersAndTenants/UserManagementMenuBlade/~/AllUsers")}; },
+  "global-admins":()=>{ if(!bGAs) return null; const n=bGAs.length; return {status:(n>=2&&n<=4)?"pass":"fail", evidence:`${n} Global Administrator${n===1?"":"s"} assigned (recommended 2–4).`, link:ROLE_LINK2}; },
+  "password-exp": ()=>{ if(!bDomains.length) return null; const e=bDomains.filter(d=>d.passwordValidityPeriodInDays!=null&&d.passwordValidityPeriodInDays<2147483647); return {status:e.length===0?"pass":"fail", evidence:e.length===0?"Passwords never expire on all domains.":`${e.length} domain(s) expire passwords.`, link:entraLink("Microsoft_AAD_IAM/PasswordResetMenuBlade")}; },
+  "guest-limited":()=>{ if(!bAuthz) return null; const ok=bAuthz.guestUserRoleId==="10dae51f-b6af-4016-8d66-8c2a99b929b3"; return {status:ok?"pass":"fail", evidence:ok?"Guests are restricted to the most limited directory role.":"Guests are not set to the most restricted role.", link:REL_LINK}; },
+  "guest-inviter":()=>{ if(!bAuthz) return null; const a=String(bAuthz.allowInvitesFrom||""); const ok=/adminsAndGuestInviters|none/i.test(a); return {status:ok?"pass":"fail", evidence:`Guest invitations allowed from: ${a||"unknown"}.`, link:REL_LINK}; },
+  "apps-register":()=>{ if(!bAuthz) return null; const ok=bAuthz.defaultUserRolePermissions?.allowedToCreateApps===false; return {status:ok?"pass":"fail", evidence:`Standard users ${ok?"cannot":"can"} register third-party applications.`, link:entraLink("Microsoft_AAD_IAM/UserManagementMenuBlade/~/UserSettings")}; },
+  "nonadmin-consent":()=>{ if(!bAuthz) return null; const pol=bAuthz.permissionGrantPolicyIdsAssignedToDefaultUserRole||(bAuthz.defaultUserRolePermissions?.permissionGrantPoliciesAssigned)||[]; const ok=!pol.length||!pol.some(x=>/low|ManagePermissionGrantsForSelf/i.test(String(x))); return {status:ok?"pass":"fail", evidence:ok?"Standard users cannot consent to third-party apps.":"Standard users can consent to some third-party apps.", link:entraLink("Microsoft_AAD_IAM/ConsentPoliciesMenuBlade/~/UserSettings")}; },
+  "dev-inventory":()=>{ if(!devicesLoaded) return null; return {status:allDevices.length>0?"pass":"fail", evidence:`${allDevices.length} device(s) in the Entra inventory.`, link:entraLink("Microsoft_AAD_Devices/DevicesMenuBlade/~/Devices")}; },
+  "stale-45":     ()=>{ if(!devicesLoaded) return null; const cut=Date.now()-45*864e5; const n=allDevices.filter(d=>{const t=d.approximateLastSignInDateTime;return t&&new Date(t).getTime()<cut;}).length; return {status:n===0?"pass":"fail", evidence:`${n} device(s) have not checked in for 45+ days.`, link:entraLink("Microsoft_AAD_Devices/DevicesMenuBlade/~/Devices")}; }
+};
+const CMMC_DATA = [
+  {family:"AC", id:"AC-1", title:"Limit information system access to authorized users, processes acting on behalf of authorized users, or devices", subs:[
+    {name:"Users are enrolled in MFA and covered by a policy", key:"mfa-enrolled", sev:"critical"},
+    {name:"Dormant accounts are disabled after 45 days", key:"dormant", sev:"medium"},
+    {name:"Guest users have limited access to properties and memberships of directory objects", key:"guest-limited"},
+    {name:"Only users with the Guest Inviter Role are allowed to invite external users", key:"guest-inviter", sev:"low"},
+    {name:"Groups are inventoried and periodically reviewed for data access", manualId:"AC-1:groups"},
+    {name:"Ensure that only organizationally managed/approved public groups exist", manualId:"AC-1:public-groups"}]},
+  {family:"AC", id:"AC-2", title:"Limit information system access to the types of transactions and functions that authorized users are permitted to execute", subs:[
+    {name:"Ensure that between two and four global admins are designated", key:"global-admins", sev:"high"},
+    {name:"Ensure 'Privileged Identity Management' is used to manage roles", ss:["privileged identity management","pim"], manualId:"AC-2:pim"},
+    {name:"Non-admin users shall be prevented from providing consent to 3rd party applications", key:"nonadmin-consent"},
+    {name:"Only Admins shall be allowed to register 3rd party applications", key:"apps-register"}]},
+  {family:"AC", id:"AC-3", title:"Verify and control/limit connections to external information system", subs:[
+    {name:"Block access outside your country's IP", manualId:"AC-3:country-ip"},
+    {name:"A conditional access policy is enabled which requires guest users to use MFA", manualId:"AC-3:guest-mfa", sev:"low"},
+    {name:"Ensure the connection filter IP allow list is not used", manualId:"AC-3:conn-allow", sev:"low"},
+    {name:"Ensure the connection filter safe list is off", manualId:"AC-3:conn-safe"},
+    {name:"Ensure external domains are restricted in the Teams admin center", manualId:"AC-3:teams-ext"},
+    {name:"Cloud App Discovery is configured and apps are periodically reviewed", ss:["defender for cloud apps","cloud app"], manualId:"AC-3:cloud-app"}]},
+  {family:"AC", id:"AC-4", title:"Control information posted or processed on publicly accessible information systems", subs:[
+    {name:"Data loss prevention policies shall be configured", ss:["dlp","data loss prevention"], manualId:"AC-4:dlp"},
+    {name:"Information Protection Labels shall be configured", ss:["sensitivity label","information protection"], manualId:"AC-4:labels"},
+    {name:"Ensure external content sharing is restricted", manualId:"AC-4:ext-sharing"},
+    {name:"Ensure link sharing is restricted in SharePoint and OneDrive", manualId:"AC-4:link-sharing"}]},
+  {family:"IA", id:"IA-1", title:"Identify information system users, processes, or devices", subs:[
+    {name:"Users Are Authenticated with Unique Credentials", manualId:"IA-1:unique-creds"},
+    {name:"All Devices shall be inventoried and periodically reviewed", key:"dev-inventory"},
+    {name:"Devices shall be deleted that haven't checked in for over 45 days", key:"stale-45", sev:"medium"}]},
+  {family:"IA", id:"IA-2", title:"Authenticate users, processes, or devices", subs:[
+    {name:"MFA is enforced for all users", key:"mfa-all"},
+    {name:"Managed Devices shall be required for authentication", key:"managed-dev", sev:"medium"},
+    {name:"Passwords shall not expire", key:"password-exp"},
+    {name:"Legacy Authentication shall be blocked", key:"legacy-auth"}]},
+  {family:"MP", id:"MP-1", title:"Sanitize or destroy information system media containing FCI before disposal or reuse", subs:[
+    {name:"All Managed Devices shall be enrolled in Intune", manualId:"MP-1:intune-enroll", sev:"medium"},
+    {name:"Retention Policies shall be configured", ss:["retention"], manualId:"MP-1:retention"},
+    {name:"Encryption shall be required on all devices", ss:["bitlocker","encryption"], manualId:"MP-1:encryption", sev:"high"}]},
+  {family:"PE", id:"PE-1", title:"Limit physical access to organizational information systems to authorized individuals", subs:[
+    {name:"Devices compliance policies shall be configured for every supported device platform", manualId:"PE-1:compliance-platform", sev:"low"},
+    {name:"Noncompliant devices shall be blocked from accessing corporate resources", key:"managed-dev", sev:"medium"}]},
+  {family:"PE", id:"PE-2", title:"Escort visitors and monitor visitor activity; maintain audit logs of physical access; and control and manage physical access devices", subs:[
+    {name:"Physical access controls are implemented, logged, and monitored", manualId:"PE-2:physical"}]},
+  {family:"SC", id:"SC-1", title:"Monitor, control, and protect organizational communications at the external boundaries and key internal boundaries of the information systems", subs:[
+    {name:"Safe Attachment Policies are configured", ss:["safe attachment"], manualId:"SC-1:safe-attach"},
+    {name:"Safe Links policies are configured", ss:["safe links"], manualId:"SC-1:safe-links", sev:"medium"},
+    {name:"App Protection policies should be created for mobile devices", ss:["app protection"], manualId:"SC-1:app-protect"},
+    {name:"Ensure email from external senders is identified", ss:["external sender","external email"], manualId:"SC-1:ext-sender"},
+    {name:"Ensure all forms of mail forwarding are blocked and/or disabled", ss:["mail forwarding","forwarding"], manualId:"SC-1:mail-fwd", sev:"high"}]},
+  {family:"SC", id:"SC-2", title:"Implement subnetworks for publicly accessible system components", subs:[
+    {name:"Subnetworks for publicly accessible components are implemented", manualId:"SC-2:subnets"}]},
+  {family:"SI", id:"SI-1", title:"Identify, report, and correct information system flaws in a timely manner", subs:[
+    {name:"Secure Score Recommendations shall be monitored and implemented", manualId:"SI-1:secscore"},
+    {name:"Windows Update Rings shall be configured for Windows Devices", manualId:"SI-1:update-rings", sev:"critical"},
+    {name:"Patches/vendor mitigations for critical vulnerabilities applied within 48 hours", manualId:"SI-1:patch-48h", sev:"high"}]},
+  {family:"SI", id:"SI-2", title:"Provide protection from malicious code at appropriate locations", subs:[
+    {name:"Microsoft Defender Antivirus is deployed via Intune", ss:["defender antivirus","microsoft defender antivirus"], manualId:"SI-2:defender-av", sev:"high"},
+    {name:"Devices shall be enrolled for Defender for Business or Defender for Endpoint", ss:["defender for endpoint","endpoint detection"], manualId:"SI-2:defender-edr"},
+    {name:"Attack Surface Reduction rules shall be configured", ss:["attack surface reduction"], manualId:"SI-2:asr", sev:"medium"}]},
+  {family:"SI", id:"SI-3", title:"Update malicious code protection mechanisms when new releases are available", subs:[
+    {name:"Microsoft Defender Antivirus is deployed via Intune", ss:["defender antivirus","microsoft defender antivirus"], manualId:"SI-3:defender-av", sev:"high"}]},
+  {family:"SI", id:"SI-4", title:"Perform periodic scans and real-time scans of files from external sources", subs:[
+    {name:"Safe Links policies are configured", ss:["safe links"], manualId:"SI-4:safe-links", sev:"medium"},
+    {name:"Safe Attachment Policies are configured", ss:["safe attachment"], manualId:"SI-4:safe-attach"},
+    {name:"Microsoft Defender Antivirus is deployed via Intune", ss:["defender antivirus"], manualId:"SI-4:defender-av", sev:"high"},
+    {name:"Microsoft Office macro antivirus scanning is enabled", manualId:"SI-4:macro-av", sev:"low"}]}
+];
+function resolveCheck(s, ov){
+  if(s.key && CMMC_CHECKS[s.key]){ let r=null; try{ r=CMMC_CHECKS[s.key](); }catch(e){} if(r) return {...r, source:"live"}; }
+  if(s.ss){ const ss=secureScoreForFrags(s.ss); if(ss) return {...ss, source:"securescore"}; }
+  const set = ov[s.manualId];
+  return { status:set||"manual", source:"manual",
+    evidence: set ? `Manually marked ${set==="pass"?"Passed":"Failed"}.` : "No automatic data source for this check — set it manually once implemented." };
+}
+function effectiveCMMC(){
+  const ov = manualOverrides();
+  return CMMC_DATA.map(c=>{
+    const subs = c.subs.map(s=>{ const r=resolveCheck(s, ov); return {...s, status:r.status, source:r.source, evidence:r.evidence, link:r.link||null, policies:r.policies||null}; });
+    let status, severity;
+    if(subs.some(s=>s.status==="fail")){ status="fail"; severity = subs.filter(s=>s.status==="fail").map(s=>s.sev).find(Boolean)||"high"; }
+    else if(subs.some(s=>s.status==="manual")){ status="manual"; }
+    else { status="pass"; }
+    const srcs=[...new Set(subs.map(s=>s.source))];
+    return {...c, category:c.family, subs, status, severity, source: srcs.length===1?srcs[0]:"mixed" };
+  });
+}
+
+/* ====================================================================
+   DASHBOARD — animated inline-SVG charts (no external libraries)
+   ==================================================================== */
+function _animateCount(node, to, suffix){
+  const dur=900, t0=performance.now();
+  (function step(t){ const k=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-k,3);
+    node.textContent=Math.round(to*e)+(suffix||""); if(k<1) requestAnimationFrame(step); })(t0);
+}
+function gaugeColor(p){ return p>=80?"#34D399":(p>=50?"#FBBF24":"#F87171"); }
+function svgGauge(pct){
+  const arc="M20,100 A80,80 0 0 1 180,100";
+  return `<svg viewBox="0 0 200 116" role="img" aria-label="Overall posture ${pct}%">
+    <defs><linearGradient id="ggrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F87171"/><stop offset=".5" stop-color="#FBBF24"/><stop offset="1" stop-color="#34D399"/></linearGradient></defs>
+    <path d="${arc}" fill="none" stroke="#212a33" stroke-width="14" stroke-linecap="round"/>
+    <path class="gauge-prog" d="${arc}" fill="none" stroke="url(#ggrad)" stroke-width="14" stroke-linecap="round"
+      pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+    <text x="100" y="84" text-anchor="middle" class="gauge-val" fill="${gaugeColor(pct)}" id="gaugeNum">0%</text>
+    <text x="100" y="104" text-anchor="middle" font-size="10.5" fill="#5B6671">controls passing</text></svg>`;
+}
+function animateGauge(box, pct){
+  const p=box.querySelector(".gauge-prog"), n=box.querySelector("#gaugeNum");
+  requestAnimationFrame(()=>{ p.style.strokeDashoffset=(100-pct); });
+  if(n) _animateCount(n, pct, "%");
+}
+function svgRadar(cats){
+  const cx=140, cy=138, R=90, n=Math.max(3,cats.length);
+  const ang=i=>(-90+i*360/cats.length)*Math.PI/180;
+  const pt=(i,r)=>[cx+Math.cos(ang(i))*r, cy+Math.sin(ang(i))*r];
+  let grid="", axes="", labels="";
+  [0.25,0.5,0.75,1].forEach(f=>{ const pts=cats.map((_,i)=>pt(i,R*f).map(z=>z.toFixed(1)).join(",")).join(" ");
+    grid+=`<polygon points="${pts}" fill="none" stroke="#212a33" stroke-width="1"/>`; });
+  cats.forEach((c,i)=>{ const [x,y]=pt(i,R);
+    axes+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#212a33" stroke-width="1"/>`;
+    const [lx,ly]=pt(i,R+16); const anch=Math.abs(lx-cx)<10?"middle":(lx>cx?"start":"end");
+    labels+=`<text x="${lx.toFixed(1)}" y="${(ly+(ly<cy?-1:9)).toFixed(1)}" text-anchor="${anch}" font-size="10.5" font-weight="600" fill="#9aa6b2">${escapeHtml(c.label)}</text>`;
+    labels+=`<text x="${lx.toFixed(1)}" y="${(ly+(ly<cy?11:21)).toFixed(1)}" text-anchor="${anch}" font-size="9.5" fill="#5B6671">${Math.round(c.pct)}%</text>`; });
+  const data=cats.map((c,i)=>pt(i,R*Math.max(0,Math.min(1,c.pct/100))).map(z=>z.toFixed(1)).join(",")).join(" ");
+  return `<svg viewBox="0 0 280 280">${grid}${axes}
+    <polygon class="radar-data" points="${data}" fill="rgba(77,208,196,.20)" stroke="#4DD0C4" stroke-width="2" style="transform:scale(.04);opacity:0"/>${labels}</svg>`;
+}
+function animateRadar(box){ const g=box.querySelector(".radar-data"); if(g) requestAnimationFrame(()=>{ g.style.transform="scale(1)"; g.style.opacity="1"; }); }
+function renderSevStrip(sev){
+  return [["critical","Critical"],["high","High"],["medium","Medium"],["low","Low"]].map(([k,l])=>{
+    const n=sev[k]||0; return `<div class="sevcell s-${k} ${n?"":"empty"}" data-sev="${k}"><div class="sc-n">${n}</div><div class="sc-l">${l}</div></div>`;
+  }).join("");
+}
+function renderCatBars(cats){
+  return cats.map(c=>{ const tot=c.total||1;
+    const pp=c.pass/tot*100, fp=c.fail/tot*100, mp=100-pp-fp;
+    return `<div class="catbar"><div class="cb-name">${escapeHtml(c.label)}</div>
+      <div class="cb-track"><div class="cb-seg pass" data-w="${pp.toFixed(1)}"></div><div class="cb-seg fail" data-w="${fp.toFixed(1)}"></div><div class="cb-seg manual" data-w="${mp.toFixed(1)}"></div></div>
+      <div class="cb-pct">${c.pass}/${c.total}</div></div>`;
+  }).join("");
+}
+function animateBars(box){ requestAnimationFrame(()=> box.querySelectorAll(".cb-seg").forEach(s=> s.style.width=s.dataset.w+"%")); }
+function loadRuns(kind){ try{ return JSON.parse(localStorage.getItem("tenantguard.runs."+kind)||"[]"); }catch{ return []; } }
+function logRun(kind, score){
+  const runs=loadRuns(kind), last=runs[runs.length-1];
+  if(last && Math.abs(last.score-score)<0.5 && (Date.now()-last.t)<120000) return runs;
+  runs.push({t:Date.now(), score}); while(runs.length>30) runs.shift();
+  try{ localStorage.setItem("tenantguard.runs."+kind, JSON.stringify(runs)); }catch{}
+  return runs;
+}
+function svgSpark(runs){
+  if(runs.length<2) return `<div class="lbl">Baseline saved — the trend line appears after your next scan</div>`;
+  const w=230,h=34,p=3, xs=runs.map((r,i)=>p+i*(w-2*p)/(runs.length-1));
+  const min=Math.min(...runs.map(r=>r.score))-2, max=Math.max(...runs.map(r=>r.score))+2;
+  const yy=s=> h-p-((s-min)/Math.max(1,max-min))*(h-2*p);
+  const pts=runs.map((r,i)=>`${xs[i].toFixed(1)},${yy(r.score).toFixed(1)}`).join(" ");
+  const d=Math.round(runs[runs.length-1].score-runs[runs.length-2].score), col=d>=0?"#34D399":"#F87171";
+  return `<svg viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="#4DD0C4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${xs[xs.length-1].toFixed(1)}" cy="${yy(runs[runs.length-1].score).toFixed(1)}" r="3" fill="${col}"/></svg>
+    <div class="lbl">This run <b style="color:${col}">${d>=0?"+":""}${d}%</b> vs last</div>`;
+}
+const CAT_SHORT = {"SharePoint and OneDrive":"SharePoint"};
+let _bizKey="";
+function renderBizDash(kind, DATA){
+  el("bizDash").classList.remove("hide"); el("cards").classList.add("hide"); el("infoCards").classList.add("hide");
+  const key = kind+"|"+DATA.map(c=>c.status[0]+(c.severity||"")).join("");
+  if(key===_bizKey) return;            // unchanged data → don't re-animate while filtering
+  _bizKey=key;
+  const total=DATA.length, passed=DATA.filter(c=>c.status==="pass").length,
+        failed=DATA.filter(c=>c.status==="fail").length, manual=DATA.filter(c=>c.status==="manual").length;
+  const evald=passed+failed, score=evald?Math.round(passed/evald*100):0;
+  const g=el("bdGauge"); g.innerHTML=svgGauge(score); animateGauge(g, score);
+  el("bdSpark").innerHTML=svgSpark(logRun(kind, score));
+  el("bdKpis").innerHTML=`
+    <div class="kpi k-total"><div class="kv" data-n="${total}">0</div><div class="kk">Total checks</div></div>
+    <div class="kpi k-pass"><div class="kv" data-n="${passed}">0</div><div class="kk">Passed</div></div>
+    <div class="kpi k-fail"><div class="kv" data-n="${failed}">0</div><div class="kk">Failed</div></div>
+    <div class="kpi k-att"><div class="kv" data-n="${failed+manual}">0</div><div class="kk">Needs attention</div></div>`;
+  el("bdKpis").querySelectorAll(".kv").forEach(x=>_animateCount(x, +x.dataset.n, ""));
+  const catKey=c=>c.category||c.family;
+  const cats=[...new Set(DATA.map(catKey))].map(name=>{ const items=DATA.filter(c=>catKey(c)===name);
+    const p=items.filter(c=>c.status==="pass").length, f=items.filter(c=>c.status==="fail").length, m=items.filter(c=>c.status==="manual").length;
+    return {name, label:(CAT_SHORT[name]||name), pass:p, fail:f, manual:m, total:items.length, pct:(p+f)?Math.round(p/(p+f)*100):0}; });
+  const r=el("bdRadar"); r.innerHTML=svgRadar(cats.map(c=>({label:c.label, pct:c.pct}))); animateRadar(r);
+  const b=el("bdBars"); b.innerHTML=renderCatBars(cats); animateBars(b);
+  const sev={critical:0,high:0,medium:0,low:0};
+  DATA.filter(c=>c.status==="fail").forEach(c=>{ if(c.severity&&sev[c.severity]!=null) sev[c.severity]++; });
+  const sv=el("bdSev"); sv.innerHTML=renderSevStrip(sev);
+  sv.querySelectorAll(".sevcell").forEach(cell=> cell.onclick=()=>{
+    const sevSel=kind==="cmmc"?"fCmmcSev":"fBaseSev", stSel=kind==="cmmc"?"fCmmcStatus":"fBaseStatus";
+    el(sevSel).value=cell.dataset.sev; el(stSel).value="fail"; render();
+  });
+}
+function skeletonRows(cols){
+  return `<tr><td colspan="${cols}"><div class="skelwrap">${Array.from({length:9}).map(()=>`<div class="skel"></div>`).join("")}</div></td></tr>`;
+}
+/* branded, client-ready summary (opens a print-optimised page) */
+function exportSummary(kind){
+  const DATA = kind==="cmmc"?effectiveCMMC():effectiveBaseline();
+  const titleTxt = kind==="cmmc"?"CMMC Level 1 Security Baseline":"Microsoft Security Baseline";
+  const total=DATA.length, passed=DATA.filter(c=>c.status==="pass").length, failed=DATA.filter(c=>c.status==="fail").length, manual=DATA.filter(c=>c.status==="manual").length;
+  const evald=passed+failed, score=evald?Math.round(passed/evald*100):0;
+  const catKey=c=>c.category||c.family;
+  const cats=[...new Set(DATA.map(catKey))].map(name=>{ const items=DATA.filter(c=>catKey(c)===name);
+    const p=items.filter(c=>c.status==="pass").length, f=items.filter(c=>c.status==="fail").length, m=items.filter(c=>c.status==="manual").length;
+    return {name, p, f, m, pct:(p+f)?Math.round(p/(p+f)*100):0}; });
+  const fails=DATA.filter(c=>c.status==="fail");
+  const who = (account&&(account.name||account.username))||"";
+  const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const col=score>=80?"#16a34a":(score>=50?"#d97706":"#dc2626");
+  const catRows=cats.map(c=>`<tr><td>${esc(c.name)}</td><td style="text-align:center">${c.p}</td><td style="text-align:center">${c.f}</td><td style="text-align:center">${c.m}</td>
+     <td style="text-align:right;font-weight:600;color:${c.pct>=80?'#16a34a':(c.pct>=50?'#d97706':'#dc2626')}">${c.pct}%</td></tr>`).join("");
+  const failRows=fails.slice(0,40).map(c=>`<tr><td style="white-space:nowrap;color:#64748b">${esc(c.id)}</td><td>${esc(c.title)}</td><td style="color:#dc2626;text-transform:capitalize">${esc(c.severity||"")}</td></tr>`).join("");
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(titleTxt)} — Summary</title>
+  <style>
+   *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Inter,sans-serif;color:#0f172a;margin:0;background:#f1f5f9}
+   .page{max-width:860px;margin:0 auto;padding:40px;background:#fff}
+   .hd{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f172a;padding-bottom:16px}
+   .brand{font-weight:800;font-size:20px;letter-spacing:.06em} .brand small{display:block;font-weight:500;font-size:11px;color:#64748b;letter-spacing:.1em;text-transform:uppercase}
+   h1{font-size:22px;margin:26px 0 4px} .sub{color:#64748b;font-size:13px;margin-bottom:24px}
+   .hero{display:flex;gap:24px;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:24px;margin-bottom:26px}
+   .ring{width:120px;height:120px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:800;color:${col};
+     background:conic-gradient(${col} ${score*3.6}deg,#e2e8f0 0)} .ring span{background:#fff;width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+   .kpis{display:flex;gap:14px;flex:1} .kp{flex:1;border:1px solid #e2e8f0;border-radius:12px;padding:14px}
+   .kp b{display:block;font-size:26px;font-weight:800} .kp small{color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-size:10px}
+   table{width:100%;border-collapse:collapse;margin:8px 0 26px;font-size:13px} th,td{padding:9px 10px;border-bottom:1px solid #e2e8f0;text-align:left}
+   th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b} h2{font-size:14px;margin:24px 0 8px;text-transform:uppercase;letter-spacing:.05em;color:#334155}
+   .ft{margin-top:30px;color:#94a3b8;font-size:11px;border-top:1px solid #e2e8f0;padding-top:14px}
+   .noprint{margin:20px 0} button{background:#0f172a;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-weight:600;cursor:pointer}
+   @media print{.noprint{display:none}body{background:#fff}.page{padding:0}}
+  </style></head><body><div class="page">
+   <div class="hd"><div class="brand">TENANT GUARD<small>Security &amp; Compliance Console</small></div><div style="text-align:right;font-size:12px;color:#64748b">${esc(new Date().toLocaleDateString())}${who?`<br>${esc(who)}`:""}</div></div>
+   <h1>${esc(titleTxt)}</h1><div class="sub">Tenant posture assessed against ${total} controls.</div>
+   <div class="hero"><div class="ring"><span>${score}%</span></div>
+     <div class="kpis"><div class="kp"><b>${total}</b><small>Controls</small></div><div class="kp"><b style="color:#16a34a">${passed}</b><small>Passed</small></div>
+     <div class="kp"><b style="color:#dc2626">${failed}</b><small>Failed</small></div><div class="kp"><b style="color:#d97706">${failed+manual}</b><small>Needs attention</small></div></div></div>
+   <h2>Coverage by category</h2>
+   <table><thead><tr><th>Category</th><th style="text-align:center">Pass</th><th style="text-align:center">Fail</th><th style="text-align:center">Manual</th><th style="text-align:right">Score</th></tr></thead><tbody>${catRows}</tbody></table>
+   <h2>Open findings${fails.length>40?` (top 40 of ${fails.length})`:` (${fails.length})`}</h2>
+   <table><thead><tr><th>Control</th><th>Requirement</th><th>Severity</th></tr></thead><tbody>${failRows||`<tr><td colspan="3" style="color:#16a34a">No failing controls 🎉</td></tr>`}</tbody></table>
+   <div class="noprint"><button onclick="window.print()">Print / Save as PDF</button></div>
+   <div class="ft">Generated by Tenant Guard. Assessment reflects live tenant data at time of export. Manual controls require attestation.</div>
+  </div></body></html>`;
+  const w=window.open("","_blank");
+  if(w){ w.document.write(html); w.document.close(); }
+  else { const blob=new Blob([html],{type:"text/html"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`tenant-guard-${kind}-summary.html`; a.click(); }
+}
+
 function baseStatusPill(s){
   return s==="pass" ? `<span class="pill pass">Passed</span>`
     : (s==="fail" ? `<span class="pill fail">Failed</span>` : `<span class="pill manual">Manual</span>`);
@@ -1869,20 +2347,15 @@ function renderBaseline(){
   if(!catSel._filled){ fillSelect("fBaseCat", [...new Set(BASELINE_DATA.map(c=>c.category))]); catSel._filled = true; }
   const tb = el("tbody");
   if(!baselineDataLoaded){
-    setInfoCards("Controls", BASELINE_DATA.length, "Passed", "…", "Failed", "…", "Pass rate", "…");
+    el("bizDash").classList.add("hide");
     setFilterCount(BASELINE_DATA.length, BASELINE_DATA.length);
-    tb.innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Assessing controls against live tenant data…</td></tr>`;
+    tb.innerHTML = skeletonRows(6);
     return;
   }
   const DATA = effectiveBaseline();
+  renderBizDash("baseline", DATA);   // executive dashboard (full posture, stable across filters)
   view = applyBaselineFilters(DATA);
   setFilterCount(view.length, DATA.length);
-  // cards reflect the CURRENT view; manual/unset controls are excluded from the pass rate
-  const passed = view.filter(c=>c.status==="pass").length;
-  const failed = view.filter(c=>c.status==="fail").length;
-  const evaluated = passed + failed;
-  const pct = evaluated ? Math.round(passed/evaluated*100)+"%" : "—";
-  setInfoCards("Controls", view.length, "Passed", passed, "Failed", failed, "Pass rate", pct);
   if(!view.length){
     tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">No matches</div>No baseline controls match the current filters.</td></tr>`;
     return;
@@ -1890,13 +2363,15 @@ function renderBaseline(){
   const sevBadge = sv => sv ? `<span class="sev ${sv}">${escapeHtml(sv)}</span>` : `<span class="num">—</span>`;
   tb.innerHTML = view.map(c=>{
     const resultCell = c.source==="manual" ? manualSelect(c) : baseStatusPill(c.status);
-    return `<tr class="clickrow" data-cid="${escapeHtml(c.id)}" title="View evidence">
+    const accent = c.status==="fail" ? (c.severity||"high") : c.status;
+    const link = c.link ? `<a class="rowlink" href="${c.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ open</a>` : "";
+    return `<tr class="clickrow" data-accent="${accent}" data-cid="${escapeHtml(c.id)}" title="View evidence">
       <td>${resultCell}</td>
       <td class="ctlid">${escapeHtml(c.id)}</td>
       <td><div class="uname">${escapeHtml(c.title)}</div></td>
       <td class="num">${escapeHtml(c.category)}</td>
       <td>${sevBadge(c.severity)}</td>
-      <td class="opt"><span class="srcchip ${c.source}">${srcLabel(c.source)}</span>${escapeHtml(c.evidence||"")}</td>
+      <td class="opt"><span class="srcchip ${c.source}">${srcLabel(c.source)}</span>${escapeHtml(c.evidence||"")} ${link}</td>
     </tr>`;
   }).join("");
   tb.querySelectorAll("select.manualsel").forEach(sel=>{
@@ -1976,6 +2451,99 @@ function applyBaselineFilters(rows){
     }
     return true;
   });
+}
+
+/* ---- CMMC Level 1 tab ---- */
+function srcChip(src, c){
+  if(src==="mixed" && c){
+    const n=s=>c.subs.filter(x=>x.source===s).length;
+    const parts=[]; if(n("live"))parts.push(`Live ${n("live")}`); if(n("securescore"))parts.push(`Score ${n("securescore")}`); if(n("manual"))parts.push(`Manual ${n("manual")}`);
+    return `<span class="srcchip manual" title="${parts.join(' · ')}">Mixed</span>`;
+  }
+  return `<span class="srcchip ${src}">${srcLabel(src)}</span>`;
+}
+function renderCMMC(){
+  ensureBaselineData();
+  const catSel = el("fCmmcCat");
+  if(!catSel._filled){ fillSelect("fCmmcCat", [...new Set(CMMC_DATA.map(c=>c.family))]); catSel._filled = true; }
+  const tb = el("tbody");
+  if(!baselineDataLoaded){
+    el("bizDash").classList.add("hide");
+    setFilterCount(CMMC_DATA.length, CMMC_DATA.length);
+    tb.innerHTML = skeletonRows(6);
+    return;
+  }
+  const DATA = effectiveCMMC();
+  renderBizDash("cmmc", DATA);
+  view = applyCMMCFilters(DATA);
+  setFilterCount(view.length, DATA.length);
+  if(!view.length){
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">No matches</div>No CMMC controls match the current filters.</td></tr>`;
+    return;
+  }
+  const sevBadge = sv => sv ? `<span class="sev ${sv}">${escapeHtml(sv)}</span>` : `<span class="num">—</span>`;
+  tb.innerHTML = view.map(c=>{
+    const summary = `${c.subs.filter(s=>s.status==="pass").length}/${c.subs.length} checks passing`;
+    const accent = c.status==="fail" ? (c.severity||"high") : c.status;
+    return `<tr class="clickrow" data-accent="${accent}" data-cid="${escapeHtml(c.id)}" title="View assessment">
+      <td>${baseStatusPill(c.status)}</td>
+      <td class="ctlid">${escapeHtml(c.id)}</td>
+      <td><div class="uname">${escapeHtml(c.title)}</div></td>
+      <td class="num">${escapeHtml(c.family)}</td>
+      <td>${sevBadge(c.severity)}</td>
+      <td class="opt">${srcChip(c.source,c)}${escapeHtml(summary)}</td>
+    </tr>`;
+  }).join("");
+  tb.querySelectorAll("tr.clickrow").forEach(r=> r.onclick = ()=> openCMMCEvidence(r.dataset.cid));
+}
+function applyCMMCFilters(rows){
+  const q = searchVal();
+  const cat = v("fCmmcCat"), st = v("fCmmcStatus"), sv = v("fCmmcSev");
+  return rows.filter(c=>{
+    if(cat && c.family!==cat) return false;
+    if(st  && c.status!==st)  return false;
+    if(sv  && c.severity!==sv) return false;
+    if(q){
+      const hay = (c.id+" "+c.title+" "+c.family+" "+c.subs.map(s=>s.name+" "+(s.evidence||"")).join(" ")).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+function openCMMCEvidence(cid){
+  const c = effectiveCMMC().find(x=>x.id===cid);
+  if(!c) return;
+  el("evPill").innerHTML = baseStatusPill(c.status);
+  el("evTitle").textContent = `${c.id} — ${c.title}`;
+  el("evCat").textContent = `${c.family} — ${FAMILY_NAMES[c.family]||c.family}${c.severity?`  ·  Severity: ${c.severity}`:""}`;
+  const dot = s => s==="pass" ? `<span class="sdot pass">✓</span>`
+    : (s==="fail" ? `<span class="sdot fail">✕</span>` : `<span class="sdot na">○</span>`);
+  el("evBody").innerHTML = c.subs.map((s,i)=>{
+    let block = `<div class="evrow">${dot(s.status)}<div style="flex:1">
+      <div class="evname">${escapeHtml(s.name)}${s.sev&&s.status==="fail"?` <span class="sev ${s.sev}">${escapeHtml(s.sev)}</span>`:""} <span class="srcchip ${s.source}">${srcLabel(s.source)}</span></div>
+      <div class="evdetail">${escapeHtml(s.evidence||"")}</div>`;
+    const pols = s.policies||[];
+    if(pols.length){
+      block += `<div class="evpolicies">`
+        + pols.map(p=>`<div class="evpol">${caStatePill(p.state)} <a href="${caPolicyLink(p.id)}" target="_blank" rel="noopener">${escapeHtml(p.name)}</a><span class="open">↗</span></div>`).join("")
+        + `</div>`;
+    } else if(s.link && s.source!=="manual"){
+      block += `<div class="evpolicies"><div class="evpol"><a href="${s.link}" target="_blank" rel="noopener">Open in portal</a><span class="open">↗</span></div></div>`;
+    }
+    if(s.source==="manual"){
+      const ov = manualOverrides()[s.manualId]||"";
+      block += `<div style="margin-top:7px"><select class="manualsel" data-mid="${escapeHtml(s.manualId)}">
+        <option value=""    ${ov===""?"selected":""}>Manual — not implemented</option>
+        <option value="pass" ${ov==="pass"?"selected":""}>Passed</option>
+        <option value="fail" ${ov==="fail"?"selected":""}>Failed</option>
+      </select></div>`;
+    }
+    return block + `</div></div>`;
+  }).join("");
+  el("evBody").querySelectorAll("select.manualsel").forEach(sel=>{
+    sel.onchange = ()=>{ setManualOverride(sel.dataset.mid, sel.value); render(); openCMMCEvidence(cid); };
+  });
+  el("evScrim").classList.add("show");
 }
 
 function renderRisky(){
@@ -2758,13 +3326,13 @@ el("btnRefresh").onclick = ()=>{
  "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
  "fPatchRel","fPatchStatus","fAvMode","fAvHealth","fLapsOs","fLapsStatus","fPatchView",
  "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent",
- "fBaseCat","fBaseStatus","fBaseSev"].forEach(id=> el(id).onchange = render);
+ "fBaseCat","fBaseStatus","fBaseSev","fCmmcCat","fCmmcStatus","fCmmcSev"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
    "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
    "fPatchRel","fPatchStatus","fLapsOs","fLapsStatus",
    "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent",
-   "fBaseCat","fBaseStatus","fBaseSev"].forEach(id=> el(id).value="");
+   "fBaseCat","fBaseStatus","fBaseSev","fCmmcCat","fCmmcStatus","fCmmcSev"].forEach(id=> el(id).value="");
   el("fAvMode").value="endpoints"; el("fAvHealth").value="unhealthy";   // antivirus keeps sensible defaults
   el("fPatchView").value="devices";
   render();
@@ -2801,9 +3369,12 @@ const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>risk
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); tab=t.dataset.tab;
+  _bizKey="";   // force the dashboard to re-animate when (re)entering a baseline/cmmc tab
+  const c=document.querySelector(".content"); if(c){ c.classList.remove("fade"); void c.offsetWidth; c.classList.add("fade"); }
   const loader = LOADER_BY_TAB[tab];
   if(loader && !loader[0]()){ loader[1](); } else { render(); }
 });
+el("btnSummary").onclick = ()=> exportSummary(tab==="cmmc"?"cmmc":"baseline");
 
 el("btnSettings").onclick = ()=>{
   const showing = el("settingsPanel").classList.toggle("hide");
@@ -2845,6 +3416,13 @@ el("btnCsv").onclick = ()=>{
     rows = view.map(c=>[c.category,c.id,c.title,c.status,c.source||"",c.severity||"",c.evidence||"",
         (c.policies||[]).map(p=>`${p.name} (${p.state})`).join("; ")]
         .map(val=>`"${String(val??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="cmmc"){
+    head = ["family","control","title","result","source","severity","check","checkResult","checkSource","checkEvidence"];
+    rows = [];
+    view.forEach(c=> c.subs.forEach(s=>{
+      rows.push([c.family,c.id,c.title,c.status,c.source||"",c.severity||"",s.name,s.status,s.source||"",s.evidence||""]
+        .map(val=>`"${String(val??"").replace(/"/g,'""')}"`).join(","));
+    }));
   } else if(tab==="device"){
     head = ["displayName","deviceId","operatingSystem","operatingSystemVersion","deviceOwnership","accountEnabled","registered","lastSignIn","daysInactive","id"];
     rows = view.map(d=>[
