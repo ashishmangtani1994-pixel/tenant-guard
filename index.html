@@ -240,6 +240,7 @@
         <li><span class="dot-tick">●</span><div><code>IdentityRiskyUser.Read.All</code>, <code>Policy.Read.All</code>, <code>UserAuthenticationMethod.Read.All</code>, <code>ServiceHealth.Read.All</code> — security views (risky users, Conditional Access, MFA, service health)</div></li>
         <li><span class="dot-tick">●</span><div><code>BitlockerKey.ReadBasic.All</code>, <code>DeviceLocalCredential.ReadBasic.All</code> &amp; <code>DeviceManagementManagedDevices.Read.All</code> — compliance &amp; antivirus views: BitLocker recovery-key and Windows LAPS metadata (no key/password material), Intune encryption status, Defender antivirus health, and active-malware reporting</div></li>
         <li><span class="dot-tick">●</span><div><code>SecurityEvents.Read.All</code> &amp; <code>Application.Read.All</code> — advanced security views: Microsoft Secure Score, and Entra app registration credential expiry (privileged accounts, legacy auth and OAuth consents reuse the scopes above)</div></li>
+        <li><span class="dot-tick">●</span><div><code>Domain.Read.All</code>, <code>DeviceManagementConfiguration.Read.All</code>, <code>DeviceManagementApps.Read.All</code> &amp; <code>SharePointTenantSettings.Read.All</code> — Microsoft Security Baseline view: domain password policy, Intune configuration/compliance/baseline profiles, app protection policies, and (best-effort) SharePoint tenant sharing settings</div></li>
         <li><span class="dot-tick">●</span><div><code>User.ReadWrite.All</code> — delete selected user accounts (soft-delete, recoverable 30 days)</div></li>
         <li><span class="dot-tick">●</span><div><code>Directory.AccessAsUser.All</code> — requested only at the moment you delete a device (Graph has no narrower delegated permission for that operation); permanent, no recovery</div></li>
         <li><span class="dot-tick">●</span><div>Needs an <b>Entra ID P1/P2</b> license. Deleting users needs User Administrator or Global Administrator; deleting devices needs Cloud Device Administrator, Intune Administrator, or Global Administrator.</div></li>
@@ -324,6 +325,12 @@
           <button class="tab" data-tab="bitlocker">BitLocker key <span class="cnt" id="cntBitlocker">—</span></button>
           <button class="tab" data-tab="laps">LAPS key <span class="cnt" id="cntLaps">—</span></button>
           <button class="tab" data-tab="patching">Patching status <span class="cnt" id="cntPatching">—</span></button>
+        </div>
+      </div>
+      <div class="navgroup" data-group="baseline">
+        <button class="navhead" data-grouphead="baseline"><span class="caret">▾</span> Microsoft Security Baseline</button>
+        <div class="navitems">
+          <button class="tab" data-tab="baseline">Baseline checklist <span class="cnt" id="cntBaseline">—</span></button>
         </div>
       </div>
       <div class="navgroup" data-group="advsec">
@@ -518,6 +525,15 @@
           <label>Consent</label>
           <select id="fOaConsent"><option value="">All</option><option value="AllPrincipals">Tenant-wide</option><option value="Principal">User</option></select>
         </div>
+        <!-- microsoft security baseline -->
+        <div class="field hide" id="wrapBaseSection">
+          <label>Category</label>
+          <select id="fBaseSection"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapBaseStatus">
+          <label>Status</label>
+          <select id="fBaseStatus"><option value="">All</option><option value="pass">Pass</option><option value="fail">Fail</option><option value="partial">Partial</option><option value="unknown">Unknown</option><option value="manual">Manual</option></select>
+        </div>
         <span class="grow"></span>
         <span class="count" id="filterCount"></span>
         <button class="btn ghost" id="fClear">Clear filters</button>
@@ -612,7 +628,8 @@ const GRAPH_BETA = "https://graph.microsoft.com/beta";
 const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All",
   "IdentityRiskyUser.Read.All","Policy.Read.All","UserAuthenticationMethod.Read.All","ServiceHealth.Read.All",
   "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All","DeviceLocalCredential.ReadBasic.All",
-  "SecurityEvents.Read.All","Application.Read.All"];
+  "SecurityEvents.Read.All","Application.Read.All",
+  "Domain.Read.All","DeviceManagementConfiguration.Read.All","DeviceManagementApps.Read.All","SharePointTenantSettings.Read.All"];
 const WRITE_SCOPES = ["User.ReadWrite.All"];
 // Device.ReadWrite.All is application-only and cannot be granted to a SPA.
 // The only delegated permission that can delete a device is Directory.AccessAsUser.All —
@@ -650,12 +667,13 @@ let secScore = null;        let secLoaded = false;                              
 let legacySignins = [];     let legacyLoaded = false; let legacyAvailable = true; // legacy auth sign-ins
 let appCreds = [];          let appCredsLoaded = false; let appCredsAvailable = true; // app secrets/certs
 let oauthGrants = [];       let oauthLoaded = false;                            // OAuth consent grants
+let baselineRows = [];      let baselineLoaded = false;                         // Microsoft Security Baseline
 let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
 
 const INFO_TABS = ["risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching",
-  "devcompliance","privileged","securescore","jailbroken","legacyauth","appcreds","oauth"];
+  "devcompliance","privileged","securescore","jailbroken","legacyauth","appcreds","oauth","baseline"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
 
@@ -1140,8 +1158,450 @@ async function loadOauth(){
 }
 
 /* ========
-   FILTER + RENDER
+   GRAPH — Microsoft Security Baseline
+   Evaluates the tenant against a CIS-style checklist (Entra ID, Exchange, Teams, Intune,
+   SharePoint/OneDrive, Defender, Purview) modeled on the Centered Networks "Microsoft
+   Security Baseline" assessment. Every signal here comes from a Graph endpoint already
+   covered by READ_SCOPES — nothing is faked. Where Microsoft Graph genuinely has no
+   delegated read surface for a control (most of Exchange Online, Teams, and Purview
+   live in their own admin APIs/PowerShell modules, not Graph), the check is best-effort
+   matched against Microsoft Secure Score's own control evaluation for that exact setting;
+   failing that, it's marked "Manual" rather than guessed.
    ======== */
+async function loadBaseline(){
+  el("tbody").innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Evaluating Microsoft Security Baseline…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES); if(!tok) return;
+    const ctx = {};
+
+    if(!devicesLoaded){
+      try{
+        const select = "id,displayName,deviceId,operatingSystem,operatingSystemVersion,deviceOwnership,accountEnabled,createdDateTime,approximateLastSignInDateTime";
+        let durl = `${GRAPH}/devices?$select=${select}&$top=500`;
+        allDevices = [];
+        while(durl){ const page = await gget(durl, tok); allDevices.push(...(page.value||[])); durl = page["@odata.nextLink"]||null; }
+        devicesLoaded = true;
+      }catch(e){}
+    }
+
+    try{ const r = await gget(`${GRAPH}/identity/conditionalAccess/policies`, tok); ctx.caPolicies = r.value||[]; allCaPolicies = ctx.caPolicies; caLoaded = true; }
+    catch(e){ ctx.caPolicies = []; }
+
+    try{
+      let u=`${GRAPH}/reports/authenticationMethods/userRegistrationDetails?$top=200`, regs=[];
+      while(u){ const p=await gget(u,tok); regs.push(...(p.value||[])); u=p["@odata.nextLink"]||null; }
+      ctx.regDetails = regs; allRegDetails = regs; mfaLoaded = true;
+    }catch(e){ ctx.regDetails = []; }
+
+    try{ const r = await gget(`${GRAPH}/policies/authorizationPolicy`, tok); ctx.authPolicy = Array.isArray(r.value)?r.value[0]:r; }
+    catch(e){ ctx.authPolicy = null; }
+
+    try{ const r = await gget(`${GRAPH}/domains?$select=id,passwordValidityPeriodInDays,isDefault`, tok); ctx.domains = r.value||[]; }
+    catch(e){ ctx.domains = []; }
+
+    ctx.globalAdmins = [];
+    try{
+      const r = await gget(`${GRAPH}/directoryRoles?$expand=members`, tok);
+      const role = (r.value||[]).find(x=>/global administrator/i.test(x.displayName||""));
+      const members = (role && role.members ? role.members : []).filter(m=> !m["@odata.type"] || /#microsoft\.graph\.user/i.test(m["@odata.type"]));
+      for(const m of members){
+        try{ const u = await gget(`${GRAPH}/users/${m.id}?$select=id,displayName,userPrincipalName,onPremisesSyncEnabled,accountEnabled`, tok); ctx.globalAdmins.push(u); }
+        catch(e){ ctx.globalAdmins.push({ id:m.id, displayName:m.displayName, userPrincipalName:m.userPrincipalName, onPremisesSyncEnabled:null }); }
+      }
+    }catch(e){}
+
+    try{ const r = await gget(`${GRAPH}/groups?$filter=groupTypes/any(c:c eq 'DynamicMembership')&$count=true&$top=1`, tok); ctx.dynamicGroupCount = r["@odata.count"] ?? (r.value||[]).length; }
+    catch(e){ ctx.dynamicGroupCount = null; }
+
+    try{ const r = await gget(`${GRAPH}/servicePrincipals?$count=true&$top=1`, tok); ctx.spCount = r["@odata.count"] ?? null; }
+    catch(e){ ctx.spCount = null; }
+
+    try{ const r = await gget(`${GRAPH}/deviceManagement/deviceCompliancePolicies?$top=200`, tok); ctx.compliancePolicies = r.value||[]; }
+    catch(e){ ctx.compliancePolicies = []; }
+    try{ const r = await gget(`${GRAPH}/deviceManagement/deviceConfigurations?$top=300`, tok); ctx.configProfiles = r.value||[]; }
+    catch(e){ ctx.configProfiles = []; }
+    try{ const r = await gget(`${GRAPH_BETA}/deviceManagement/intents?$top=200`, tok); ctx.baselineIntents = r.value||[]; }
+    catch(e){ ctx.baselineIntents = []; }
+    try{ const r = await gget(`${GRAPH}/deviceAppManagement/managedAppPolicies?$top=200`, tok); ctx.appProtectionPolicies = r.value||[]; }
+    catch(e){ ctx.appProtectionPolicies = []; }
+    try{ const r = await gget(`${GRAPH}/deviceAppManagement/mobileApps?$top=50`, tok); ctx.mobileApps = r.value||[]; }
+    catch(e){ ctx.mobileApps = []; }
+
+    ctx.managed = allManagedDevices.length ? allManagedDevices.slice() : [];
+    if(!ctx.managed.length){
+      try{
+        let murl=`${GRAPH}/deviceManagement/managedDevices?$select=id,deviceName,operatingSystem,isEncrypted,complianceState,managedDeviceOwnerType,lastSyncDateTime&$top=300`, p=0;
+        while(murl && p<10){ const page = await gget(murl, tok); ctx.managed.push(...(page.value||[])); murl = page["@odata.nextLink"]||null; p++; }
+      }catch(e){}
+    }
+
+    ctx.lapsBackups = allLaps.length ? allLaps.slice() : [];
+    if(!ctx.lapsBackups.length){
+      try{
+        let u=`${GRAPH}/directory/deviceLocalCredentials?$select=id,deviceName,lastBackupDateTime&$top=500`;
+        while(u){ const p=await gget(u,tok); ctx.lapsBackups.push(...(p.value||[])); u=p["@odata.nextLink"]||null; }
+      }catch(e){}
+    }
+
+    ctx.avOv = avOverview;
+    if(!ctx.avOv){ try{ ctx.avOv = await gget(`${GRAPH}/deviceManagement/deviceProtectionOverview`, tok); }catch(e){ ctx.avOv = null; } }
+
+    try{ ctx.spoSettings = await gget(`${GRAPH_BETA}/admin/sharepoint/settings`, tok); }catch(e){ ctx.spoSettings = null; }
+
+    let sc = secScore;
+    if(!sc){ try{ const r = await gget(`${GRAPH}/security/secureScores?$top=1`, tok); sc = (r.value||[])[0]||null; }catch(e){ sc = null; } }
+    const scProfileMap = new Map();
+    try{
+      let u=`${GRAPH}/security/secureScoreControlProfiles?$top=200`, p=0;
+      while(u && p<5){ const page = await gget(u,tok); for(const c of (page.value||[])) scProfileMap.set(c.id, c); u = page["@odata.nextLink"]||null; p++; }
+    }catch(e){}
+    ctx.scControls = (sc && sc.controlScores) ? sc.controlScores.map(c=>{
+      const prof = scProfileMap.get(c.controlName) || {};
+      return { name:c.controlName, score:c.score||0, max:prof.maxScore??null, title:prof.title||c.description||c.controlName, category:c.controlCategory||prof.controlCategory||"" };
+    }) : [];
+
+    baselineRows = evaluateBaseline(ctx);
+    baselineLoaded = true;
+    fillSelect("fBaseSection", [...new Set(baselineRows.map(r=>r.section))]);
+    render();
+  }catch(e){ handleGraphError(e); }
+}
+
+function evaluateBaseline(ctx){
+  const rows = [];
+  const add = (section,id,title,status,detail,severity,source)=> rows.push({section,id,title,status,detail:detail||"",severity:severity||"",source:source||""});
+
+  const enabledCa = (ctx.caPolicies||[]).filter(p=>p.state==="enabled");
+  const allUsersTarget = users => ((users&&users.includeUsers)||[]).includes("All");
+  const allAppsTarget  = apps  => ((apps&&apps.includeApplications)||[]).includes("All");
+  const grantHas = (p,c) => ((p.grantControls&&p.grantControls.builtInControls)||[]).includes(c);
+  const hasRoleTarget = p => (((p.conditions&&p.conditions.users&&p.conditions.users.includeRoles))||[]).length>0;
+  const targetsApp = (p,appId) => { const apps=((p.conditions&&p.conditions.applications&&p.conditions.applications.includeApplications))||[]; return apps.includes("All")||apps.includes(appId); };
+  const targetsUserAction = (p,action) => (((p.conditions&&p.conditions.applications&&p.conditions.applications.includeUserActions))||[]).includes(action);
+
+  function scFind(keywords){
+    let best=null, bestN=0;
+    for(const c of (ctx.scControls||[])){
+      const hay = ((c.title||"")+" "+(c.name||"")).toLowerCase();
+      const n = keywords.filter(k=>hay.includes(k)).length;
+      if(n>bestN){ bestN=n; best=c; }
+    }
+    return bestN>0 ? best : null;
+  }
+  function scStatus(c){
+    if(!c) return "manual";
+    if(c.max==null) return c.score>0 ? "pass" : "unknown";
+    const ratio = c.max ? c.score/c.max : 0;
+    return ratio>=0.99 ? "pass" : (ratio<=0.01 ? "fail" : "partial");
+  }
+  function scDetail(c){ return c ? `Microsoft Secure Score control "${c.title}": ${Math.round(c.score)}/${c.max??"?"} points.` : null; }
+
+  /* ===== 1. Entra ID ===== */
+  {
+    const mfaAll = enabledCa.some(p=> allUsersTarget(p.conditions&&p.conditions.users) && allAppsTarget(p.conditions&&p.conditions.applications) && grantHas(p,"mfa"));
+    add("Entra ID","1.1","MFA is enforced for all users", mfaAll?"pass":"fail",
+      mfaAll?"An enabled Conditional Access policy grants access to all users, all apps, only with MFA.":"No enabled CA policy requires MFA for all users across all apps.","critical","Conditional Access");
+
+    const mfaAzureMgmt = enabledCa.some(p=> targetsApp(p,"797f4846-ba00-4fd7-ba43-dac1f8f63013") && grantHas(p,"mfa"));
+    add("Entra ID","1.1a","MFA is enforced for Azure Management", mfaAzureMgmt?"pass":"fail",
+      mfaAzureMgmt?"CA policy targets Microsoft Azure Management and requires MFA.":"No CA policy requires MFA for the Microsoft Azure Management app.","high","Conditional Access");
+
+    const noMfaCount = (ctx.regDetails||[]).filter(r=>!r.isMfaRegistered).length;
+    add("Entra ID","1.1b","Users are enrolled in MFA and covered by a policy", noMfaCount===0?"pass":"fail",
+      `${noMfaCount} user(s) do not have MFA registered.`,"critical","Authentication methods report");
+
+    const mfaAdmins = enabledCa.some(p=> hasRoleTarget(p) && grantHas(p,"mfa"));
+    add("Entra ID","1.2","MFA is required for all Admins", mfaAdmins?"pass":"fail",
+      mfaAdmins?"An enabled CA policy targets directory roles and requires MFA.":"No enabled CA policy targets admin roles with an MFA requirement.","critical","Conditional Access");
+
+    const legacyBlocked = enabledCa.some(p=> grantHas(p,"block") && (((p.conditions&&p.conditions.clientAppTypes))||[]).some(c=>["exchangeActiveSync","other"].includes(c)));
+    add("Entra ID","1.3","Legacy Authentication is blocked", legacyBlocked?"pass":"fail",
+      legacyBlocked?"CA policy blocks the legacy/other client app types.":"No CA policy blocks legacy authentication client types.","high","Conditional Access");
+
+    add("Entra ID","1.4","Break Glass users are created for emergency access","manual",
+      "Not detectable via Graph — and shouldn't be (break-glass accounts should be excluded from automated checks by design). Verify manually.","","Manual");
+
+    const gaCount = (ctx.globalAdmins||[]).length;
+    add("Entra ID","1.5","Ensure that between two and four global admins are designated", (gaCount>=2&&gaCount<=4)?"pass":"fail",
+      `${gaCount} Global Administrator(s) detected.`,"high","Directory roles");
+
+    const nonCloudGA = (ctx.globalAdmins||[]).filter(u=>u.onPremisesSyncEnabled===true).length;
+    add("Entra ID","1.6","Highly privileged accounts shall be cloud-only", gaCount===0?"unknown":(nonCloudGA===0?"pass":"fail"),
+      gaCount===0?"No Global Administrators found to evaluate.":(nonCloudGA?`${nonCloudGA} Global Admin(s) are synced from on-premises AD.`:"All Global Admins are cloud-only."),"high","Directory roles + users");
+
+    const permPolicies = ctx.authPolicy && ctx.authPolicy.defaultUserRolePermissions ? ctx.authPolicy.defaultUserRolePermissions.permissionGrantPoliciesAssigned : null;
+    const consentRestricted = Array.isArray(permPolicies) && permPolicies.length===0;
+    add("Entra ID","1.7","Non-admin users shall be prevented from providing consent to 3rd party applications", ctx.authPolicy?(consentRestricted?"pass":"fail"):"unknown",
+      ctx.authPolicy?`permissionGrantPoliciesAssigned: ${JSON.stringify(permPolicies||[])}`:"Could not read the directory authorization policy.","","Authorization policy");
+
+    add("Entra ID","1.8","Guest users have limited access to properties and memberships of directory objects", ctx.authPolicy?"unknown":"unknown",
+      ctx.authPolicy?`guestUserRoleId: ${ctx.authPolicy.guestUserRoleId||"default (full access)"} — compare against your tenant's intended restricted-guest role.`:"Could not read the directory authorization policy.","","Authorization policy");
+
+    const pwdNoExpiry = (ctx.domains||[]).length ? ctx.domains.every(d=> d.passwordValidityPeriodInDays==null || d.passwordValidityPeriodInDays>=2147483647) : null;
+    add("Entra ID","1.9","Passwords shall not expire", pwdNoExpiry===null?"unknown":(pwdNoExpiry?"pass":"fail"),
+      (ctx.domains||[]).length?ctx.domains.map(d=>`${d.id}: ${d.passwordValidityPeriodInDays||"default (no expiry)"}`).join("; "):"Could not read domain password policy (Domain.Read.All).","","Domains");
+
+    const mfaDeviceJoin = enabledCa.some(p=> targetsUserAction(p,"urn:user:registerdevice") && grantHas(p,"mfa"));
+    add("Entra ID","1.10","MFA shall be required to enroll devices to Azure AD", mfaDeviceJoin?"pass":"fail",
+      mfaDeviceJoin?"CA policy requires MFA for the 'Register or join devices' user action.":"No CA policy requires MFA for device registration/join.","low","Conditional Access");
+
+    add("Entra ID","1.11","Local Administrator settings are configured for device joins","manual",
+      "Device-join local-admin settings aren't reliably exposed via delegated Graph scopes. Verify the Device Settings blade in Entra ID.","","Manual");
+
+    const dormant45 = (allUsers||[]).filter(u=>{
+      if(u.accountEnabled===false) return false;
+      const la = lastActivity(u); const d = la?daysSince(la):daysSince(u.createdDateTime);
+      return d!==null && d>=45;
+    }).length;
+    add("Entra ID","1.12","Dormant Accounts are disabled with 45 days of Inactivity", dormant45===0?"pass":"fail",
+      `${dormant45} active account(s) found with no sign-in for 45+ days.`,"medium","Users + sign-in activity");
+
+    const browserSessAdmin = enabledCa.some(p=> hasRoleTarget(p) && p.sessionControls && p.sessionControls.persistentBrowser && p.sessionControls.persistentBrowser.isEnabled===false);
+    add("Entra ID","1.13","Browser Sessions are limited for Privileged Users", browserSessAdmin?"pass":"fail",
+      browserSessAdmin?"CA policy disables persistent browser sessions for admin roles.":"No CA policy found disabling persistent browser sessions for privileged roles.","","Conditional Access");
+
+    const staleDev45 = (allDevices||[]).filter(d=>{
+      const la = d.approximateLastSignInDateTime; const dd = la?daysSince(la):daysSince(d.createdDateTime);
+      return dd!==null && dd>=45;
+    }).length;
+    add("Entra ID","1.14","Devices shall be deleted that haven't checked in for over 30 days", staleDev45===0?"pass":"fail",
+      `${staleDev45} device(s) have not checked in for 45+ days.`,"medium","Devices");
+
+    add("Entra ID","1.15","All corporate approved applications are cataloged and periodically reviewed", ctx.spCount>0?"pass":"unknown",
+      ctx.spCount!=null?`${ctx.spCount} enterprise application(s) detected.`:"Could not read service principals.","","Service principals");
+
+    add("Entra ID","1.16","Dynamic Groups are leveraged for automated group management", ctx.dynamicGroupCount>0?"pass":"fail",
+      ctx.dynamicGroupCount!=null?`${ctx.dynamicGroupCount} dynamic group(s) detected.`:"Could not read groups.","","Groups");
+
+    const intuneAppId = "d4ebce55-015a-49b5-a083-c84d1797ae8c";
+    const mfaIntuneEnroll = enabledCa.some(p=> targetsApp(p,intuneAppId) && grantHas(p,"mfa"));
+    add("Entra ID","1.17","MFA Shall be required for Intune Enrollment", mfaIntuneEnroll?"pass":"fail",
+      mfaIntuneEnroll?"CA policy requires MFA targeting the Microsoft Intune Enrollment app.":"No CA policy requires MFA targeting Microsoft Intune Enrollment.","low","Conditional Access");
+
+    const reqManagedDevice = enabledCa.some(p=> allAppsTarget(p.conditions&&p.conditions.applications) && (grantHas(p,"compliantDevice")||grantHas(p,"domainJoinedDevice")));
+    add("Entra ID","1.18","Require Managed Devices for Sign in", reqManagedDevice?"pass":"fail",
+      reqManagedDevice?"CA policy requires a compliant or domain-joined device for all cloud apps.":"No CA policy found requiring a managed device for sign-in.","medium","Conditional Access");
+    add("Entra ID","1.19","Device Compliance is required for access to resources", reqManagedDevice?"pass":"fail",
+      reqManagedDevice?"Covered by the same compliant/domain-joined device grant control.":"No CA policy blocks non-compliant devices from accessing resources.","medium","Conditional Access");
+
+    const phishResistAdmin = enabledCa.some(p=> hasRoleTarget(p) && p.grantControls && p.grantControls.authenticationStrength && /phish/i.test(p.grantControls.authenticationStrength.displayName||""));
+    add("Entra ID","1.20","Require Phishing Resistant MFA for Admins", phishResistAdmin?"pass":"fail",
+      phishResistAdmin?"CA policy enforces a phishing-resistant authentication strength for admin roles.":"No CA policy enforces phishing-resistant MFA for admin roles.","low","Conditional Access");
+
+    const riskBlocked = enabledCa.some(p=> grantHas(p,"block") && ((((p.conditions&&p.conditions.signInRiskLevels))||[]).length>0 || (((p.conditions&&p.conditions.userRiskLevels))||[]).length>0));
+    add("Entra ID","1.21","High risk users and sign-ins are blocked", riskBlocked?"pass":"fail",
+      riskBlocked?"CA policy blocks access for elevated sign-in or user risk.":"No CA policy found blocking medium/high risk sign-ins.","","Conditional Access + Identity Protection");
+
+    add("Entra ID","1.22","Privileged Identity Management (PIM) is configured for JIT access","manual",
+      "Requires Entra ID Governance APIs (roleManagement/policies) and a P2 license — verify manually in PIM.","","Manual");
+    add("Entra ID","1.23","Microsoft Sentinel is configured to ingest logs from Entra and Defender","manual",
+      "Sentinel workspace/connector configuration lives in the Azure portal, outside Microsoft Graph.","","Manual");
+
+    const deviceCodeBlocked = enabledCa.some(p=> grantHas(p,"block") && p.conditions && p.conditions.authenticationFlows && (((p.conditions.authenticationFlows.transferMethods))||[]).includes("deviceCodeFlow"));
+    add("Entra ID","1.24","Ensure the device code sign-in flow is blocked", deviceCodeBlocked?"pass":"fail",
+      deviceCodeBlocked?"CA policy blocks the device code authentication flow.":"No CA policy found blocking the device code sign-in flow (a newer CA condition — confirm your tenant's CA schema supports it).","medium","Conditional Access");
+
+    const appProtCount = (ctx.appProtectionPolicies||[]).length;
+    add("Entra ID","1.25","Require App Protection for Android/iOS", appProtCount>0?"pass":"fail",
+      `${appProtCount} app protection policy(ies) found in Intune.`,"medium","Intune app protection policies");
+  }
+
+  /* ===== 2. Exchange =====
+     Exchange Online transport/anti-spam/anti-phish/mail-flow settings have no delegated
+     Microsoft Graph read surface (they live in Exchange Online PowerShell / the EAC REST
+     API). Best-effort matched against Microsoft Secure Score's own evaluation of the same
+     setting; otherwise marked Manual. */
+  {
+    const exItems = [
+      ["2.1","SPF, DKIM, and DMARC records are set up for every domain", null],
+      ["2.2","Anti-spam policies are configured", ["anti-spam","inbound spam"]],
+      ["2.3","Anti-phishing policies are configured", ["anti-phishing","antiphish"]],
+      ["2.4","Anti-malware policies are configured", ["anti-malware","zero-hour","zap"]],
+      ["2.5","Automatic forwarding to external domains SHALL be disabled", ["mail forwarding","auto forwarding","forwarding rule"]],
+      ["2.6","Mailbox Auditing SHALL Be Enabled", ["mailbox audit"]],
+      ["2.7","Calendar and Contact Sharing Shall Be Restricted", ["calendar sharing"]],
+      ["2.8","External Sender Warnings are Implemented", ["external sender"]],
+      ["2.9","Ensure Direct Send submissions are rejected", null]
+    ];
+    for(const [id,title,kw] of exItems){
+      const c = kw ? scFind(kw) : null;
+      add("Exchange", id, title, c?scStatus(c):"manual",
+        c?scDetail(c):"Not exposed via Microsoft Graph — Exchange Online (PowerShell/REST) required. Verify in the Exchange admin center.","", c?"Secure Score":"Manual");
+    }
+  }
+
+  /* ===== 3. Teams =====
+     Teams tenant policies (external access, meeting policies, file sharing) live in the
+     Teams Admin Center / Microsoft Teams PowerShell module — no delegated Graph surface. */
+  {
+    const teamsItems = [
+      ["3.1","External User Access SHALL Be Restricted"],
+      ["3.2","External Participants SHOULD NOT Be Enabled to Request Control of Shared Desktops or Windows in Meetings"],
+      ["3.3","Anonymous Users SHALL NOT Be Enabled to Start Meetings"],
+      ["3.4","Automatic Admittance to Meetings SHOULD Be Restricted"],
+      ["3.5","Unmanaged users SHALL NOT be enabled to initiate contact with internal users"],
+      ["3.6","Contact with Skype Users SHALL Be Blocked"],
+      ["3.7","File Sharing and File Storage Options shall be blocked"]
+    ];
+    for(const [id,title] of teamsItems){
+      add("Teams", id, title, "manual",
+        "Teams tenant policies are managed via Teams Admin Center / Microsoft Teams PowerShell — not exposed via Microsoft Graph for a delegated SPA.","","Manual");
+    }
+  }
+
+  /* ===== 4. Intune ===== */
+  {
+    const updateRings = (ctx.configProfiles||[]).filter(c=>/windowsUpdateForBusinessConfiguration/i.test(c["@odata.type"]||""));
+    add("Intune","4.1","Automated patching is performed on all devices", updateRings.length>0?"pass":"fail",
+      `${updateRings.length} Windows Update ring policy(ies) found in Intune.`,"critical","Intune device configurations");
+
+    add("Intune","4.2","Managed devices are enrolled in MDM","manual","Informational / contextual — review enrollment scope manually.","","Manual");
+
+    add("Intune","4.3","Personal Devices should be restricted from enrolling into the MDM solution","unknown",
+      "Per-platform enrollment restrictions need deviceManagement/deviceEnrollmentConfigurations parsed individually — verify in Intune > Enrollment restrictions.","low","Manual / Intune");
+
+    const baselineCount = (ctx.baselineIntents||[]).length;
+    add("Intune","4.4","Security Baselines should be configured for Windows Devices", baselineCount>0?"pass":"fail",
+      `${baselineCount} security baseline/intent template(s) found.`,"","Intune intents (beta)");
+
+    const platformsSeen = [...new Set((ctx.managed||[]).map(d=>d.operatingSystem).filter(Boolean))];
+    const compliancePass = (ctx.compliancePolicies||[]).length>0;
+    add("Intune","4.5","Devices compliance policies shall be configured for every supported device platform", compliancePass?"pass":"fail",
+      `${(ctx.compliancePolicies||[]).length} compliance policy(ies) found. Platforms seen on managed devices: ${platformsSeen.join(", ")||"none"}.`,"low","Intune compliance policies");
+
+    const notEncrypted = (ctx.managed||[]).filter(d=>d.isEncrypted===false).length;
+    add("Intune","4.6","All devices have drive encryption applied", notEncrypted===0?"pass":"fail",
+      `${notEncrypted} managed device(s) reported as not encrypted.`,"high","Intune managed devices");
+
+    add("Intune","4.7","Lockout screen and password settings shall be configured for each device", (ctx.compliancePolicies||[]).length>0?"pass":"unknown",
+      (ctx.compliancePolicies||[]).length?`${ctx.compliancePolicies.length} compliance policy(ies) present (lockout/password settings not individually parsed — spot-check in Intune).`:"No compliance policies found.","","Intune compliance policies");
+
+    add("Intune","4.8","App Protection policies should be created for mobile devices", appProtCountOf(ctx)>0?"pass":"fail",
+      `${appProtCountOf(ctx)} app protection policy(ies) found.`,"","Intune app protection policies");
+
+    add("Intune","4.9","Approved 3rd party applications are deployed and patched", (ctx.mobileApps||[]).length>0?"pass":"fail",
+      `${(ctx.mobileApps||[]).length} app(s) found in Intune app management.`,"","Intune mobile apps");
+
+    const lapsBackedUp = (ctx.lapsBackups||[]).length>0;
+    add("Intune","4.10","Local Administrators passwords are managed with LAPS", lapsBackedUp?"pass":"fail",
+      lapsBackedUp?`${ctx.lapsBackups.length} Windows LAPS backup(s) found.`:"No Windows LAPS backups found (DeviceLocalCredential.ReadBasic.All).","medium","Windows LAPS");
+
+    const oneDriveKfm = (ctx.configProfiles||[]).some(c=> /onedrive/i.test(c.displayName||"") || /knownfoldermove|kfm/i.test(JSON.stringify(c)));
+    add("Intune","4.11","OneDrive KFM is configured", oneDriveKfm?"pass":"fail",
+      oneDriveKfm?"A device configuration profile referencing OneDrive Known Folder Move was found.":"No OneDrive Known Folder Move configuration profile found.","","Intune device configurations");
+  }
+
+  /* ===== 5. SharePoint and OneDrive ===== */
+  {
+    if(ctx.spoSettings){
+      const cap = ctx.spoSettings.sharingCapability;
+      const pass51 = !!cap && cap!=="ExternalUserAndGuestSharing";
+      add("SharePoint and OneDrive","5.1","Default sharing settings are set for New and Existing Guest", pass51?"pass":"fail",
+        `sharingCapability: ${cap||"unknown"}.`,"","SharePoint tenant settings (beta)");
+      add("SharePoint and OneDrive","5.2","Expiration Dates are set for Anyone links", ctx.spoSettings.fileAnonymousLinkType?"pass":"unknown",
+        "SharePoint anonymous-link settings were retrieved — verify the expiration policy in the SharePoint admin center.","","SharePoint tenant settings (beta)");
+    } else {
+      add("SharePoint and OneDrive","5.1","Default sharing settings are set for New and Existing Guest","manual",
+        "SharePoint tenant settings need the SharePointTenantSettings.Read.All scope + SharePoint Administrator role — verify in the SharePoint admin center.","","Manual");
+      add("SharePoint and OneDrive","5.2","Expiration Dates are set for Anyone links","manual","Same as above.","","Manual");
+    }
+  }
+
+  /* ===== 6. Defender ===== */
+  {
+    add("Defender","6.1","Security Awareness training is conducted at least once per year","manual",
+      "Attack-simulation cadence is a process control, not a tenant setting — verify manually in Attack simulation training.","","Manual");
+
+    const avPolicy = (ctx.configProfiles||[]).some(c=>/defender|antivirus|endpointProtection/i.test(c["@odata.type"]||"")) || (ctx.baselineIntents||[]).length>0;
+    add("Defender","6.2","Anti-virus protections are applied to all devices", avPolicy?"pass":"fail",
+      avPolicy?"A Defender/Antivirus-related Intune policy or baseline was found.":"No Microsoft Defender Antivirus policy found in Intune.","high","Intune device configurations / intents");
+
+    const total = (ctx.avOv&&ctx.avOv.totalReportedDeviceCount)||0, clean = (ctx.avOv&&ctx.avOv.cleanDeviceCount)||0;
+    add("Defender","6.3","Endpoint detection and response software is running on all devices", total>0?"pass":"unknown",
+      total>0?`${total} device(s) enrolled and reporting to Defender (${clean} clean).`:"No Defender device protection overview returned.","","Defender device protection overview");
+
+    const fwPolicy = (ctx.configProfiles||[]).some(c=>/firewall/i.test(c["@odata.type"]||"")||/firewall/i.test(c.displayName||""));
+    add("Defender","6.4","Firewall protections configured on devices", fwPolicy?"pass":"fail",
+      fwPolicy?"A firewall configuration profile was found in Intune.":"No Windows firewall policy found in Intune.","high","Intune device configurations");
+
+    const safeLinks = scFind(["safe links"]);
+    add("Defender","6.5","Safe Links policies are configured", safeLinks?scStatus(safeLinks):"manual",
+      safeLinks?scDetail(safeLinks):"Defender for Office 365 policy — not exposed via Graph. Verify in the Microsoft Defender portal.","", safeLinks?"Secure Score":"Manual");
+
+    const safeAttach = scFind(["safe attachment"]);
+    add("Defender","6.6","Safe Attachment policies are configured", safeAttach?scStatus(safeAttach):"manual",
+      safeAttach?scDetail(safeAttach):"Defender for Office 365 policy — not exposed via Graph. Verify in the Microsoft Defender portal.","", safeAttach?"Secure Score":"Manual");
+
+    add("Defender","6.7","Tamper Protection is configured","manual",
+      "Tamper Protection state isn't reliably exposed via delegated Graph scopes — verify in Microsoft Defender > Endpoint security.","","Manual");
+
+    const asrPolicy = (ctx.configProfiles||[]).some(c=>/attackSurfaceReduction|asr/i.test(c["@odata.type"]||"")) || (ctx.baselineIntents||[]).length>0;
+    add("Defender","6.8","Attack Surface reduction rules are configured", asrPolicy?"pass":"fail",
+      asrPolicy?"An Attack Surface Reduction policy/template was found in Intune.":"No Attack Surface Reduction policy found in Intune.","medium","Intune device configurations / intents");
+
+    add("Defender","6.9","Defender for Cloud Apps is configured to monitor applications on the network","unknown",
+      "Cloud App Discovery licensing/config isn't exposed via delegated Graph scopes — verify in Defender for Cloud Apps.","","Manual");
+  }
+
+  /* ===== 7. Purview ===== */
+  {
+    add("Purview","7.1","Periodic backups are performed for email, files, and Servers","manual",
+      "Third-party backup posture is outside Microsoft Graph — verify your backup vendor's console.","","Manual");
+    add("Purview","7.2","Audit Logging SHALL Be Enabled","manual",
+      "The unified audit log toggle is an Exchange Online / Purview setting (Get-AdminAuditLogConfig) — not exposed via Microsoft Graph.","","Manual");
+    add("Purview","7.3","Retention Polices are configured","manual",
+      "Retention policies live in the Purview compliance API, outside the scopes requested here.","","Manual");
+
+    const sensLabel = scFind(["sensitivity label","information protection","classify data"]);
+    add("Purview","7.4","Sensitivity Labels are configured", sensLabel?scStatus(sensLabel):"manual",
+      sensLabel?scDetail(sensLabel):"No matching Secure Score control found — verify sensitivity labels in Purview.","", sensLabel?"Secure Score":"Manual");
+
+    const dlp = scFind(["data loss prevention","dlp policy"]);
+    add("Purview","7.5","Data Loss Prevention Policies are configured", dlp?scStatus(dlp):"manual",
+      dlp?scDetail(dlp):"No matching Secure Score control found — verify DLP policies in Purview.","", dlp?"Secure Score":"Manual");
+  }
+
+  return rows;
+}
+function appProtCountOf(ctx){ return (ctx.appProtectionPolicies||[]).length; }
+
+const BASE_STATUS_PILL  = { pass:"lic-yes", fail:"miss", manual:"off", unknown:"guest", partial:"guest" };
+const BASE_STATUS_LABEL = { pass:"Pass", fail:"Fail", manual:"Manual", unknown:"Unknown", partial:"Partial" };
+function renderBaseline(){
+  const tb = el("tbody");
+  if(!baselineRows.length){
+    setInfoCards("Checks","—","Passed","—","Failed","—","Manual / Unknown","—");
+    view=[]; setFilterCount(0,0);
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">No baseline data</div>Couldn't evaluate the Microsoft Security Baseline.</td></tr>`;
+    return;
+  }
+  const total = baselineRows.length;
+  const passed = baselineRows.filter(r=>r.status==="pass").length;
+  const failed = baselineRows.filter(r=>r.status==="fail").length;
+  const manual = baselineRows.filter(r=>r.status==="manual"||r.status==="unknown"||r.status==="partial").length;
+  setInfoCards("Checks", total, "Passed", passed, "Failed", failed, "Manual / Unknown", manual);
+
+  const q=searchVal(), sec=v("fBaseSection"), st=v("fBaseStatus");
+  const rows = baselineRows.filter(r=>{
+    if(q && !((r.title||"")+" "+(r.section||"")+" "+(r.detail||"")).toLowerCase().includes(q)) return false;
+    if(sec && r.section!==sec) return false;
+    if(st && r.status!==st) return false;
+    return true;
+  });
+  view = rows; setFilterCount(rows.length, baselineRows.length);
+  if(!rows.length){ tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">No matches</div>No checks match the current filters.</td></tr>`; return; }
+  tb.innerHTML = rows.map(r=>{
+    const pill = `<span class="pill ${BASE_STATUS_PILL[r.status]||"off"}">${BASE_STATUS_LABEL[r.status]||r.status}</span>`;
+    return `<tr>
+      <td class="num">${escapeHtml(r.id)}</td>
+      <td>${escapeHtml(r.section)}</td>
+      <td><div class="uname">${escapeHtml(r.title)}</div></td>
+      <td>${pill}</td>
+      <td class="num opt">${escapeHtml(r.severity||"—")}</td>
+      <td class="opt">${escapeHtml(r.detail||"")}${r.source?`<div class="upn" style="margin-top:3px">${escapeHtml(r.source)}</div>`:""}</td>
+    </tr>`;
+  }).join("");
+}
 function computeDormant(){
   const thr = +el("thresh").value;
   const includeNever = el("optNever").checked;
@@ -1288,7 +1748,8 @@ const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatu
   "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
   "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc",
   "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth","wrapLapsOs","wrapLapsStatus","wrapPatchView",
-  "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent"];
+  "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent",
+  "wrapBaseSection","wrapBaseStatus"];
 const FILTERS_BY_TAB = {
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
@@ -1308,14 +1769,16 @@ const FILTERS_BY_TAB = {
   securescore:["wrapSecCat"],
   legacyauth:[],
   appcreds:["wrapAcStatus","wrapAcType"],
-  oauth:["wrapOaConsent"]
+  oauth:["wrapOaConsent"],
+  baseline:["wrapBaseSection","wrapBaseStatus"]
 };
 const SEARCH_PLACEHOLDER = {
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
   ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…",
   patching:"device name or build…", antivirus:"device or malware…", laps:"device name…",
   devcompliance:"device or OS…", jailbroken:"device or OS…", privileged:"name, UPN or role…",
-  securescore:"control…", legacyauth:"user, app or client…", appcreds:"app or secret…", oauth:"app, resource or scope…"
+  securescore:"control…", legacyauth:"user, app or client…", appcreds:"app or secret…", oauth:"app, resource or scope…",
+  baseline:"check, category or detail…"
 };
 
 function syncFilterBar(){
@@ -1347,6 +1810,7 @@ const HEAD_SEC     = `<th>Control</th><th>Category</th><th>Score</th><th class="
 const HEAD_LEGACY  = `<th>User</th><th>App</th><th>Client</th><th>Result</th><th class="opt">IP</th><th>When</th>`;
 const HEAD_APPCREDS= `<th>Application</th><th>Type</th><th>Expires</th><th>Time left</th><th>Status</th>`;
 const HEAD_OAUTH   = `<th>Client app</th><th>Resource</th><th class="opt">Scopes</th><th>Consent</th>`;
+const HEAD_BASELINE = `<th style="width:54px">#</th><th>Category</th><th>Microsoft Security Baseline check</th><th>Status</th><th class="opt">Severity</th><th>Detail</th>`;
 const HEAD_PATCHING  = `<th>Device</th><th>Current OS</th><th>Current build</th><th>Target build</th><th>Patch status</th><th class="opt">Last active</th>`;
 const HEAD_AV_ENDPOINTS = `<th>Device</th><th>Managed by</th><th>Malware protection</th><th>State</th><th>Real-time</th><th>Network</th><th>Signature</th><th>Tamper</th><th class="opt">Product status</th><th class="opt">Reboot</th>`;
 
@@ -1380,6 +1844,7 @@ function render(){
   if(legacyLoaded)    el("cntLegacy").textContent = legacyAvailable ? legacySignins.length : "0";
   if(appCredsLoaded)  el("cntAppCreds").textContent = appCreds.filter(c=>c._status==="expired"||c._status==="expiring").length;
   if(oauthLoaded)     el("cntOauth").textContent = oauthGrants.filter(g=>g.consentType==="AllPrincipals").length;
+  if(baselineLoaded)  el("cntBaseline").textContent = baselineRows.filter(r=>r.status==="fail").length;
 
   // KPI cards are scoped to the ACTIVE dormant view, not the whole tenant
   if(!isInfoTab()) setDormantCards(members, guests, stale);
@@ -1388,11 +1853,11 @@ function render(){
   if(tab==="antivirus"){ renderAntivirus(); return; }
 
   const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
-    devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH };
+    devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH, baseline:HEAD_BASELINE };
   if(heads[tab]){
     el("theadRow").innerHTML = heads[tab];
     ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching,
-       devcompliance:renderDevCompliance, jailbroken:renderJailbroken, privileged:renderPrivileged, securescore:renderSecScore, legacyauth:renderLegacyAuth, appcreds:renderAppCreds, oauth:renderOauth })[tab]();
+       devcompliance:renderDevCompliance, jailbroken:renderJailbroken, privileged:renderPrivileged, securescore:renderSecScore, legacyauth:renderLegacyAuth, appcreds:renderAppCreds, oauth:renderOauth, baseline:renderBaseline })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
     renderUsers(tab==="member"?members:guests);
@@ -2204,6 +2669,7 @@ el("btnRefresh").onclick = ()=>{
   else if(tab==="legacyauth"){ legacyLoaded=false; loadLegacyAuth(); }
   else if(tab==="appcreds"){ appCredsLoaded=false; loadAppCreds(); }
   else if(tab==="oauth"){ oauthLoaded=false; loadOauth(); }
+  else if(tab==="baseline"){ baselineLoaded=false; loadBaseline(); }
   else { loadDirectory(); }
 };
 
@@ -2212,12 +2678,14 @@ el("btnRefresh").onclick = ()=>{
 ["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
  "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
  "fPatchRel","fPatchStatus","fAvMode","fAvHealth","fLapsOs","fLapsStatus","fPatchView",
- "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent"].forEach(id=> el(id).onchange = render);
+ "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent",
+ "fBaseSection","fBaseStatus"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
    "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
    "fPatchRel","fPatchStatus","fLapsOs","fLapsStatus",
-   "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent"].forEach(id=> el(id).value="");
+   "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent",
+   "fBaseSection","fBaseStatus"].forEach(id=> el(id).value="");
   el("fAvMode").value="endpoints"; el("fAvHealth").value="unhealthy";   // antivirus keeps sensible defaults
   el("fPatchView").value="devices";
   render();
@@ -2250,7 +2718,7 @@ const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>risk
   devcompliance:[()=>mdmLoaded, loadMdm], jailbroken:[()=>mdmLoaded, loadMdm],
   privileged:[()=>privLoaded, loadPrivileged], securescore:[()=>secLoaded, loadSecScore],
   legacyauth:[()=>legacyLoaded, loadLegacyAuth], appcreds:[()=>appCredsLoaded, loadAppCreds],
-  oauth:[()=>oauthLoaded, loadOauth] };
+  oauth:[()=>oauthLoaded, loadOauth], baseline:[()=>baselineLoaded, loadBaseline] };
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); tab=t.dataset.tab;
@@ -2352,6 +2820,9 @@ el("btnCsv").onclick = ()=>{
   } else if(tab==="oauth"){
     head = ["client","resource","scopes","consentType"];
     rows = view.map(g=>[g.client,g.resource,g.scope,g.consentType].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="baseline"){
+    head = ["id","section","check","status","severity","detail","source"];
+    rows = view.map(r=>[r.id,r.section,r.title,r.status,r.severity,r.detail,r.source].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
   } else if(tab==="patching" && el("fPatchView").value==="coverage"){
     head = ["windowsRelease","devices","patched","behind","pctPatched"];
     rows = view.map(r=>[r.rel, r.total, r.patched, r.behind, r.pct==null?"":r.pct+"%"].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
