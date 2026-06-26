@@ -119,7 +119,7 @@
   .actionbar .sel{font-size:13px;color:var(--muted)}
   .actionbar .sel b{color:var(--text)}
   /* ---------- table ---------- */
-  .tablewrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--panel)}
+  .tablewrap{border:1px solid var(--border);border-radius:var(--radius);overflow-x:auto;background:var(--panel)}
   table{width:100%;border-collapse:collapse;font-size:13px}
   thead th{
     text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);
@@ -131,8 +131,10 @@
   tbody tr{transition:background .12s}
   tbody tr:hover{background:var(--panel-2)}
   tbody tr.picked{background:rgba(229,72,77,.07)}
-  .uname{font-weight:600}
-  .upn{color:var(--muted);font-family:var(--mono);font-size:11.5px;margin-top:1px}
+  .uname{font-weight:600;word-break:break-word}
+  .upn{color:var(--muted);font-family:var(--mono);font-size:11.5px;margin-top:1px;word-break:break-all;overflow-wrap:anywhere}
+  /* keep the identity column from blowing out the table width on long external (#EXT#) UPNs */
+  tbody td:nth-child(2){max-width:340px}
   .pill{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;letter-spacing:.03em}
   .pill.member{background:rgba(77,208,196,.12);color:var(--accent)}
   .pill.guest{background:rgba(224,165,0,.13);color:var(--warn)}
@@ -271,6 +273,26 @@
       screen, which provisions the enterprise application (service principal) in the tenant automatically — no app needs
       to be created by hand.
     </div>
+
+    <h3 style="margin-top:24px">Patch baselines — Patch Tuesday target builds</h3>
+    <div class="note" id="patchTuesdayNote" style="margin-top:0;margin-bottom:14px"></div>
+    <div class="grid">
+      <div class="f"><label>Windows 11 24H2 — target build</label><input id="cfgPatch24H2" placeholder="26100.xxxxx" /></div>
+      <div class="f"><label>Windows 11 25H2 — target build</label><input id="cfgPatch25H2" placeholder="26200.xxxxx" /></div>
+      <div class="f"><label>Windows 11 23H2 — target build</label><input id="cfgPatch23H2" placeholder="22631.xxxxx" /></div>
+      <div class="f"><label>Windows 10 22H2 — target build</label><input id="cfgPatch22H2Win10" placeholder="19045.xxxxx" /></div>
+    </div>
+    <div class="acts">
+      <button class="btn primary" id="patchSave">Save baselines</button>
+      <a class="btn" id="patch24Link" target="_blank" rel="noopener">24H2 update history ↗</a>
+      <a class="btn" id="patch25Link" target="_blank" rel="noopener">25H2 update history ↗</a>
+    </div>
+    <div class="note">
+      Browsers can't read <span class="mono">support.microsoft.com</span> directly (CORS), so the latest build is entered here.
+      Use the <b>second-Tuesday</b> cumulative update for the month shown above — <b>not</b> the later optional "preview" (C) update
+      released the same month. Enter the full build (e.g. <span class="mono">26100.4567</span>) or just the revision (e.g. <span class="mono">4567</span>).
+      Each device is then compared against the baseline for whichever track it runs.
+    </div>
   </div>
 
   <div class="workspace">
@@ -298,6 +320,7 @@
         <button class="navhead" data-grouphead="compliance"><span class="caret">▾</span> Compliance</button>
         <div class="navitems">
           <button class="tab" data-tab="bitlocker">BitLocker key <span class="cnt" id="cntBitlocker">—</span></button>
+          <button class="tab" data-tab="patching">Patching status <span class="cnt" id="cntPatching">—</span></button>
         </div>
       </div>
     </aside>
@@ -414,6 +437,15 @@
         <div class="field hide" id="wrapBlEnc">
           <label>Encrypted</label>
           <select id="fBlEnc"><option value="">All</option><option value="yes">Encrypted</option><option value="no">Not encrypted</option><option value="unknown">Unknown</option></select>
+        </div>
+        <!-- compliance: patching status -->
+        <div class="field hide" id="wrapPatchRel">
+          <label>Windows release</label>
+          <select id="fPatchRel"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapPatchStatus">
+          <label>Patch status</label>
+          <select id="fPatchStatus"><option value="">All</option><option value="behind">Behind</option><option value="patched">Patched</option><option value="nobaseline">No baseline</option><option value="unknown">Unknown</option></select>
         </div>
         <span class="grow"></span>
         <span class="count" id="filterCount"></span>
@@ -538,7 +570,7 @@ let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
 
-const INFO_TABS = ["risky","mfa","ca","license","health","bitlocker"];
+const INFO_TABS = ["risky","mfa","ca","license","health","bitlocker","patching"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
 
@@ -620,6 +652,7 @@ function enterApp(){
   el("redirNote").textContent = "Redirect URI: " + REDIRECT;
   el("cfgClient").value = clientId();
   el("cfgAuthority").value = authority();
+  fillPatchSettings();
   loadDirectory();
 }
 
@@ -983,7 +1016,8 @@ function fillSelect(id, values){
 /* which filter controls each view shows (only its own fields) */
 const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatus","wrapRisk","wrapRiskState",
   "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
-  "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc"];
+  "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc",
+  "wrapPatchRel","wrapPatchStatus"];
 const FILTERS_BY_TAB = {
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
@@ -993,11 +1027,13 @@ const FILTERS_BY_TAB = {
   ca:    ["wrapCaState"],
   license:["wrapLicStatus"],
   health:["wrapHealthSvc","wrapHealthClass","wrapHealthStatus"],
-  bitlocker:["wrapBlOs","wrapBlStatus","wrapBlEnc"]
+  bitlocker:["wrapBlOs","wrapBlStatus","wrapBlEnc"],
+  patching:["wrapPatchRel","wrapPatchStatus"]
 };
 const SEARCH_PLACEHOLDER = {
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
-  ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…"
+  ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…",
+  patching:"device name or build…"
 };
 
 function syncFilterBar(){
@@ -1021,6 +1057,7 @@ const HEAD_CA      = `<th>Policy</th><th>State</th><th class="opt">Created</th><
 const HEAD_LICENSE = `<th>SKU</th><th>Enabled</th><th>Consumed</th><th>Available</th><th>Status</th>`;
 const HEAD_HEALTH  = `<th>Issue</th><th>Service</th><th>Classification</th><th>Status</th><th>Last updated</th>`;
 const HEAD_BITLOCKER = `<th>Device</th><th>OS</th><th>BitLocker key</th><th>Encrypted</th><th class="opt">Key escrowed</th><th>Ownership</th>`;
+const HEAD_PATCHING  = `<th>Device</th><th>Current OS</th><th>Current build</th><th>Target build</th><th>Patch status</th><th class="opt">Last active</th>`;
 
 function render(){
   syncFilterBar();
@@ -1042,14 +1079,15 @@ function render(){
   if(skusLoaded)   el("cntLicense").textContent= allSkus.length;
   if(healthLoaded) el("cntHealth").textContent = allHealthIssues.filter(h=>!h.isResolved).length;
   if(bitlockerLoaded) el("cntBitlocker").textContent = bitlockerRows().filter(d=>d._status==="missing").length;
+  if(devicesLoaded)   el("cntPatching").textContent = patchingRows().filter(d=>d._status==="behind").length;
 
   // KPI cards are scoped to the ACTIVE dormant view, not the whole tenant
   if(!isInfoTab()) setDormantCards(members, guests, stale);
 
-  const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER };
+  const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, patching:HEAD_PATCHING };
   if(heads[tab]){
     el("theadRow").innerHTML = heads[tab];
-    ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker })[tab]();
+    ({ device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, patching:renderPatching })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
     renderUsers(tab==="member"?members:guests);
@@ -1281,6 +1319,111 @@ function renderBitlocker(){
   }).join("");
 }
 
+/* ---------- patching status (Compliance) ---------- */
+/* Patch Tuesday = 2nd Tuesday of the month. If this month's hasn't occurred yet,
+   fall back to last month's — so we always validate against the most recent one. */
+function secondTuesday(year, monthIdx){
+  const first = new Date(year, monthIdx, 1);
+  const offsetToTue = (2 - first.getDay() + 7) % 7;   // 0=Sun..2=Tue..6=Sat
+  return 1 + offsetToTue + 7;                          // date of the 2nd Tuesday
+}
+function currentPatchTuesday(){
+  const now = new Date();
+  let y = now.getFullYear(), m = now.getMonth();
+  const thisMonthPT = new Date(y, m, secondTuesday(y, m));
+  if(now < thisMonthPT){ m -= 1; if(m < 0){ m = 11; y -= 1; } }   // not reached yet → previous month
+  return new Date(y, m, secondTuesday(y, m));
+}
+function ymd(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+
+/* map an OS build major number to its Windows release moniker */
+const RELEASE_BY_BUILD = {
+  "26200":"25H2", "26100":"24H2", "22631":"23H2", "22621":"22H2",
+  "19045":"Windows 10 22H2", "19044":"Windows 10 21H2", "19043":"Windows 10 21H1"
+};
+function osLabel(major){
+  const rel = RELEASE_BY_BUILD[String(major)];
+  const fam = major >= 22000 ? "Windows 11" : "Windows 10";
+  if(!rel) return `${fam} (build ${major})`;
+  return /windows/i.test(rel) ? rel : `${fam} ${rel}`;
+}
+function parseBuild(osVer){
+  const m = String(osVer||"").match(/(\d{4,6})\.(\d{1,7})/);
+  if(m) return { major:+m[1], rev:+m[2], full:`${m[1]}.${m[2]}` };
+  const m2 = String(osVer||"").match(/\b(\d{4,6})\b/);
+  if(m2) return { major:+m2[1], rev:0, full:m2[1] };
+  return null;
+}
+const LS_PATCH = "tenantguard.patchBaselines";
+function patchBaselines(){ try{ return JSON.parse(localStorage.getItem(LS_PATCH)||"{}")||{}; }catch{ return {}; } }
+/* compare a device build to the admin-entered target ("26100.4567" or just "4567") */
+function patchStatus(b, target){
+  if(!b) return "unknown";
+  if(!target) return "nobaseline";
+  const t = String(target).trim();
+  let tMajor = b.major, tRev;
+  if(t.includes(".")){ const p = t.split("."); tRev = +p[p.length-1]; tMajor = +p[p.length-2]; }
+  else { tRev = +t; }
+  if(isNaN(tRev)) return "nobaseline";
+  if(b.major !== tMajor) return b.major > tMajor ? "patched" : "behind";
+  return b.rev >= tRev ? "patched" : "behind";
+}
+function patchingRows(){
+  const base = patchBaselines();
+  return allDevices.filter(d=> /windows/i.test(d.operatingSystem||"") || /^10\.0\./.test(d.operatingSystemVersion||"")).map(d=>{
+    const b = parseBuild(d.operatingSystemVersion);
+    const rel = b ? (RELEASE_BY_BUILD[String(b.major)] || null) : null;
+    const target = rel ? (base[rel] || null) : null;
+    const status = patchStatus(b, target);
+    return { ...d, _build:b, _rel:rel, _osLabel: b ? osLabel(b.major) : (d.operatingSystem||"—"),
+             _target:target, _status:status };
+  });
+}
+function applyPatchingFilters(rows){
+  const q=searchVal(), rel=v("fPatchRel"), st=v("fPatchStatus");
+  return rows.filter(d=>{
+    if(q && !((d.displayName||"")+" "+(d._osLabel||"")+" "+(d.operatingSystemVersion||"")).toLowerCase().includes(q)) return false;
+    if(rel && (d._rel||"")!==rel) return false;
+    if(st && d._status!==st) return false;
+    return true;
+  });
+}
+const PATCH_RANK = { behind:0, nobaseline:1, unknown:2, patched:3 };
+const PATCH_PILL = {
+  patched:`<span class="pill lic-yes">Patched</span>`,
+  behind:`<span class="pill miss">Behind</span>`,
+  nobaseline:`<span class="pill off">No baseline</span>`,
+  unknown:`<span class="pill off">Unknown</span>`
+};
+function renderPatching(){
+  const all = patchingRows();
+  // release dropdown reflects what's actually present
+  fillSelect("fPatchRel", [...new Set(all.map(d=>d._rel).filter(Boolean))].sort());
+  view = applyPatchingFilters(all).sort((a,b)=> (PATCH_RANK[a._status]-PATCH_RANK[b._status]) || (b._build?b._build.major:0)-(a._build?a._build.major:0));
+  setFilterCount(view.length, all.length);
+  const base = patchBaselines();
+  const behind = all.filter(d=>d._status==="behind").length;
+  setInfoCards("Patch Tuesday", ymd(currentPatchTuesday()),
+    "24H2 target", base["24H2"] || "set ↗", "25H2 target", base["25H2"] || "set ↗", "Behind", behind);
+  const tb = el("tbody");
+  if(!view.length){
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">${all.length?"No matches":"No Windows devices"}</div>${all.length?"No rows match the current filters.":"No registered Windows devices found. Load the Devices view, or check Device.Read.All consent."}</td></tr>`;
+    return;
+  }
+  tb.innerHTML = view.map(d=>{
+    const cur = d._build ? d._build.full : "—";
+    const tgt = d._target ? (String(d._target).includes(".") ? d._target : (d._build?d._build.major+".":"")+d._target) : "—";
+    return `<tr>
+      <td><div class="uname">${escapeHtml(d.displayName||"—")}</div><div class="upn">${escapeHtml(d.deviceOwnership||"")}</div></td>
+      <td>${escapeHtml(d._osLabel)}</td>
+      <td class="num">${escapeHtml(cur)}</td>
+      <td class="num">${escapeHtml(tgt)}</td>
+      <td>${PATCH_PILL[d._status]||PATCH_PILL.unknown}</td>
+      <td class="num opt">${fmtDate(d.approximateLastSignInDateTime)}</td>
+    </tr>`;
+  }).join("");
+}
+
 function renderUsers(rows){
   const total = rows.length;
   view = applyUserFilters(rows).sort((a,b)=> b._inactive - a._inactive);
@@ -1384,16 +1527,19 @@ el("btnRefresh").onclick = ()=>{
   else if(tab==="license"){ skusLoaded=false; loadSkus(); }
   else if(tab==="health"){ healthLoaded=false; loadHealth(); }
   else if(tab==="bitlocker"){ bitlockerLoaded=false; loadBitlocker(); }
+  else if(tab==="patching"){ devicesLoaded=false; loadDevices(); }
   else { loadDirectory(); }
 };
 
 /* filter-bar wiring — re-render on any filter change (every view's own fields) */
 ["fSearch"].forEach(id=> el(id).oninput = render);
 ["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
- "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc"].forEach(id=> el(id).onchange = render);
+ "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
+ "fPatchRel","fPatchStatus"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
-   "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc"].forEach(id=> el(id).value="");
+   "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
+   "fPatchRel","fPatchStatus"].forEach(id=> el(id).value="");
   render();
 };
 
@@ -1418,7 +1564,8 @@ loadNavState();
 /* left-nav: view switching */
 const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>riskyLoaded, loadRisky],
   mfa:[()=>mfaLoaded, loadMfa], ca:[()=>caLoaded, loadCa], license:[()=>skusLoaded, loadSkus],
-  health:[()=>healthLoaded, loadHealth], bitlocker:[()=>bitlockerLoaded, loadBitlocker] };
+  health:[()=>healthLoaded, loadHealth], bitlocker:[()=>bitlockerLoaded, loadBitlocker],
+  patching:[()=>devicesLoaded, loadDevices] };
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); tab=t.dataset.tab;
@@ -1426,11 +1573,34 @@ document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   if(loader && !loader[0]()){ loader[1](); } else { render(); }
 });
 
-el("btnSettings").onclick = ()=> el("settingsPanel").classList.toggle("hide");
+el("btnSettings").onclick = ()=>{
+  const showing = el("settingsPanel").classList.toggle("hide");
+  if(!showing) fillPatchSettings();   // panel just opened
+};
 el("cfgSave").onclick = ()=>{
   localStorage.setItem(LS_CLIENT, el("cfgClient").value.trim());
   localStorage.setItem(LS_AUTH,  el("cfgAuthority").value.trim());
   location.reload();
+};
+
+/* patch baselines settings */
+const PATCH_FIELDS = { "24H2":"cfgPatch24H2", "25H2":"cfgPatch25H2", "23H2":"cfgPatch23H2", "Windows 10 22H2":"cfgPatch22H2Win10" };
+function fillPatchSettings(){
+  const b = patchBaselines();
+  for(const [key,id] of Object.entries(PATCH_FIELDS)) el(id).value = b[key] || "";
+  el("patchTuesdayNote").innerHTML = `Validating devices against <b>${ymd(currentPatchTuesday())}</b> — the most recent <b>second-Tuesday</b> Patch Tuesday. Enter that date's cumulative-update build per track (not the later optional/preview update).`;
+  el("patch24Link").href = "https://support.microsoft.com/en-us/topic/windows-11-version-24h2-update-history-0929c747-1815-4543-8461-0160d16f15e5";
+  el("patch25Link").href = "https://support.microsoft.com/en-us/search?query=Windows%2011%20version%2025H2%20update%20history";
+}
+el("patchSave").onclick = ()=>{
+  const b = patchBaselines();
+  for(const [key,id] of Object.entries(PATCH_FIELDS)){
+    const x = el(id).value.trim();
+    if(x) b[key] = x; else delete b[key];
+  }
+  localStorage.setItem(LS_PATCH, JSON.stringify(b));
+  toast("Patch baselines saved.");
+  render();
 };
 
 /* ---------- CSV ---------- */
@@ -1469,6 +1639,11 @@ el("btnCsv").onclick = ()=>{
       (d._hasKey?"Yes":(d._isWin?"No":"N/A")),
       (d._encrypted===true?"Yes":(d._encrypted===false?"No":"Unknown")),
       d._keyDate||"", d.deviceOwnership||"", d.deviceId]
+      .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="patching"){
+    head = ["displayName","currentOS","currentBuild","targetBuild","patchStatus","operatingSystemVersion","lastActive","deviceId"];
+    rows = view.map(d=>[d.displayName, d._osLabel, d._build?d._build.full:"", d._target||"", d._status,
+      d.operatingSystemVersion||"", d.approximateLastSignInDateTime||"", d.deviceId]
       .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
   } else {
     head = ["displayName","userPrincipalName","userType","licenseAssigned","accountEnabled","lastInteractive","lastNonInteractive","lastSuccessful","lastActivity","daysInactive","id"];
