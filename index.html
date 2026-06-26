@@ -238,7 +238,7 @@
         <li><span class="dot-tick">●</span><div><code>Directory.Read.All</code> — read tenant license state (required for sign-in activity)</div></li>
         <li><span class="dot-tick">●</span><div><code>Device.Read.All</code> — read registered devices and their last sign-in</div></li>
         <li><span class="dot-tick">●</span><div><code>IdentityRiskyUser.Read.All</code>, <code>Policy.Read.All</code>, <code>UserAuthenticationMethod.Read.All</code>, <code>ServiceHealth.Read.All</code> — security views (risky users, Conditional Access, MFA, service health)</div></li>
-        <li><span class="dot-tick">●</span><div><code>BitlockerKey.ReadBasic.All</code> &amp; <code>DeviceManagementManagedDevices.Read.All</code> — compliance view: BitLocker recovery-key metadata (no key material) plus Intune encryption status, to find devices missing a key or not encrypted</div></li>
+        <li><span class="dot-tick">●</span><div><code>BitlockerKey.ReadBasic.All</code> &amp; <code>DeviceManagementManagedDevices.Read.All</code> — compliance &amp; antivirus views: BitLocker recovery-key metadata (no key material), Intune encryption status, Defender antivirus health, and active-malware reporting</div></li>
         <li><span class="dot-tick">●</span><div><code>User.ReadWrite.All</code> — delete selected user accounts (soft-delete, recoverable 30 days)</div></li>
         <li><span class="dot-tick">●</span><div><code>Directory.AccessAsUser.All</code> — requested only at the moment you delete a device (Graph has no narrower delegated permission for that operation); permanent, no recovery</div></li>
         <li><span class="dot-tick">●</span><div>Needs an <b>Entra ID P1/P2</b> license. Deleting users needs User Administrator or Global Administrator; deleting devices needs Cloud Device Administrator, Intune Administrator, or Global Administrator.</div></li>
@@ -314,6 +314,7 @@
           <button class="tab" data-tab="ca">Conditional Access <span class="cnt" id="cntCa">—</span></button>
           <button class="tab" data-tab="license">Licenses <span class="cnt" id="cntLicense">—</span></button>
           <button class="tab" data-tab="health">Service health <span class="cnt" id="cntHealth">—</span></button>
+          <button class="tab" data-tab="antivirus">Antivirus <span class="cnt" id="cntAntivirus">—</span></button>
         </div>
       </div>
       <div class="navgroup" data-group="compliance">
@@ -447,6 +448,15 @@
           <label>Patch status</label>
           <select id="fPatchStatus"><option value="">All</option><option value="behind">Behind</option><option value="patched">Patched</option><option value="nobaseline">No baseline</option><option value="unknown">Unknown</option></select>
         </div>
+        <!-- security: antivirus -->
+        <div class="field hide" id="wrapAvMode">
+          <label>View</label>
+          <select id="fAvMode"><option value="endpoints">Unhealthy endpoints</option><option value="malware">Active malware</option></select>
+        </div>
+        <div class="field hide" id="wrapAvHealth">
+          <label>Health</label>
+          <select id="fAvHealth"><option value="unhealthy">Unhealthy only</option><option value="">All</option><option value="healthy">Healthy</option></select>
+        </div>
         <span class="grow"></span>
         <span class="count" id="filterCount"></span>
         <button class="btn ghost" id="fClear">Clear filters</button>
@@ -537,6 +547,7 @@
    ======== */
 const DEFAULT_CLIENT_ID = "63aad37d-5338-46cd-9790-2651f0af3233";
 const GRAPH = "https://graph.microsoft.com/v1.0";
+const GRAPH_BETA = "https://graph.microsoft.com/beta";
 const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All",
   "IdentityRiskyUser.Read.All","Policy.Read.All","UserAuthenticationMethod.Read.All","ServiceHealth.Read.All",
   "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All"];
@@ -566,11 +577,14 @@ let allSkus = [];           let skusLoaded = false;
 let allHealthIssues = [];   let healthLoaded = false;
 let allBitlockerKeys = [];  let bitlockerLoaded = false;
 let allManagedDevices = []; let intuneAvailable = false;   // Intune encryption status (best-effort)
+let avOverview = null;      let avEndpoints = [];  let avEndpointsAvailable = true;   // antivirus / Defender health
+let avMalware = [];         let avMalwareCols = []; let avMalwareAvailable = true;
+let avLoaded = false;
 let view = [];              // filtered rows for current tab
 let tab = "member";
 let licensePremium = null;
 
-const INFO_TABS = ["risky","mfa","ca","license","health","bitlocker","patching"];
+const INFO_TABS = ["risky","mfa","ca","license","health","antivirus","bitlocker","patching"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
 
@@ -870,6 +884,56 @@ async function loadBitlocker(){
 }
 
 /* ========
+   GRAPH — Antivirus / Microsoft Defender (Endpoint security → Antivirus)
+   Three validated sources, each loaded best-effort so one failing doesn't break the view:
+   • deviceProtectionOverview (GET)            → Summary KPI counts
+   • managedDevices $expand windowsProtectionState (GET) → per-device "Unhealthy endpoints"
+   • reports/getActiveMalwareReport (POST, beta) → "Active malware" grid (portal-style synchronous report)
+   All covered by DeviceManagementManagedDevices.Read.All; needs an Intune licence.
+   ======== */
+async function loadAntivirus(){
+  el("tbody").innerHTML = `<tr><td colspan="10" class="loadrow"><span class="spin"></span> Reading antivirus &amp; malware status…</td></tr>`;
+  try{
+    const tok = await token(READ_SCOPES);
+    if(!tok) return;
+
+    // 1) Summary overview counts
+    try{ avOverview = await gget(`${GRAPH}/deviceManagement/deviceProtectionOverview`, tok); }
+    catch(e){ avOverview = null; }
+
+    // 2) Per-device Defender health (Unhealthy endpoints)
+    avEndpoints = [];
+    try{
+      let url = `${GRAPH}/deviceManagement/managedDevices?$select=id,deviceName,managedDeviceOwnerType,operatingSystem&$expand=windowsProtectionState&$top=200`;
+      let pages = 0;
+      while(url && pages < 10){
+        const page = await gget(url, tok);
+        avEndpoints.push(...(page.value||[]));
+        url = page["@odata.nextLink"] || null; pages++;
+      }
+      avEndpointsAvailable = true;
+    }catch(e){ avEndpoints = []; avEndpointsAvailable = false; }
+
+    // 3) Active malware report (synchronous report endpoint — returns {Schema, Values})
+    avMalware = []; avMalwareCols = []; avMalwareAvailable = true;
+    try{
+      const r = await fetch(`${GRAPH_BETA}/deviceManagement/reports/getActiveMalwareReport`, {
+        method:"POST",
+        headers:{ Authorization:"Bearer "+tok, "Content-Type":"application/json" },
+        body: JSON.stringify({ select:[], skip:0, top:50, orderBy:[] })
+      });
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      const data = await r.json();
+      avMalwareCols = (data.Schema||data.schema||[]).map(s=> s.Column||s.column);
+      avMalware = (data.Values||data.values||[]);
+    }catch(e){ avMalwareAvailable = false; avMalware = []; avMalwareCols = []; }
+
+    avLoaded = true;
+    render();
+  }catch(e){ handleGraphError(e); }
+}
+
+/* ========
    FILTER + RENDER
    ======== */
 function computeDormant(){
@@ -1017,7 +1081,7 @@ function fillSelect(id, values){
 const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatus","wrapRisk","wrapRiskState",
   "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
   "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc",
-  "wrapPatchRel","wrapPatchStatus"];
+  "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth"];
 const FILTERS_BY_TAB = {
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
@@ -1027,13 +1091,14 @@ const FILTERS_BY_TAB = {
   ca:    ["wrapCaState"],
   license:["wrapLicStatus"],
   health:["wrapHealthSvc","wrapHealthClass","wrapHealthStatus"],
+  antivirus:["wrapAvMode","wrapAvHealth"],
   bitlocker:["wrapBlOs","wrapBlStatus","wrapBlEnc"],
   patching:["wrapPatchRel","wrapPatchStatus"]
 };
 const SEARCH_PLACEHOLDER = {
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
   ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…",
-  patching:"device name or build…"
+  patching:"device name or build…", antivirus:"device or malware…"
 };
 
 function syncFilterBar(){
@@ -1058,6 +1123,7 @@ const HEAD_LICENSE = `<th>SKU</th><th>Enabled</th><th>Consumed</th><th>Available
 const HEAD_HEALTH  = `<th>Issue</th><th>Service</th><th>Classification</th><th>Status</th><th>Last updated</th>`;
 const HEAD_BITLOCKER = `<th>Device</th><th>OS</th><th>BitLocker key</th><th>Encrypted</th><th class="opt">Key escrowed</th><th>Ownership</th>`;
 const HEAD_PATCHING  = `<th>Device</th><th>Current OS</th><th>Current build</th><th>Target build</th><th>Patch status</th><th class="opt">Last active</th>`;
+const HEAD_AV_ENDPOINTS = `<th>Device</th><th>Managed by</th><th>Malware protection</th><th>State</th><th>Real-time</th><th>Network</th><th>Signature</th><th>Tamper</th><th class="opt">Product status</th><th class="opt">Reboot</th>`;
 
 function render(){
   syncFilterBar();
@@ -1078,11 +1144,15 @@ function render(){
   if(caLoaded)     el("cntCa").textContent     = allCaPolicies.length;
   if(skusLoaded)   el("cntLicense").textContent= allSkus.length;
   if(healthLoaded) el("cntHealth").textContent = allHealthIssues.filter(h=>!h.isResolved).length;
+  if(avLoaded){ const o=avOverview||{}; el("cntAntivirus").textContent = Math.max(0,(o.totalReportedDeviceCount||0)-(o.cleanDeviceCount||0)); }
   if(bitlockerLoaded) el("cntBitlocker").textContent = bitlockerRows().filter(d=>d._status==="missing").length;
   if(devicesLoaded)   el("cntPatching").textContent = patchingRows().filter(d=>d._status==="behind").length;
 
   // KPI cards are scoped to the ACTIVE dormant view, not the whole tenant
   if(!isInfoTab()) setDormantCards(members, guests, stale);
+
+  // antivirus sets its own header (per sub-mode) inside renderAntivirus
+  if(tab==="antivirus"){ renderAntivirus(); return; }
 
   const heads = { device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, patching:HEAD_PATCHING };
   if(heads[tab]){
@@ -1448,6 +1518,85 @@ function renderPatching(){
   }).join("");
 }
 
+/* ---------- antivirus (Security) ---------- */
+const AV_YES = `<span class="pill lic-yes">Yes</span>`;
+const AV_NO  = `<span class="pill miss">No</span>`;
+function ynPill(b){ return b===true?AV_YES:(b===false?AV_NO:`<span class="pill off">—</span>`); }
+function humanize(s){ return String(s||"").replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^./,c=>c.toUpperCase()); }
+function avUnhealthy(p){
+  if(!p) return false;
+  return (p.deviceState && p.deviceState!=="clean")
+    || p.malwareProtectionEnabled===false || p.realTimeProtectionEnabled===false
+    || p.networkInspectionSystemEnabled===false || p.tamperProtectionEnabled===false
+    || p.signatureUpdateOverdue===true || p.rebootRequired===true
+    || (p.productStatus && !["noStatusFlagsSet","noStatus"].includes(p.productStatus));
+}
+function renderAntivirus(){
+  const o = avOverview||{};
+  const total = o.totalReportedDeviceCount||0, clean = o.cleanDeviceCount||0;
+  setInfoCards("Clean", clean, "Unhealthy", Math.max(0,total-clean),
+    "Critical failures", o.criticalFailuresDeviceCount||0,
+    "Active malware", avMalwareAvailable ? avMalware.length : "—");
+  if((v("fAvMode")||"endpoints")==="malware"){ el("theadRow").innerHTML = avMalwareHead(); renderAvMalware(); }
+  else { el("theadRow").innerHTML = HEAD_AV_ENDPOINTS; renderAvEndpoints(); }
+}
+function renderAvEndpoints(){
+  const q = searchVal(), hf = v("fAvHealth");
+  const rows = avEndpoints.map(d=>({ d, p:d.windowsProtectionState })).filter(r=>{
+    if(q && !((r.d.deviceName||"")+" "+(r.d.operatingSystem||"")).toLowerCase().includes(q)) return false;
+    const uh = avUnhealthy(r.p);
+    if(hf==="unhealthy" && !uh) return false;
+    if(hf==="healthy" && uh) return false;
+    return true;
+  });
+  view = rows.map(r=>r.d);
+  setFilterCount(rows.length, avEndpoints.length);
+  const tb = el("tbody");
+  if(!avEndpoints.length){
+    tb.innerHTML = `<tr><td colspan="10" class="empty"><div class="big">No device health data</div>${avEndpointsAvailable===false?"Intune Defender health wasn't available — needs an Intune licence and DeviceManagementManagedDevices.Read.All (admin consent).":"No managed devices reported Defender health."}</td></tr>`;
+    return;
+  }
+  if(!rows.length){ tb.innerHTML = `<tr><td colspan="10" class="empty"><div class="big">No matches</div>No endpoints match the current filters.</td></tr>`; return; }
+  tb.innerHTML = rows.map(({d,p})=>{
+    const s = p||{};
+    const stateClass = (!s.deviceState||s.deviceState==="clean") ? "lic-yes" : "miss";
+    const sig = s.signatureUpdateOverdue===true ? `<span class="pill miss">Overdue</span>` : (s.signatureUpdateOverdue===false?`<span class="pill lic-yes">OK</span>`:`<span class="pill off">—</span>`);
+    return `<tr>
+      <td><div class="uname">${escapeHtml(d.deviceName||"—")}</div><div class="upn">${escapeHtml(d.operatingSystem||"")}</div></td>
+      <td class="num">${escapeHtml(d.managedDeviceOwnerType||"—")}</td>
+      <td>${ynPill(s.malwareProtectionEnabled)}</td>
+      <td><span class="pill ${stateClass}">${escapeHtml(humanize(s.deviceState||"—"))}</span></td>
+      <td>${ynPill(s.realTimeProtectionEnabled)}</td>
+      <td>${ynPill(s.networkInspectionSystemEnabled)}</td>
+      <td>${sig}</td>
+      <td>${ynPill(s.tamperProtectionEnabled)}</td>
+      <td class="num opt">${escapeHtml(humanize(s.productStatus||"—"))}</td>
+      <td class="num opt">${s.rebootRequired===true?`<span class="pill miss">Yes</span>`:"No"}</td>
+    </tr>`;
+  }).join("");
+}
+function avMalwareHead(){
+  if(!avMalwareCols.length) return `<th>Active malware</th>`;
+  return avMalwareCols.map(c=>`<th>${escapeHtml(humanize(c))}</th>`).join("");
+}
+function renderAvMalware(){
+  const q = searchVal();
+  const rows = avMalware.filter(row => !q || row.join(" ").toLowerCase().includes(q));
+  view = rows;
+  setFilterCount(rows.length, avMalware.length);
+  const cols = Math.max(1, avMalwareCols.length);
+  const tb = el("tbody");
+  if(!avMalwareAvailable){
+    tb.innerHTML = `<tr><td colspan="${cols}" class="empty"><div class="big">Malware report unavailable</div>The active-malware report couldn't be retrieved here — it needs an Intune licence and the reporting API. (Some tenants expose it only via export jobs, which a browser can't download cross-origin.)</td></tr>`;
+    return;
+  }
+  if(!rows.length){
+    tb.innerHTML = `<tr><td colspan="${cols}" class="empty"><div class="big">No active malware</div>No devices currently report active malware.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = rows.map(row=>`<tr>${row.map(c=>`<td class="num">${escapeHtml(String(c==null?"—":c))}</td>`).join("")}</tr>`).join("");
+}
+
 function renderUsers(rows){
   const total = rows.length;
   view = applyUserFilters(rows).sort((a,b)=> b._inactive - a._inactive);
@@ -1550,6 +1699,7 @@ el("btnRefresh").onclick = ()=>{
   else if(tab==="ca"){ caLoaded=false; loadCa(); }
   else if(tab==="license"){ skusLoaded=false; loadSkus(); }
   else if(tab==="health"){ healthLoaded=false; loadHealth(); }
+  else if(tab==="antivirus"){ avLoaded=false; loadAntivirus(); }
   else if(tab==="bitlocker"){ bitlockerLoaded=false; loadBitlocker(); }
   else if(tab==="patching"){ devicesLoaded=false; loadDevices(); }
   else { loadDirectory(); }
@@ -1559,11 +1709,12 @@ el("btnRefresh").onclick = ()=>{
 ["fSearch"].forEach(id=> el(id).oninput = render);
 ["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
  "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
- "fPatchRel","fPatchStatus"].forEach(id=> el(id).onchange = render);
+ "fPatchRel","fPatchStatus","fAvMode","fAvHealth"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
    "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
    "fPatchRel","fPatchStatus"].forEach(id=> el(id).value="");
+  el("fAvMode").value="endpoints"; el("fAvHealth").value="unhealthy";   // antivirus keeps sensible defaults
   render();
 };
 
@@ -1589,7 +1740,7 @@ loadNavState();
 const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>riskyLoaded, loadRisky],
   mfa:[()=>mfaLoaded, loadMfa], ca:[()=>caLoaded, loadCa], license:[()=>skusLoaded, loadSkus],
   health:[()=>healthLoaded, loadHealth], bitlocker:[()=>bitlockerLoaded, loadBitlocker],
-  patching:[()=>devicesLoaded, loadDevices] };
+  patching:[()=>devicesLoaded, loadDevices], antivirus:[()=>avLoaded, loadAntivirus] };
 document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); tab=t.dataset.tab;
@@ -1670,6 +1821,15 @@ el("btnCsv").onclick = ()=>{
     rows = view.map(d=>[d.displayName, d._osLabel, d._build?d._build.full:"", d._target||"", d._status,
       d.operatingSystemVersion||"", d.approximateLastSignInDateTime||"", d.deviceId]
       .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","));
+  } else if(tab==="antivirus"){
+    if((el("fAvMode").value||"endpoints")==="malware"){
+      head = avMalwareCols.slice();
+      rows = view.map(row=> row.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(","));
+    } else {
+      head = ["deviceName","managedBy","malwareProtection","state","realTimeProtection","networkProtection","signatureOverdue","tamperProtection","productStatus","rebootRequired","operatingSystem"];
+      rows = view.map(d=>{ const p=d.windowsProtectionState||{}; return [d.deviceName,d.managedDeviceOwnerType,p.malwareProtectionEnabled,p.deviceState,p.realTimeProtectionEnabled,p.networkInspectionSystemEnabled,p.signatureUpdateOverdue,p.tamperProtectionEnabled,p.productStatus,p.rebootRequired,d.operatingSystem]
+        .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(","); });
+    }
   } else {
     head = ["displayName","userPrincipalName","userType","licenseAssigned","accountEnabled","lastInteractive","lastNonInteractive","lastSuccessful","lastActivity","daysInactive","id"];
     rows = view.map(u=>{ const a=u.signInActivity||{}; return [
