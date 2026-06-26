@@ -51,7 +51,7 @@
   .btn.danger{background:var(--danger);color:#fff;border-color:transparent;font-weight:600}
   .btn.danger:hover{background:#f05a5e}
   .btn.ghost{background:transparent}
-  main{max-width:1280px;margin:0 auto;padding:26px 22px 80px}
+  main{max-width:1320px;margin:0 auto;padding:26px 22px 80px}
   /* ---------- sign-in screen ---------- */
   .hero{max-width:620px;margin:9vh auto 0;text-align:center;padding:0 20px}
   .hero .glyph-lg{width:74px;height:74px;margin:0 auto 26px;display:block}
@@ -65,15 +65,28 @@
   .req li{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted)}
   .req li code{font-family:var(--mono);color:var(--accent);font-size:12px}
   .dot-tick{color:var(--accent);flex:0 0 auto;margin-top:1px}
-  /* ---------- controls ---------- */
-  .controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;margin-bottom:20px}
-  .tabset{display:flex;gap:4px;background:var(--panel);border:1px solid var(--border);
-    border-radius:9px;padding:4px}
-  .tab{border:none;background:transparent;color:var(--muted);padding:8px 16px;border-radius:6px;
-    font-size:13px;font-weight:600}
-  .tab.active{background:var(--panel-2);color:var(--text)}
+  /* ---------- workspace: left nav + content ---------- */
+  .workspace{display:flex;gap:22px;align-items:flex-start}
+  .sidenav{width:226px;flex:0 0 auto;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:10px;position:sticky;top:78px}
+  .content{flex:1;min-width:0}
+  .navgroup{margin-bottom:4px}
+  .navhead{display:flex;align-items:center;gap:9px;width:100%;border:none;background:transparent;color:var(--text);
+    font-family:'Space Grotesk';font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+    padding:10px 10px;border-radius:7px;text-align:left}
+  .navhead:hover{background:var(--panel-2)}
+  .navhead .caret{transition:transform .15s;color:var(--muted);font-size:10px;flex:0 0 auto}
+  .navgroup.collapsed .caret{transform:rotate(-90deg)}
+  .navgroup.collapsed .navitems{display:none}
+  .navitems{display:flex;flex-direction:column;gap:2px;padding:3px 0 8px 4px}
+  .tab{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;border:none;
+    background:transparent;color:var(--muted);padding:8px 12px;border-radius:6px;font-size:13px;font-weight:600}
+  .tab:hover{background:var(--panel-2);color:var(--text)}
+  .tab.active{background:var(--panel-2);color:var(--text);box-shadow:inset 2px 0 0 var(--accent)}
   .tab .cnt{margin-left:7px;font-family:var(--mono);font-size:11px;color:var(--faint)}
   .tab.active .cnt{color:var(--accent)}
+  /* ---------- controls ---------- */
+  .controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;margin-bottom:20px}
   .field{display:flex;flex-direction:column;gap:6px}
   .field label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600}
   .field .row{display:flex;align-items:center;gap:10px}
@@ -96,6 +109,7 @@
   .filterbar .count b{color:var(--text)}
   /* ---------- summary cards ---------- */
   .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+  .cards.info4{grid-template-columns:repeat(4,1fr)}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
   .card .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:600}
   .card .v{font-family:'Space Grotesk';font-weight:700;font-size:26px;margin-top:6px;letter-spacing:-.01em}
@@ -174,8 +188,11 @@
   @keyframes sp{to{transform:rotate(360deg)}}
   .loadrow{padding:50px;text-align:center;color:var(--muted)}
   .hide{display:none!important}
-  @media (max-width:760px){
+  @media (max-width:900px){
+    .workspace{flex-direction:column}
+    .sidenav{width:auto;position:static}
     .cards{grid-template-columns:repeat(2,1fr)}
+    .cards.info4{grid-template-columns:repeat(2,1fr)}
     .settings .grid{grid-template-columns:1fr}
     thead th.opt,tbody td.opt{display:none}
   }
@@ -204,7 +221,7 @@
   <button class="btn ghost" id="btnSignout">Sign out</button>
 </header>
 
-<!-- ==== SIGN IN ======== -->
+<!-- ==== SIGN IN ==== -->
 <section id="signin">
   <div class="hero">
     <svg class="glyph-lg"><use href="#glyph"/></svg>
@@ -217,6 +234,7 @@
         <li><span class="dot-tick">●</span><div><code>User.Read.All</code> &amp; <code>AuditLog.Read.All</code> — read users and their sign-in activity</div></li>
         <li><span class="dot-tick">●</span><div><code>Directory.Read.All</code> — read tenant license state (required for sign-in activity)</div></li>
         <li><span class="dot-tick">●</span><div><code>Device.Read.All</code> — read registered devices and their last sign-in</div></li>
+        <li><span class="dot-tick">●</span><div><code>IdentityRiskyUser.Read.All</code>, <code>Policy.Read.All</code>, <code>UserAuthenticationMethod.Read.All</code>, <code>ServiceHealth.Read.All</code> — security views (risky users, Conditional Access, MFA, service health)</div></li>
         <li><span class="dot-tick">●</span><div><code>User.ReadWrite.All</code> — delete selected user accounts (soft-delete, recoverable 30 days)</div></li>
         <li><span class="dot-tick">●</span><div><code>Directory.AccessAsUser.All</code> — requested only at the moment you delete a device (Graph has no narrower delegated permission for that operation); permanent, no recovery</div></li>
         <li><span class="dot-tick">●</span><div>Needs an <b>Entra ID P1/P2</b> license. Deleting users needs User Administrator or Global Administrator; deleting devices needs Cloud Device Administrator, Intune Administrator, or Global Administrator.</div></li>
@@ -225,7 +243,7 @@
   </div>
 </section>
 
-<!-- ==== APP ======== -->
+<!-- ==== APP ==== -->
 <main id="app" class="hide">
   <div class="settings hide" id="settingsPanel">
     <h3>Configuration</h3>
@@ -253,123 +271,180 @@
     </div>
   </div>
 
-  <div class="controls">
-    <div class="tabset">
-      <button class="tab active" data-tab="member">Dormant members <span class="cnt" id="cntMember">—</span></button>
-      <button class="tab" data-tab="guest">Dormant guests <span class="cnt" id="cntGuest">—</span></button>
-      <button class="tab" data-tab="device">Stale devices <span class="cnt" id="cntDevice">—</span></button>
-      <button class="tab" data-tab="risky">Risky users <span class="cnt" id="cntRisky">—</span></button>
-      <button class="tab" data-tab="mfa">MFA coverage <span class="cnt" id="cntMfa">—</span></button>
-      <button class="tab" data-tab="ca">Conditional Access <span class="cnt" id="cntCa">—</span></button>
-      <button class="tab" data-tab="license">Licenses <span class="cnt" id="cntLicense">—</span></button>
-      <button class="tab" data-tab="health">Service health <span class="cnt" id="cntHealth">—</span></button>
-    </div>
-    <div class="field" id="threshField">
-      <label>Inactive for at least</label>
-      <div class="row">
-        <input type="range" id="thresh" min="30" max="365" step="5" value="90" />
-        <span class="thresh-val mono" id="threshVal">90 days</span>
+  <div class="workspace">
+    <!-- ==== LEFT NAV — collapsible sections ==== -->
+    <aside class="sidenav" id="sidenav">
+      <div class="navgroup" data-group="dormant">
+        <button class="navhead" data-grouphead="dormant"><span class="caret">▾</span> Dormant Status</button>
+        <div class="navitems">
+          <button class="tab active" data-tab="member">Dormant members <span class="cnt" id="cntMember">—</span></button>
+          <button class="tab" data-tab="guest">Dormant guests <span class="cnt" id="cntGuest">—</span></button>
+          <button class="tab" data-tab="device">Stale devices <span class="cnt" id="cntDevice">—</span></button>
+        </div>
       </div>
-    </div>
-    <div class="field" id="optionsField">
-      <label>Options</label>
-      <div class="row" style="gap:18px">
-        <label class="chk"><input type="checkbox" id="optNever" checked /> include never-signed-in</label>
-        <label class="chk"><input type="checkbox" id="optDisabled" checked /> include disabled accounts</label>
+      <div class="navgroup" data-group="security">
+        <button class="navhead" data-grouphead="security"><span class="caret">▾</span> Security</button>
+        <div class="navitems">
+          <button class="tab" data-tab="risky">Risky users <span class="cnt" id="cntRisky">—</span></button>
+          <button class="tab" data-tab="mfa">MFA coverage <span class="cnt" id="cntMfa">—</span></button>
+          <button class="tab" data-tab="ca">Conditional Access <span class="cnt" id="cntCa">—</span></button>
+          <button class="tab" data-tab="license">Licenses <span class="cnt" id="cntLicense">—</span></button>
+          <button class="tab" data-tab="health">Service health <span class="cnt" id="cntHealth">—</span></button>
+        </div>
       </div>
-    </div>
-    <span style="flex:1"></span>
-    <button class="btn" id="btnRefresh">↻ Reload directory</button>
-    <button class="btn" id="btnCsv">Export CSV</button>
-  </div>
+    </aside>
 
-  <!-- ==== COLUMN FILTERS ======== -->
-  <div class="filterbar" id="filterbar">
-    <div class="field">
-      <label>Search</label>
-      <input type="text" id="fSearch" placeholder="name or UPN…" autocomplete="off" />
-    </div>
-    <div class="field" id="wrapType">
-      <label>Type</label>
-      <select id="fType">
-        <option value="">All</option>
-        <option value="Member">Member</option>
-        <option value="Guest">Guest</option>
-      </select>
-    </div>
-    <div class="field" id="wrapLicense">
-      <label>License assigned</label>
-      <select id="fLicense">
-        <option value="">All</option>
-        <option value="yes">Yes — licensed</option>
-        <option value="no">No — unlicensed</option>
-      </select>
-    </div>
-    <div class="field hide" id="wrapOs">
-      <label>Operating system</label>
-      <select id="fOs"><option value="">All</option></select>
-    </div>
-    <div class="field hide" id="wrapOwn">
-      <label>Ownership</label>
-      <select id="fOwn"><option value="">All</option></select>
-    </div>
-    <div class="field" id="wrapStatus">
-      <label>Status</label>
-      <select id="fStatus">
-        <option value="">All</option>
-        <option value="enabled">Enabled</option>
-        <option value="disabled">Disabled</option>
-      </select>
-    </div>
-    <span class="grow"></span>
-    <span class="count" id="filterCount"></span>
-    <button class="btn ghost" id="fClear">Clear filters</button>
-  </div>
+    <!-- ==== CONTENT ==== -->
+    <section class="content">
+      <div class="controls">
+        <div class="field" id="threshField">
+          <label>Inactive for at least</label>
+          <div class="row">
+            <input type="range" id="thresh" min="30" max="365" step="5" value="90" />
+            <span class="thresh-val mono" id="threshVal">90 days</span>
+          </div>
+        </div>
+        <div class="field" id="optionsField">
+          <label>Options</label>
+          <div class="row" style="gap:18px">
+            <label class="chk"><input type="checkbox" id="optNever" checked /> include never-signed-in</label>
+            <label class="chk"><input type="checkbox" id="optDisabled" checked /> include disabled accounts</label>
+          </div>
+        </div>
+        <span style="flex:1"></span>
+        <button class="btn" id="btnRefresh">↻ Reload</button>
+        <button class="btn" id="btnCsv">Export CSV</button>
+      </div>
 
-  <div class="cards" id="cards">
-    <div class="card"><div class="k">Users scanned</div><div class="v" id="cScanned">—</div></div>
-    <div class="card warn"><div class="k">Dormant members</div><div class="v" id="cMember">—</div></div>
-    <div class="card warn"><div class="k">Dormant guests</div><div class="v" id="cGuest">—</div></div>
-    <div class="card warn"><div class="k">Stale devices</div><div class="v" id="cDevice">—</div></div>
-    <div class="card accent"><div class="k">Premium / license</div><div class="v" id="cLic" style="font-size:18px;padding-top:6px">—</div></div>
-  </div>
+      <!-- ==== PER-VIEW COLUMN FILTERS — each view shows filters for its own fields ==== -->
+      <div class="filterbar" id="filterbar">
+        <div class="field">
+          <label>Search</label>
+          <input type="text" id="fSearch" placeholder="name or UPN…" autocomplete="off" />
+        </div>
+        <!-- members / guests -->
+        <div class="field" id="wrapType">
+          <label>Type</label>
+          <select id="fType"><option value="">All</option><option value="Member">Member</option><option value="Guest">Guest</option></select>
+        </div>
+        <div class="field" id="wrapLicense">
+          <label>License assigned</label>
+          <select id="fLicense"><option value="">All</option><option value="yes">Yes — licensed</option><option value="no">No — unlicensed</option></select>
+        </div>
+        <!-- devices -->
+        <div class="field hide" id="wrapOs">
+          <label>Operating system</label>
+          <select id="fOs"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapOwn">
+          <label>Ownership</label>
+          <select id="fOwn"><option value="">All</option></select>
+        </div>
+        <!-- shared: account status (users + devices) -->
+        <div class="field" id="wrapStatus">
+          <label>Status</label>
+          <select id="fStatus"><option value="">All</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select>
+        </div>
+        <!-- risky users -->
+        <div class="field hide" id="wrapRisk">
+          <label>Risk level</label>
+          <select id="fRisk"><option value="">All</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="none">None</option></select>
+        </div>
+        <div class="field hide" id="wrapRiskState">
+          <label>Risk state</label>
+          <select id="fRiskState"><option value="">All</option></select>
+        </div>
+        <!-- mfa coverage -->
+        <div class="field hide" id="wrapMfaType">
+          <label>Type</label>
+          <select id="fMfaType"><option value="">All</option><option value="member">Member</option><option value="guest">Guest</option></select>
+        </div>
+        <div class="field hide" id="wrapMfaReg">
+          <label>MFA registered</label>
+          <select id="fMfaReg"><option value="">All</option><option value="yes">Yes</option><option value="no">No</option></select>
+        </div>
+        <div class="field hide" id="wrapMfaCap">
+          <label>MFA capable</label>
+          <select id="fMfaCap"><option value="">All</option><option value="yes">Yes</option><option value="no">No</option></select>
+        </div>
+        <div class="field hide" id="wrapSspr">
+          <label>SSPR registered</label>
+          <select id="fSspr"><option value="">All</option><option value="yes">Yes</option><option value="no">No</option></select>
+        </div>
+        <!-- conditional access -->
+        <div class="field hide" id="wrapCaState">
+          <label>State</label>
+          <select id="fCaState"><option value="">All</option><option value="enabled">Enabled</option><option value="enabledForReportingButNotEnforced">Report-only</option><option value="disabled">Disabled</option></select>
+        </div>
+        <!-- licenses -->
+        <div class="field hide" id="wrapLicStatus">
+          <label>Capacity</label>
+          <select id="fLicStatus"><option value="">All</option><option value="ok">Within capacity</option><option value="over">Over capacity</option></select>
+        </div>
+        <!-- service health -->
+        <div class="field hide" id="wrapHealthSvc">
+          <label>Service</label>
+          <select id="fHealthSvc"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapHealthClass">
+          <label>Classification</label>
+          <select id="fHealthClass"><option value="">All</option><option value="advisory">Advisory</option><option value="incident">Incident</option></select>
+        </div>
+        <div class="field hide" id="wrapHealthStatus">
+          <label>Status</label>
+          <select id="fHealthStatus"><option value="">All</option><option value="active">Active</option><option value="resolved">Resolved</option></select>
+        </div>
+        <span class="grow"></span>
+        <span class="count" id="filterCount"></span>
+        <button class="btn ghost" id="fClear">Clear filters</button>
+      </div>
 
-  <div class="cards hide" id="infoCards">
-    <div class="card"><div class="k" id="infoCard1k">—</div><div class="v" id="infoCard1v">—</div></div>
-    <div class="card warn"><div class="k" id="infoCard2k">—</div><div class="v" id="infoCard2v">—</div></div>
-    <div class="card warn"><div class="k" id="infoCard3k">—</div><div class="v" id="infoCard3v">—</div></div>
-    <div class="card accent"><div class="k" id="infoCard4k">—</div><div class="v" id="infoCard4v" style="font-size:18px;padding-top:6px">—</div></div>
-  </div>
+      <div class="cards" id="cards">
+        <div class="card"><div class="k">Users scanned</div><div class="v" id="cScanned">—</div></div>
+        <div class="card warn"><div class="k">Dormant members</div><div class="v" id="cMember">—</div></div>
+        <div class="card warn"><div class="k">Dormant guests</div><div class="v" id="cGuest">—</div></div>
+        <div class="card warn"><div class="k">Stale devices</div><div class="v" id="cDevice">—</div></div>
+        <div class="card accent"><div class="k">Premium / license</div><div class="v" id="cLic" style="font-size:18px;padding-top:6px">—</div></div>
+      </div>
 
-  <div class="actionbar" id="actionbar">
-    <label class="chk"><input type="checkbox" id="selAll" /> Select all (view)</label>
-    <span class="sel" id="selInfo"></span>
-    <span style="flex:1"></span>
-    <button class="btn danger" id="btnDelete" disabled>Delete selected</button>
-  </div>
+      <div class="cards info4 hide" id="infoCards">
+        <div class="card"><div class="k" id="infoCard1k">—</div><div class="v" id="infoCard1v">—</div></div>
+        <div class="card warn"><div class="k" id="infoCard2k">—</div><div class="v" id="infoCard2v">—</div></div>
+        <div class="card warn"><div class="k" id="infoCard3k">—</div><div class="v" id="infoCard3v">—</div></div>
+        <div class="card accent"><div class="k" id="infoCard4k">—</div><div class="v" id="infoCard4v" style="font-size:18px;padding-top:6px">—</div></div>
+      </div>
 
-  <div class="tablewrap">
-    <table>
-      <thead>
-        <tr id="theadRow">
-          <th style="width:34px"></th>
-          <th>User</th>
-          <th>Type</th>
-          <th>License</th>
-          <th class="opt">Last interactive</th>
-          <th class="opt">Last non-interactive</th>
-          <th>Last activity</th>
-          <th>Inactive</th>
-        </tr>
-      </thead>
-      <tbody id="tbody">
-        <tr><td colspan="8" class="loadrow"><span class="spin"></span> Loading directory…</td></tr>
-      </tbody>
-    </table>
+      <div class="actionbar" id="actionbar">
+        <label class="chk"><input type="checkbox" id="selAll" /> Select all (view)</label>
+        <span class="sel" id="selInfo"></span>
+        <span style="flex:1"></span>
+        <button class="btn danger" id="btnDelete" disabled>Delete selected</button>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr id="theadRow">
+              <th style="width:34px"></th>
+              <th>User</th>
+              <th>Type</th>
+              <th>License</th>
+              <th class="opt">Last interactive</th>
+              <th class="opt">Last non-interactive</th>
+              <th>Last activity</th>
+              <th>Inactive</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="8" class="loadrow"><span class="spin"></span> Loading directory…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 </main>
 
-<!-- ==== DELETE MODAL ======== -->
+<!-- ==== DELETE MODAL ==== -->
 <div class="scrim" id="scrim">
   <div class="modal">
     <div id="mConfirm">
@@ -403,10 +478,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
 <script>
-/* ================
+/* ========
    CONFIG  — set DEFAULT_CLIENT_ID to your multi-tenant SPA app.
    Tenant Guard. Orgs can override it in Settings without editing this file.
-   ================ */
+   ======== */
 const DEFAULT_CLIENT_ID = "63aad37d-5338-46cd-9790-2651f0af3233";
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All",
@@ -449,6 +524,7 @@ const el = (id) => document.getElementById(id);
 function toast(msg, isErr){ const t=el("toast"); t.textContent=msg; t.className="toast show"+(isErr?" err":""); clearTimeout(t._t); t._t=setTimeout(()=>t.className="toast",4200); }
 function fmtDate(d){ if(!d) return "—"; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return "—"; return dt.toISOString().slice(0,10); }
 function daysSince(d){ if(!d) return null; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return null; return Math.floor((Date.now()-dt)/864e5); }
+function yn(b){ return b ? "yes" : "no"; }
 
 /* a user is "licensed" if Graph returns one or more assignedLicenses entries */
 function hasLicense(u){ return Array.isArray(u.assignedLicenses) && u.assignedLicenses.length > 0; }
@@ -462,9 +538,9 @@ function lastActivity(u){
   return cands.length ? new Date(Math.max(...cands)).toISOString() : null;
 }
 
-/* ================
+/* ========
    AUTH
-   ================ */
+   ======== */
 async function initAuth(){
   msalApp = new msal.PublicClientApplication({
     auth: { clientId: clientId(), authority: authority(), redirectUri: REDIRECT },
@@ -523,9 +599,9 @@ function enterApp(){
   loadDirectory();
 }
 
-/* ================
+/* ========
    GRAPH — fetch all users with signInActivity (paged, 500/page)
-   ================ */
+   ======== */
 async function gget(url, tok){
   const r = await fetch(url, { headers:{ Authorization:"Bearer "+tok, ConsistencyLevel:"eventual" } });
   if(!r.ok){
@@ -571,9 +647,9 @@ function handleGraphError(e){
   toast(msg, true);
 }
 
-/* ================
+/* ========
    GRAPH — fetch all devices with approximateLastSignInDateTime
-   ================ */
+   ======== */
 async function loadDevices(){
   el("tbody").innerHTML = `<tr><td colspan="7" class="loadrow"><span class="spin"></span> Reading registered devices…</td></tr>`;
   el("cDevice").textContent="—";
@@ -597,11 +673,11 @@ async function loadDevices(){
   }
 }
 
-/* ================
+/* ========
    GRAPH — Identity Protection: risky users
    Requires Entra ID P2 for full risk detail; P1/Free tenants get a 403 here,
    which is surfaced as a normal error card rather than failing the whole app.
-   ================ */
+   ======== */
 async function loadRisky(){
   el("tbody").innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Reading risky users…</td></tr>`;
   try{
@@ -616,13 +692,14 @@ async function loadRisky(){
       url = page["@odata.nextLink"] || null;
     }
     riskyLoaded = true;
+    fillSelect("fRiskState", [...new Set(allRisky.map(r=>r.riskState).filter(Boolean))].sort());
     render();
   }catch(e){ handleGraphError(e); }
 }
 
-/* ================
+/* ========
    GRAPH — MFA / authentication method registration report
-   ================ */
+   ======== */
 async function loadMfa(){
   el("tbody").innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Reading MFA registration report…</td></tr>`;
   try{
@@ -640,9 +717,9 @@ async function loadMfa(){
   }catch(e){ handleGraphError(e); }
 }
 
-/* ================
+/* ========
    GRAPH — Conditional Access policies
-   ================ */
+   ======== */
 async function loadCa(){
   el("tbody").innerHTML = `<tr><td colspan="5" class="loadrow"><span class="spin"></span> Reading Conditional Access policies…</td></tr>`;
   try{
@@ -655,9 +732,9 @@ async function loadCa(){
   }catch(e){ handleGraphError(e); }
 }
 
-/* ================
+/* ========
    GRAPH — tenant-wide license SKU usage (no new scope — Directory.Read.All covers this)
-   ================ */
+   ======== */
 async function loadSkus(){
   el("tbody").innerHTML = `<tr><td colspan="5" class="loadrow"><span class="spin"></span> Reading license SKUs…</td></tr>`;
   try{
@@ -670,9 +747,9 @@ async function loadSkus(){
   }catch(e){ handleGraphError(e); }
 }
 
-/* ================
+/* ========
    GRAPH — M365 service health advisories/incidents
-   ================ */
+   ======== */
 async function loadHealth(){
   el("tbody").innerHTML = `<tr><td colspan="5" class="loadrow"><span class="spin"></span> Reading service health…</td></tr>`;
   try{
@@ -687,13 +764,14 @@ async function loadHealth(){
       url = page["@odata.nextLink"] || null;
     }
     healthLoaded = true;
+    fillSelect("fHealthSvc", [...new Set(allHealthIssues.map(h=>h.service).filter(Boolean))].sort());
     render();
   }catch(e){ handleGraphError(e); }
 }
 
-/* ================
+/* ========
    FILTER + RENDER
-   ================ */
+   ======== */
 function computeDormant(){
   const thr = +el("thresh").value;
   const includeNever = el("optNever").checked;
@@ -739,50 +817,85 @@ function computeStaleDevices(){
   return out;
 }
 
-/* ---------- column filters ---------- */
-/* read the current filter-bar state once per render */
-function filterState(){
-  return {
-    q:    (el("fSearch").value||"").trim().toLowerCase(),
-    type:  el("fType").value,      // "", "Member", "Guest"
-    lic:   el("fLicense").value,   // "", "yes", "no"
-    os:    el("fOs").value,        // "", os name
-    own:   el("fOwn").value,       // "", ownership
-    status:el("fStatus").value     // "", "enabled", "disabled"
-  };
-}
+/* ---------- per-view column filters ---------- */
+function v(id){ return (el(id).value||""); }
+function searchVal(){ return v("fSearch").trim().toLowerCase(); }
 function matchStatus(enabledFlag, want){
   if(!want) return true;
   const enabled = enabledFlag !== false;
   return want==="enabled" ? enabled : !enabled;
 }
+
+/* members / guests */
 function applyUserFilters(rows){
-  const f = filterState();
+  const q=searchVal(), type=v("fType"), lic=v("fLicense"), st=v("fStatus");
   return rows.filter(u=>{
-    if(f.q){
-      const hay = ((u.displayName||"")+" "+(u.userPrincipalName||"")).toLowerCase();
-      if(!hay.includes(f.q)) return false;
-    }
-    if(f.type && (u.userType||"Member")!==f.type) return false;
-    if(f.lic){
-      const h = hasLicense(u);
-      if(f.lic==="yes" && !h) return false;
-      if(f.lic==="no"  &&  h) return false;
-    }
-    if(!matchStatus(u.accountEnabled, f.status)) return false;
+    if(q && !((u.displayName||"")+" "+(u.userPrincipalName||"")).toLowerCase().includes(q)) return false;
+    if(type && (u.userType||"Member")!==type) return false;
+    if(lic){ const h=hasLicense(u); if(lic==="yes"&&!h) return false; if(lic==="no"&&h) return false; }
+    if(!matchStatus(u.accountEnabled, st)) return false;
     return true;
   });
 }
+/* devices */
 function applyDeviceFilters(rows){
-  const f = filterState();
+  const q=searchVal(), os=v("fOs"), own=v("fOwn"), st=v("fStatus");
   return rows.filter(d=>{
-    if(f.q){
-      const hay = ((d.displayName||"")+" "+(d.operatingSystem||"")+" "+(d.operatingSystemVersion||"")).toLowerCase();
-      if(!hay.includes(f.q)) return false;
-    }
-    if(f.os  && (d.operatingSystem||"")!==f.os)  return false;
-    if(f.own && (d.deviceOwnership||"")!==f.own) return false;
-    if(!matchStatus(d.accountEnabled, f.status)) return false;
+    if(q && !((d.displayName||"")+" "+(d.operatingSystem||"")+" "+(d.operatingSystemVersion||"")).toLowerCase().includes(q)) return false;
+    if(os && (d.operatingSystem||"")!==os) return false;
+    if(own && (d.deviceOwnership||"")!==own) return false;
+    if(!matchStatus(d.accountEnabled, st)) return false;
+    return true;
+  });
+}
+/* risky users */
+function applyRiskyFilters(rows){
+  const q=searchVal(), lvl=v("fRisk"), st=v("fRiskState");
+  return rows.filter(r=>{
+    if(q && !((r.userDisplayName||"")+" "+(r.userPrincipalName||"")).toLowerCase().includes(q)) return false;
+    if(lvl && (r.riskLevel||"")!==lvl) return false;
+    if(st && (r.riskState||"")!==st) return false;
+    return true;
+  });
+}
+/* mfa coverage */
+function applyMfaFilters(rows){
+  const q=searchVal(), ty=v("fMfaType"), reg=v("fMfaReg"), cap=v("fMfaCap"), sspr=v("fSspr");
+  return rows.filter(r=>{
+    if(q && !((r.userDisplayName||"")+" "+(r.userPrincipalName||"")).toLowerCase().includes(q)) return false;
+    if(ty && (r.userType||"")!==ty) return false;
+    if(reg && yn(r.isMfaRegistered)!==reg) return false;
+    if(cap && yn(r.isMfaCapable)!==cap) return false;
+    if(sspr && yn(r.isSsprRegistered)!==sspr) return false;
+    return true;
+  });
+}
+/* conditional access */
+function applyCaFilters(rows){
+  const q=searchVal(), st=v("fCaState");
+  return rows.filter(p=>{
+    if(q && !(p.displayName||"").toLowerCase().includes(q)) return false;
+    if(st && (p.state||"")!==st) return false;
+    return true;
+  });
+}
+/* licenses */
+function applyLicenseFilters(rows){
+  const q=searchVal(), st=v("fLicStatus");
+  return rows.filter(s=>{
+    if(q && !(s.skuPartNumber||"").toLowerCase().includes(q)) return false;
+    if(st){ const over=(s.consumedUnits||0) > (s.prepaidUnits?.enabled||0); if(st==="over"&&!over) return false; if(st==="ok"&&over) return false; }
+    return true;
+  });
+}
+/* service health */
+function applyHealthFilters(rows){
+  const q=searchVal(), svc=v("fHealthSvc"), cls=v("fHealthClass"), st=v("fHealthStatus");
+  return rows.filter(h=>{
+    if(q && !((h.title||"")+" "+(h.service||"")).toLowerCase().includes(q)) return false;
+    if(svc && (h.service||"")!==svc) return false;
+    if(cls && (h.classification||"")!==cls) return false;
+    if(st){ const resolved=!!h.isResolved; if(st==="resolved"&&!resolved) return false; if(st==="active"&&resolved) return false; }
     return true;
   });
 }
@@ -796,22 +909,35 @@ function populateDeviceFilters(){
 }
 function fillSelect(id, values){
   const sel = el(id); const cur = sel.value;
-  sel.innerHTML = `<option value="">All</option>` + values.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  sel.innerHTML = `<option value="">All</option>` + values.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
   if(values.includes(cur)) sel.value = cur;
 }
 
-/* show the filter controls that apply to the active tab */
-function syncFilterBar(){
-  const isDevice = tab==="device";
-  const info = isInfoTab();
-  el("wrapType").classList.toggle("hide", isDevice || info);
-  el("wrapLicense").classList.toggle("hide", isDevice || info);
-  el("wrapOs").classList.toggle("hide", !isDevice);
-  el("wrapOwn").classList.toggle("hide", !isDevice);
-  el("wrapStatus").classList.toggle("hide", info);
-  el("fSearch").placeholder = isDevice ? "device name or OS…" : (info ? "search…" : "name or UPN…");
+/* which filter controls each view shows (only its own fields) */
+const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatus","wrapRisk","wrapRiskState",
+  "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
+  "wrapHealthSvc","wrapHealthClass","wrapHealthStatus"];
+const FILTERS_BY_TAB = {
+  member:["wrapType","wrapLicense","wrapStatus"],
+  guest: ["wrapType","wrapLicense","wrapStatus"],
+  device:["wrapOs","wrapOwn","wrapStatus"],
+  risky: ["wrapRisk","wrapRiskState"],
+  mfa:   ["wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr"],
+  ca:    ["wrapCaState"],
+  license:["wrapLicStatus"],
+  health:["wrapHealthSvc","wrapHealthClass","wrapHealthStatus"]
+};
+const SEARCH_PLACEHOLDER = {
+  device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
+  ca:"policy name…", license:"SKU…", health:"issue or service…"
+};
 
-  // dormant-only controls (threshold, never/disabled, the select-all/delete action bar)
+function syncFilterBar(){
+  const info = isInfoTab();
+  const show = FILTERS_BY_TAB[tab] || [];
+  ALL_FILTER_WRAPS.forEach(id=> el(id).classList.toggle("hide", !show.includes(id)));
+  el("fSearch").placeholder = SEARCH_PLACEHOLDER[tab] || "name or UPN…";
+  // dormant-only chrome: threshold, never/disabled options, the select-all/delete action bar, KPI cards
   el("threshField").classList.toggle("hide", info);
   el("optionsField").classList.toggle("hide", info);
   el("actionbar").classList.toggle("hide", info);
@@ -866,11 +992,12 @@ function setInfoCards(k1,v1,k2,v2,k3,v3,k4,v4){
   el("infoCard4k").textContent=k4; el("infoCard4v").textContent=v4;
 }
 function entraLink(path){ return `https://entra.microsoft.com/#view/${path}`; }
-function searchVal(){ return (el("fSearch").value||"").trim().toLowerCase(); }
+function setFilterCount(shown, total){
+  el("filterCount").innerHTML = shown===total ? `<b>${total}</b> rows` : `<b>${shown}</b> of ${total} rows`;
+}
 
 function renderRisky(){
-  const q = searchVal();
-  view = allRisky.filter(r => !q || ((r.userDisplayName||"")+" "+(r.userPrincipalName||"")).toLowerCase().includes(q));
+  view = applyRiskyFilters(allRisky);
   setFilterCount(view.length, allRisky.length);
   const high = allRisky.filter(r=>r.riskLevel==="high").length;
   const med  = allRisky.filter(r=>r.riskLevel==="medium").length;
@@ -878,7 +1005,7 @@ function renderRisky(){
   setInfoCards("Total flagged", allRisky.length, "High risk", high, "Medium risk", med, "Low risk", low);
   const tb = el("tbody");
   if(!view.length){
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">${allRisky.length?"No matches":"No risky users"}</div>${allRisky.length?"No rows match the current search.":"Identity Protection has not flagged any users — or this tenant lacks Entra ID P2, which the risk detail requires."}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">${allRisky.length?"No matches":"No risky users"}</div>${allRisky.length?"No rows match the current filters.":"Identity Protection has not flagged any users — or this tenant lacks Entra ID P2, which the risk detail requires."}</td></tr>`;
     return;
   }
   tb.innerHTML = view.map(r=>{
@@ -896,8 +1023,7 @@ function renderRisky(){
 }
 
 function renderMfa(){
-  const q = searchVal();
-  view = allRegDetails.filter(r => !q || ((r.userDisplayName||"")+" "+(r.userPrincipalName||"")).toLowerCase().includes(q));
+  view = applyMfaFilters(allRegDetails);
   setFilterCount(view.length, allRegDetails.length);
   const total = allRegDetails.length;
   const registered = allRegDetails.filter(r=>r.isMfaRegistered).length;
@@ -906,7 +1032,7 @@ function renderMfa(){
   setInfoCards("Users in report", total, "MFA registered", registered, "Not registered", notRegistered, "Coverage", pct+"%");
   const tb = el("tbody");
   if(!view.length){
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">No matches</div>No rows match the current search.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="big">${allRegDetails.length?"No matches":"No data"}</div>${allRegDetails.length?"No rows match the current filters.":"The MFA registration report returned no users."}</td></tr>`;
     return;
   }
   tb.innerHTML = view.map(r=>{
@@ -923,8 +1049,7 @@ function renderMfa(){
 }
 
 function renderCa(){
-  const q = searchVal();
-  view = allCaPolicies.filter(p => !q || (p.displayName||"").toLowerCase().includes(q));
+  view = applyCaFilters(allCaPolicies);
   setFilterCount(view.length, allCaPolicies.length);
   const enabled = allCaPolicies.filter(p=>p.state==="enabled").length;
   const reportOnly = allCaPolicies.filter(p=>p.state==="enabledForReportingButNotEnforced").length;
@@ -932,7 +1057,7 @@ function renderCa(){
   setInfoCards("Total policies", allCaPolicies.length, "Enabled", enabled, "Report-only", reportOnly, "Disabled", disabled);
   const tb = el("tbody");
   if(!view.length){
-    tb.innerHTML = `<tr><td colspan="5" class="empty"><div class="big">${allCaPolicies.length?"No matches":"No Conditional Access policies"}</div>${allCaPolicies.length?"No rows match the current search.":"This tenant has none configured, or lacks the Entra ID P1/P2 license CA requires."}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="5" class="empty"><div class="big">${allCaPolicies.length?"No matches":"No Conditional Access policies"}</div>${allCaPolicies.length?"No rows match the current filters.":"This tenant has none configured, or lacks the Entra ID P1/P2 license CA requires."}</td></tr>`;
     return;
   }
   tb.innerHTML = view.map(p=>{
@@ -948,8 +1073,7 @@ function renderCa(){
 }
 
 function renderLicense(){
-  const q = searchVal();
-  view = allSkus.filter(s => !q || (s.skuPartNumber||"").toLowerCase().includes(q));
+  view = applyLicenseFilters(allSkus);
   setFilterCount(view.length, allSkus.length);
   const totalEnabled = allSkus.reduce((a,s)=>a+(s.prepaidUnits?.enabled||0),0);
   const totalConsumed = allSkus.reduce((a,s)=>a+(s.consumedUnits||0),0);
@@ -957,7 +1081,7 @@ function renderLicense(){
   setInfoCards("SKUs", allSkus.length, "Seats enabled", totalEnabled, "Seats consumed", totalConsumed, "Over-consumed SKUs", overConsumed);
   const tb = el("tbody");
   if(!view.length){
-    tb.innerHTML = `<tr><td colspan="5" class="empty"><div class="big">${allSkus.length?"No matches":"No licenses"}</div>${allSkus.length?"No rows match the current search.":"No subscribed SKUs found for this tenant."}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="5" class="empty"><div class="big">${allSkus.length?"No matches":"No licenses"}</div>${allSkus.length?"No rows match the current filters.":"No subscribed SKUs found for this tenant."}</td></tr>`;
     return;
   }
   tb.innerHTML = view.map(s=>{
@@ -974,8 +1098,7 @@ function renderLicense(){
 }
 
 function renderHealth(){
-  const q = searchVal();
-  view = allHealthIssues.filter(h => !q || (h.title||"").toLowerCase().includes(q) || (h.service||"").toLowerCase().includes(q));
+  view = applyHealthFilters(allHealthIssues);
   setFilterCount(view.length, allHealthIssues.length);
   const active = allHealthIssues.filter(h=>!h.isResolved).length;
   const advisories = allHealthIssues.filter(h=>h.classification==="advisory").length;
@@ -983,7 +1106,7 @@ function renderHealth(){
   setInfoCards("Total entries", allHealthIssues.length, "Active", active, "Advisories", advisories, "Incidents", incidents);
   const tb = el("tbody");
   if(!view.length){
-    tb.innerHTML = `<tr><td colspan="5" class="empty"><div class="big">${allHealthIssues.length?"No matches":"No service health entries"}</div>${allHealthIssues.length?"No rows match the current search.":"Nothing reported for this tenant."}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="5" class="empty"><div class="big">${allHealthIssues.length?"No matches":"No service health entries"}</div>${allHealthIssues.length?"No rows match the current filters.":"Nothing reported for this tenant."}</td></tr>`;
     return;
   }
   tb.innerHTML = view.map(h=>{
@@ -996,12 +1119,6 @@ function renderHealth(){
       <td class="num">${fmtDate(h.lastModifiedDateTime)}</td>
     </tr>`;
   }).join("");
-}
-
-function setFilterCount(shown, total){
-  el("filterCount").innerHTML = shown===total
-    ? `<b>${total}</b> rows`
-    : `<b>${shown}</b> of ${total} rows`;
 }
 
 function renderUsers(rows){
@@ -1109,19 +1226,20 @@ el("btnRefresh").onclick = ()=>{
   else { loadDirectory(); }
 };
 
-/* filter-bar wiring — re-render on any filter change */
-el("fSearch").oninput  = render;
-el("fType").onchange    = render;
-el("fLicense").onchange = render;
-el("fOs").onchange      = render;
-el("fOwn").onchange     = render;
-el("fStatus").onchange  = render;
+/* filter-bar wiring — re-render on any filter change (every view's own fields) */
+["fSearch"].forEach(id=> el(id).oninput = render);
+["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
+ "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
-  el("fSearch").value=""; el("fType").value=""; el("fLicense").value="";
-  el("fOs").value=""; el("fOwn").value=""; el("fStatus").value="";
+  ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
+   "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus"].forEach(id=> el(id).value="");
   render();
 };
 
+/* left-nav: collapsible section headers (Dormant Status / Security) */
+document.querySelectorAll(".navhead").forEach(h=> h.onclick = ()=> h.closest(".navgroup").classList.toggle("collapsed"));
+
+/* left-nav: view switching */
 const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>riskyLoaded, loadRisky],
   mfa:[()=>mfaLoaded, loadMfa], ca:[()=>caLoaded, loadCa], license:[()=>skusLoaded, loadSkus],
   health:[()=>healthLoaded, loadHealth] };
@@ -1183,9 +1301,9 @@ el("btnCsv").onclick = ()=>{
   URL.revokeObjectURL(url);
 };
 
-/* ================
+/* ========
    DELETE  (Graph $batch, chunks of 20, 429-aware)
-   ================ */
+   ======== */
 let pendingDelete = [];
 function openDeleteModal(){
   const isDevice = tab==="device";
