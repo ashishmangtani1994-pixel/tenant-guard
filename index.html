@@ -383,6 +383,27 @@
   .radar-data{transform-origin:center;transition:transform .8s cubic-bezier(.2,.7,.2,1),opacity .8s}
   @media(max-width:1100px){ .bd-top{grid-template-columns:1fr} .catbar{grid-template-columns:120px 1fr 78px} }
   @media(max-width:560px){ .cards{grid-template-columns:1fr 1fr} .bd-kpi-grid{grid-template-columns:1fr 1fr} }
+
+  /* ---- scheduled report modal ---- */
+  .modal.sched{max-width:600px;max-height:92vh;overflow:auto}
+  .schmuted{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .schtoggle{display:flex;align-items:center;gap:10px;font-weight:600;margin-bottom:16px;cursor:pointer;
+    background:var(--panel-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 14px}
+  .schtoggle input{width:16px;height:16px;accent-color:var(--accent)}
+  .schgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+  .schf{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+  .schf label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .schf input,.schf select{background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:9px 11px;font-family:inherit;font-size:13px;width:100%}
+  .schf input:focus,.schf select:focus{outline:none;border-color:var(--accent-dim)}
+  .schcols{display:grid;grid-template-columns:1fr 1fr;gap:7px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 13px}
+  .schcols label{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0;font-weight:400;cursor:pointer}
+  .schcols input{width:15px;height:15px;accent-color:var(--accent)}
+  .schnote{font-size:12px;color:var(--muted);background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);
+    border-radius:8px;padding:10px 12px;margin:6px 0 10px;line-height:1.45}
+  .schstatus{font-size:12.5px;color:var(--muted);margin-bottom:6px;min-height:16px}
+  .schstatus b{color:var(--text)}
+  @media(max-width:560px){ .schgrid,.schcols{grid-template-columns:1fr} }
   .toast.err{border-color:var(--danger-dim);color:#f3a9ab}
   .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--border);
     border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
@@ -563,6 +584,7 @@
           </div>
         </div>
         <span style="flex:1"></span>
+        <button class="btn glow hide" id="btnSchedule">📅 Schedule report</button>
         <button class="btn glow hide" id="btnSummary">✦ Export summary</button>
         <button class="btn" id="btnRefresh">↻ Reload</button>
         <button class="btn" id="btnCsv">Export CSV</button>
@@ -870,6 +892,48 @@
   </div>
 </div>
 
+<!-- ==== SCHEDULED REPORT MODAL ==== -->
+<div class="scrim" id="schedScrim">
+  <div class="modal sched">
+    <h2 id="schedTitle">Schedule report</h2>
+    <p id="schedLead" class="schmuted">Email this list on a recurring cadence. The console sends it for real via Microsoft Graph and prompts you when a run is due.</p>
+
+    <label class="schtoggle"><input type="checkbox" id="schEnabled" /> <span>Enable scheduled delivery</span></label>
+
+    <div class="schgrid">
+      <div class="schf"><label>Frequency</label>
+        <select id="schFreq"><option value="monthly">Monthly</option><option value="weekly">Weekly</option></select></div>
+      <div class="schf" id="schDayWrap"><label>Day of month</label>
+        <select id="schDay"></select></div>
+      <div class="schf hide" id="schWeekdayWrap"><label>Day of week</label>
+        <select id="schWeekday"><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option></select></div>
+      <div class="schf"><label>Time</label><input type="time" id="schTime" value="08:00" /></div>
+    </div>
+
+    <div class="schgrid">
+      <div class="schf"><label>Send from (sender address)</label><input type="email" id="schFrom" placeholder="reports@yourdomain.com" /></div>
+      <div class="schf"><label>Send to (comma-separated)</label><input type="text" id="schTo" placeholder="secops@yourdomain.com, it@yourdomain.com" /></div>
+    </div>
+    <div class="schf"><label>Subject</label><input type="text" id="schSubject" placeholder="Dormant accounts — monthly review" /></div>
+
+    <div class="schf">
+      <label>Columns to include</label>
+      <div class="schcols" id="schCols"></div>
+    </div>
+
+    <div class="schnote" id="schNote"></div>
+    <div class="schstatus" id="schStatus"></div>
+
+    <div class="foot" style="flex-wrap:wrap;gap:8px">
+      <span style="flex:1;min-width:120px"></span>
+      <button class="btn" id="schCancel">Cancel</button>
+      <button class="btn" id="schTest">Send test to me</button>
+      <button class="btn glow" id="schSend">Send now</button>
+      <button class="btn primary" id="schSave">Save schedule</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
 <script>
 /* ========
@@ -884,6 +948,11 @@ const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","
   "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All","DeviceLocalCredential.ReadBasic.All",
   "SecurityEvents.Read.All","Application.Read.All"];
 const WRITE_SCOPES = ["User.ReadWrite.All"];
+// Mail.Send lets the signed-in admin send the report; Mail.Send.Shared adds "send-as" a
+// shared mailbox / distribution sender the admin has rights to. Requested on demand (popup
+// consent) only when a report is actually sent — not forced on every user at sign-in.
+const SEND_SCOPES = ["Mail.Send"];
+const SEND_SHARED_SCOPES = ["Mail.Send","Mail.Send.Shared"];
 // Device.ReadWrite.All is application-only and cannot be granted to a SPA.
 // The only delegated permission that can delete a device is Directory.AccessAsUser.All —
 // broad (acts as the signed-in admin across the directory), so it's split out and only
@@ -1009,6 +1078,8 @@ function enterApp(){
   el("cfgAuthority").value = authority();
   fillPatchSettings();
   loadDirectory();
+  try{ applyDormantDeepLink(); }catch(e){}
+  try{ checkSchedulesDue(); }catch(e){}
 }
 
 /* ========
@@ -1607,6 +1678,9 @@ function syncFilterBar(){
   el("infoCards").classList.toggle("hide", !info || dash);   // dashboard replaces the plain info cards
   el("bizDash").classList.toggle("hide", !dash);
   el("btnSummary").classList.toggle("hide", !dash);
+  const dormant = (tab==="member"||tab==="guest"||tab==="device");
+  el("btnSchedule").classList.toggle("hide", !dormant);
+  if(dormant && typeof refreshScheduleBadges==="function") refreshScheduleBadges();
 }
 
 const HEAD_USERS   = `<th style="width:34px"></th><th>User</th><th>Type</th><th>License</th><th class="opt">Last interactive</th><th class="opt">Last non-interactive</th><th>Last activity</th><th>Inactive</th>`;
@@ -3375,6 +3449,248 @@ document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   if(loader && !loader[0]()){ loader[1](); } else { render(); }
 });
 el("btnSummary").onclick = ()=> exportSummary(tab==="cmmc"?"cmmc":"baseline");
+
+/* ====================================================================
+   SCHEDULED REPORTS — Dormant members / guests / Stale devices
+   Configured + persisted per list; real delivery via Graph /me/sendMail.
+   A browser app can't run server-side cron, so the schedule is honoured by
+   prompting (and one-click sending) whenever the console is opened on/after
+   a due date — and "Send now" always works on demand.
+   ==================================================================== */
+const SCHED_KIND = { member:{label:"Dormant members", noun:"dormant member accounts"},
+  guest:{label:"Dormant guests", noun:"dormant guest accounts"},
+  device:{label:"Stale devices", noun:"stale devices"} };
+function schedRows(kind){
+  if(kind==="device") return computeStaleDevices();
+  const d = computeDormant();
+  return d.filter(u => kind==="guest" ? (u.userType||"Member")==="Guest" : (u.userType||"Member")!=="Guest");
+}
+/* column catalogue per kind: key, label, default-on, getter */
+const SCHED_COLS = {
+  user:[
+    {k:"name",   l:"Display name",   on:true,  get:u=>u.displayName||"—"},
+    {k:"upn",    l:"User principal name", on:true, get:u=>u.userPrincipalName||"—"},
+    {k:"type",   l:"Type",           on:false, get:u=>u.userType||"Member"},
+    {k:"licensed",l:"Licensed",      on:true,  get:u=>hasLicense(u)?"Yes":"No"},
+    {k:"last",   l:"Last activity",  on:true,  get:u=>u._never?"Never":fmtDate(u._last)},
+    {k:"inactive",l:"Days inactive", on:true,  get:u=>u._never?"Never signed in":String(u._inactive)},
+    {k:"enabled",l:"Account enabled",on:true,  get:u=>u.accountEnabled===false?"No":"Yes"},
+    {k:"created",l:"Created",        on:false, get:u=>fmtDate(u.createdDateTime)}
+  ],
+  device:[
+    {k:"name",   l:"Device name",    on:true,  get:d=>d.displayName||"—"},
+    {k:"os",     l:"OS",             on:true,  get:d=>d.operatingSystem||"—"},
+    {k:"osv",    l:"OS version",     on:false, get:d=>d.operatingSystemVersion||"—"},
+    {k:"own",    l:"Ownership",      on:true,  get:d=>d.deviceOwnership||"—"},
+    {k:"last",   l:"Last sign-in",   on:true,  get:d=>d._never?"Never":fmtDate(d._last)},
+    {k:"inactive",l:"Days inactive", on:true,  get:d=>d._never?"Never":String(d._inactive)},
+    {k:"enabled",l:"Enabled",        on:true,  get:d=>d.accountEnabled===false?"No":"Yes"},
+    {k:"trust",  l:"Join type",      on:false, get:d=>d.trustType||"—"},
+    {k:"created",l:"Registered",     on:false, get:d=>fmtDate(d.createdDateTime)}
+  ]
+};
+const schedColsFor = kind => SCHED_COLS[kind==="device"?"device":"user"];
+function schedCfgKey(kind){ return "tenantguard.sched."+kind; }
+function loadSchedCfg(kind){
+  let c; try{ c=JSON.parse(localStorage.getItem(schedCfgKey(kind))||"null"); }catch{ c=null; }
+  const def = { enabled:false, freq:"monthly", day:1, weekday:1, time:"08:00",
+    from:(account&&account.username)||"", to:(account&&account.username)||"",
+    subject:`${SCHED_KIND[kind].label} — recurring review`,
+    cols:schedColsFor(kind).filter(c=>c.on).map(c=>c.k), lastSent:null };
+  return Object.assign(def, c||{});
+}
+function saveSchedCfg(kind, cfg){ localStorage.setItem(schedCfgKey(kind), JSON.stringify(cfg)); }
+/* next due timestamp from a config (null if disabled) */
+function nextDue(cfg, fromTs){
+  if(!cfg.enabled) return null;
+  const [hh,mm]=(cfg.time||"08:00").split(":").map(Number);
+  const base = new Date(fromTs || cfg.lastSent || Date.now());
+  let d;
+  if(cfg.freq==="weekly"){
+    d = new Date(base); d.setHours(hh,mm,0,0);
+    const target=+cfg.weekday; let add=(target-d.getDay()+7)%7;
+    if(add===0 && (cfg.lastSent && (Date.now()-cfg.lastSent)<6*864e5)) add=7;
+    if(add===0 && !cfg.lastSent && d.getTime()<=Date.now()) add=7;
+    d.setDate(d.getDate()+add);
+    if(!cfg.lastSent && d.getTime()<Date.now()) d.setDate(d.getDate()+7);
+  } else {
+    d = new Date(base.getFullYear(), base.getMonth(), 1, hh, mm, 0, 0);
+    const dom = cfg.day===-1 ? 0 : Math.min(28,+cfg.day);   // -1 => last day; cap at 28 for safety
+    if(cfg.day===-1){ d=new Date(base.getFullYear(), base.getMonth()+1, 0, hh, mm,0,0); }
+    else { d.setDate(dom); }
+    if(d.getTime() <= (cfg.lastSent || (Date.now()-864e5))){   // already passed/sent this month → next month
+      const nm=new Date(d); nm.setMonth(nm.getMonth()+1);
+      if(cfg.day===-1){ d=new Date(nm.getFullYear(), nm.getMonth()+1, 0, hh, mm,0,0); }
+      else { nm.setDate(dom); d=nm; }
+    }
+  }
+  return d.getTime();
+}
+function fmtWhen(ts){ if(!ts) return "—"; const d=new Date(ts); return d.toLocaleString([], {dateStyle:"medium", timeStyle:"short"}); }
+
+/* ---- send token (popup consent so the modal isn't lost) ---- */
+async function sendToken(scopes){
+  try{ const r=await msalApp.acquireTokenSilent({scopes, account}); return r.accessToken; }
+  catch(e){
+    try{ const r=await msalApp.acquireTokenPopup({scopes, account}); return r&&r.accessToken; }
+    catch(e2){ const r=await msalApp.acquireTokenRedirect({scopes, account}); return r&&r.accessToken; }
+  }
+}
+function parseRecips(s){ return (s||"").split(/[;,]/).map(x=>x.trim()).filter(x=>/.+@.+\..+/.test(x))
+  .map(a=>({emailAddress:{address:a}})); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ---- build the branded HTML email ---- */
+function buildReportHtml(kind, rows, cfg){
+  const cols = schedColsFor(kind).filter(c=>cfg.cols.includes(c.k));
+  const portal = REDIRECT + "#dormant=" + kind;
+  const head = cols.map(c=>`<th style="text-align:left;padding:8px 10px;border-bottom:2px solid #0f172a;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#475569">${esc(c.l)}</th>`).join("");
+  const body = rows.length ? rows.slice(0,500).map((r,i)=>`<tr style="background:${i%2?'#f8fafc':'#fff'}">`+
+      cols.map(c=>`<td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#0f172a">${esc(c.get(r))}</td>`).join("")+`</tr>`).join("")
+    : `<tr><td colspan="${cols.length}" style="padding:14px;color:#16a34a">No ${esc(SCHED_KIND[kind].noun)} found 🎉</td></tr>`;
+  const more = rows.length>500 ? `<p style="color:#64748b;font-size:12px">Showing first 500 of ${rows.length}.</p>` : "";
+  return `<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:760px;margin:0 auto;color:#0f172a">
+    <div style="border-bottom:3px solid #0f172a;padding-bottom:14px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:baseline">
+      <div style="font-weight:800;letter-spacing:.06em;font-size:18px">TENANT GUARD</div>
+      <div style="color:#64748b;font-size:12px">${esc(new Date().toLocaleDateString())}</div></div>
+    <h2 style="font-size:19px;margin:0 0 4px">${esc(SCHED_KIND[kind].label)}</h2>
+    <p style="color:#475569;font-size:14px;margin:0 0 18px"><b>${rows.length}</b> ${esc(SCHED_KIND[kind].noun)} flagged for review.</p>
+    <div style="margin:0 0 20px">
+      <a href="${portal}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:600;font-size:14px">Review &amp; delete in Tenant Guard →</a>
+      <div style="color:#94a3b8;font-size:11px;margin-top:6px">Opens the ${esc(SCHED_KIND[kind].label)} list where you can select accounts and remove them.</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+    ${more}
+    <p style="color:#94a3b8;font-size:11px;border-top:1px solid #e2e8f0;padding-top:12px;margin-top:20px">
+      Automated review from Tenant Guard. Deletions are soft-deletes (recoverable for 30 days). This message was sent on a ${esc(cfg.freq)} schedule configured by your administrator.</p>
+  </div>`;
+}
+
+/* ---- actually send via Graph ---- */
+async function sendReport(kind, cfg, overrideTo){
+  const rows = schedRows(kind);
+  const toList = overrideTo ? parseRecips(overrideTo) : parseRecips(cfg.to);
+  if(!toList.length){ toast("Add at least one valid recipient.", true); return false; }
+  const me = (account&&account.username||"").toLowerCase();
+  const wantsFrom = cfg.from && cfg.from.trim().toLowerCase()!==me;
+  const message = {
+    subject: (cfg.subject||SCHED_KIND[kind].label) + " — " + new Date().toLocaleDateString(),
+    body: { contentType:"HTML", content: buildReportHtml(kind, rows, cfg) },
+    toRecipients: toList
+  };
+  if(wantsFrom) message.from = { emailAddress:{ address: cfg.from.trim() } };  // send-as (needs Mail.Send.Shared + rights)
+  try{
+    const tok = await sendToken(wantsFrom ? SEND_SHARED_SCOPES : SEND_SCOPES);
+    if(!tok){ toast("Couldn't acquire send permission.", true); return false; }
+    const r = await fetch(`${GRAPH}/me/sendMail`, { method:"POST",
+      headers:{ Authorization:"Bearer "+tok, "Content-Type":"application/json" },
+      body: JSON.stringify({ message, saveToSentItems:true }) });
+    if(!r.ok){
+      const t = await r.text();
+      if(r.status===403 && wantsFrom){ toast("Send failed: you don't have send-as rights on "+cfg.from+". Use your own address or grant SendAs.", true); }
+      else { toast("Send failed ("+r.status+"). "+(t.slice(0,140)||""), true); }
+      return false;
+    }
+    return true;
+  }catch(e){ toast("Send failed: "+(e.message||"unknown error").slice(0,140), true); return false; }
+}
+
+/* ---- modal ---- */
+let schedKind = "member";
+function dormantKind(){ return (tab==="guest")?"guest":(tab==="device")?"device":"member"; }
+function openSchedule(){
+  schedKind = dormantKind();
+  const k = schedKind, cfg = loadSchedCfg(k);
+  el("schedTitle").textContent = `Schedule — ${SCHED_KIND[k].label}`;
+  el("schEnabled").checked = !!cfg.enabled;
+  el("schFreq").value = cfg.freq;
+  // day-of-month options 1..28 + last day
+  el("schDay").innerHTML = Array.from({length:28},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join("") + `<option value="-1">Last day</option>`;
+  el("schDay").value = String(cfg.day);
+  el("schWeekday").value = String(cfg.weekday);
+  el("schTime").value = cfg.time;
+  el("schFrom").value = cfg.from;
+  el("schTo").value = cfg.to;
+  el("schSubject").value = cfg.subject;
+  // columns
+  el("schCols").innerHTML = schedColsFor(k).map(c=>
+    `<label><input type="checkbox" data-col="${c.k}" ${cfg.cols.includes(c.k)?"checked":""}> ${esc(c.l)}</label>`).join("");
+  syncSchedFreq();
+  el("schNote").innerHTML = `Sending uses Microsoft Graph <b>Mail.Send</b> — you'll be asked to consent once. To send from a different address (e.g. <i>reports@yourdomain.com</i>) you need <b>Mail.Send.Shared</b> and send-as rights on that mailbox; otherwise leave it as your own address.`;
+  updateSchedStatus(k, cfg);
+  el("schedScrim").classList.add("show");
+}
+function syncSchedFreq(){
+  const monthly = el("schFreq").value==="monthly";
+  el("schDayWrap").classList.toggle("hide", !monthly);
+  el("schWeekdayWrap").classList.toggle("hide", monthly);
+}
+function readSchedForm(){
+  const k=schedKind, prev=loadSchedCfg(k);
+  return { enabled: el("schEnabled").checked, freq: el("schFreq").value,
+    day:+el("schDay").value, weekday:+el("schWeekday").value, time: el("schTime").value,
+    from: el("schFrom").value.trim(), to: el("schTo").value.trim(), subject: el("schSubject").value.trim(),
+    cols: [...el("schCols").querySelectorAll("input:checked")].map(i=>i.dataset.col),
+    lastSent: prev.lastSent };
+}
+function updateSchedStatus(k, cfg){
+  const rows = (allUsers.length||allDevices.length) ? schedRows(k).length : null;
+  const nd = nextDue(cfg);
+  el("schStatus").innerHTML =
+    (rows!=null?`Current list: <b>${rows}</b> ${esc(SCHED_KIND[k].noun)}. `:"") +
+    (cfg.lastSent?`Last sent <b>${fmtWhen(cfg.lastSent)}</b>. `:"Never sent. ") +
+    (cfg.enabled && nd?`Next due <b>${fmtWhen(nd)}</b>.`:"Schedule off.");
+}
+el("schFreq").onchange = syncSchedFreq;
+el("schCancel").onclick = ()=> el("schedScrim").classList.remove("show");
+el("schedScrim").onclick = e=>{ if(e.target===el("schedScrim")) el("schedScrim").classList.remove("show"); };
+el("schSave").onclick = ()=>{
+  const cfg = readSchedForm(); saveSchedCfg(schedKind, cfg); updateSchedStatus(schedKind, cfg);
+  toast(cfg.enabled ? `Schedule saved — next due ${fmtWhen(nextDue(cfg))}.` : "Schedule saved (disabled).");
+  refreshScheduleBadges();
+};
+el("schSend").onclick = async ()=>{
+  const cfg = readSchedForm(); saveSchedCfg(schedKind, cfg);
+  el("schSend").disabled=true; el("schSend").textContent="Sending…";
+  const ok = await sendReport(schedKind, cfg);
+  el("schSend").disabled=false; el("schSend").textContent="Send now";
+  if(ok){ cfg.lastSent=Date.now(); saveSchedCfg(schedKind, cfg); updateSchedStatus(schedKind, cfg);
+    toast(`Report sent to ${parseRecips(cfg.to).length} recipient(s).`); refreshScheduleBadges(); }
+};
+el("schTest").onclick = async ()=>{
+  const cfg = readSchedForm();
+  el("schTest").disabled=true; el("schTest").textContent="Sending…";
+  const ok = await sendReport(schedKind, cfg, (account&&account.username)||cfg.from);
+  el("schTest").disabled=false; el("schTest").textContent="Send test to me";
+  if(ok) toast("Test report sent to your mailbox.");
+};
+
+/* due-on-open detection: prompt once per due schedule */
+function checkSchedulesDue(){
+  let pending=[];
+  for(const k of Object.keys(SCHED_KIND)){
+    const cfg=loadSchedCfg(k); if(!cfg.enabled) continue;
+    const nd=nextDue(cfg); if(nd && Date.now()>=nd) pending.push(k);
+  }
+  if(pending.length){
+    const names=pending.map(k=>SCHED_KIND[k].label).join(", ");
+    toast(`📅 Scheduled report due: ${names}. Open the tab → Schedule report → Send now.`);
+  }
+  refreshScheduleBadges();
+}
+function refreshScheduleBadges(){
+  // tiny "•" indicator on the Schedule button when the current tab's schedule is enabled
+  const k=dormantKind(); const cfg=loadSchedCfg(k);
+  const b=el("btnSchedule"); if(!b) return;
+  b.textContent = cfg.enabled ? "📅 Schedule report ●" : "📅 Schedule report";
+}
+el("btnSchedule").onclick = openSchedule;
+
+/* deep link from the email: #dormant=member|guest|device opens that tab */
+function applyDormantDeepLink(){
+  const m=/[#&]dormant=(member|guest|device)/.exec(location.hash||"");
+  if(m){ const t=document.querySelector(`.tab[data-tab="${m[1]}"]`); if(t){ t.click(); history.replaceState(null,"",location.pathname); } }
+}
 
 el("btnSettings").onclick = ()=>{
   const showing = el("settingsPanel").classList.toggle("hide");
