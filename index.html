@@ -15,7 +15,6 @@
     --text:#E8EEF5; --muted:#A6B2C2; --faint:#6E7B8A;
     --accent:#00E4BC; --accent-dim:#0C6F60;     /* brand / info — never a status */
     --warn:#F5B53B; --danger:#FF5B66; --danger-dim:#7E2A30; --ok:#2FD98B;
-    --on-accent:#06201E;                          /* readable text on an accent fill */
     --radius:10px; --mono:'JetBrains Mono',monospace;
   }
   *{box-sizing:border-box}
@@ -32,7 +31,7 @@
   header.topbar{
     display:flex;align-items:center;gap:14px;
     padding:14px 22px;border-bottom:1px solid var(--border);
-    position:sticky;top:0;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);z-index:20;
+    position:sticky;top:0;background:rgba(14,17,23,.92);backdrop-filter:blur(8px);z-index:20;
   }
   .brand{display:flex;align-items:center;gap:11px}
   .glyph{width:30px;height:30px;flex:0 0 auto}
@@ -49,7 +48,7 @@
   }
   .btn:hover{border-color:var(--accent-dim)}
   .btn:disabled{opacity:.4;cursor:not-allowed}
-  .btn.primary{background:var(--accent);color:var(--on-accent);border-color:transparent;font-weight:600}
+  .btn.primary{background:var(--accent);color:#06201E;border-color:transparent;font-weight:600}
   .btn.primary:hover{background:#63ded2}
   .btn.danger{background:var(--danger);color:#fff;border-color:transparent;font-weight:600}
   .btn.danger:hover{background:#f05a5e}
@@ -109,18 +108,8 @@
   .filterbar .field input[type=text]:focus,
   .filterbar .field select:focus{outline:none;border-color:var(--accent-dim)}
   .filterbar .grow{flex:1}
-  .filterbar .count{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;
-    color:var(--muted);white-space:nowrap;border:1px solid var(--border);border-radius:999px;padding:5px 11px;
-    background:linear-gradient(180deg,color-mix(in srgb,var(--text) 5%,transparent),transparent),var(--panel-2);
-    transition:color .2s ease,border-color .2s ease,box-shadow .2s ease}
-  .filterbar .count:empty{display:none}
-  .filterbar .count::before{content:"";width:6px;height:6px;border-radius:50%;flex:0 0 auto;background:var(--faint);
-    box-shadow:0 0 0 3px color-mix(in srgb,var(--faint) 18%,transparent)}
-  .filterbar .count b{color:var(--text);font-weight:600}
-  .filterbar .count.filtered{color:var(--accent);border-color:var(--accent-dim);
-    box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent),0 6px 18px -10px color-mix(in srgb,var(--accent) 50%,transparent)}
-  .filterbar .count.filtered b{color:var(--accent)}
-  .filterbar .count.filtered::before{background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+  .filterbar .count{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+  .filterbar .count b{color:var(--text)}
   /* ---------- summary cards ---------- */
   .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
   .cards.info4{grid-template-columns:repeat(4,1fr)}
@@ -275,131 +264,6 @@
     --glow-accent:0 0 0 1px rgba(0,228,188,.35),0 10px 30px -10px rgba(0,228,188,.32);
     --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:22px;
   }
-
-  /* ======================================================================
-     THEMES — each block overrides the design tokens above. Default
-     (Midnight) needs no block; the base :root values already define it.
-     ====================================================================== */
-  :root[data-theme="nord"]{
-    --bg:#2E3440; --panel:#353C4A; --panel-2:#3B4252; --surface-3:#434C5E;
-    --border:#434C5E; --border-2:#4C566A;
-    --text:#ECEFF4; --muted:#C2C9D6; --faint:#8893A5;
-    --accent:#88C0D0; --accent-dim:#3E6A74; --on-accent:#16202A;
-    --warn:#EBCB8B; --danger:#BF616A; --danger-dim:#5E3034; --ok:#A3BE8C;
-    --grad-accent:linear-gradient(135deg,#88C0D0 0%,#81A1C1 100%);
-    --pass:#A3BE8C; --pass-dim:rgba(163,190,140,.16); --pass-deep:#2b3327;
-    --fail:#BF616A; --fail-dim:rgba(191,97,106,.16); --fail-deep:#3a2528;
-    --manual:#EBCB8B; --manual-dim:rgba(235,203,139,.16); --manual-deep:#3a3320;
-    --info:#81A1C1; --info-dim:rgba(129,161,193,.16);
-  }
-  :root[data-theme="dracula"]{
-    --bg:#282A36; --panel:#2F3242; --panel-2:#363A4C; --surface-3:#44475A;
-    --border:#3C4156; --border-2:#44475A;
-    --text:#F8F8F2; --muted:#C9CBE0; --faint:#7C82A8;
-    --accent:#BD93F9; --accent-dim:#574B7E; --on-accent:#1E1430;
-    --warn:#FFB86C; --danger:#FF5555; --danger-dim:#5E2A2A; --ok:#50FA7B;
-    --grad-accent:linear-gradient(135deg,#BD93F9 0%,#FF79C6 100%);
-    --pass:#50FA7B; --pass-dim:rgba(80,250,123,.15); --pass-deep:#143021;
-    --fail:#FF5555; --fail-dim:rgba(255,85,85,.16); --fail-deep:#3a1717;
-    --manual:#FFB86C; --manual-dim:rgba(255,184,108,.16); --manual-deep:#3a2914;
-    --info:#8BE9FD; --info-dim:rgba(139,233,253,.14);
-  }
-  :root[data-theme="tokyo"]{
-    --bg:#1A1B26; --panel:#1F2233; --panel-2:#24283B; --surface-3:#2A2F45;
-    --border:#2A2F45; --border-2:#353B57;
-    --text:#C0CAF5; --muted:#9AA5CE; --faint:#6A739E;
-    --accent:#7AA2F7; --accent-dim:#2E406E; --on-accent:#0E1020;
-    --warn:#E0AF68; --danger:#F7768E; --danger-dim:#5A2A38; --ok:#9ECE6A;
-    --grad-accent:linear-gradient(135deg,#7AA2F7 0%,#BB9AF7 100%);
-    --pass:#9ECE6A; --pass-dim:rgba(158,206,106,.15); --pass-deep:#232f1c;
-    --fail:#F7768E; --fail-dim:rgba(247,118,142,.16); --fail-deep:#38202a;
-    --manual:#E0AF68; --manual-dim:rgba(224,175,104,.16); --manual-deep:#332813;
-    --info:#7DCFFF; --info-dim:rgba(125,207,255,.14);
-  }
-  :root[data-theme="solarized"]{
-    --bg:#FDF6E3; --panel:#F5EFDC; --panel-2:#EEE8D5; --surface-3:#E7E0C9;
-    --border:#E0D8BE; --border-2:#D3CBB0;
-    --text:#586E75; --muted:#657B83; --faint:#93A1A1;
-    --accent:#268BD2; --accent-dim:#93C0E2; --on-accent:#FFFFFF;
-    --warn:#B58900; --danger:#DC322F; --danger-dim:#F2C9C7; --ok:#859900;
-    --grad-accent:linear-gradient(135deg,#268BD2 0%,#2AA198 100%);
-    --grad-surface:linear-gradient(180deg,rgba(0,0,0,.02),rgba(0,0,0,0));
-    --pass:#859900; --pass-dim:rgba(133,153,0,.16); --pass-deep:#e9ecc9;
-    --fail:#DC322F; --fail-dim:rgba(220,50,47,.13); --fail-deep:#f6d5d4;
-    --manual:#B58900; --manual-dim:rgba(181,137,0,.16); --manual-deep:#efe4c2;
-    --info:#268BD2; --info-dim:rgba(38,139,210,.14);
-  }
-  :root[data-theme="github"]{
-    --bg:#FFFFFF; --panel:#F6F8FA; --panel-2:#EFF2F5; --surface-3:#E7EBEF;
-    --border:#D0D7DE; --border-2:#BFC8D0;
-    --text:#1F2328; --muted:#59636E; --faint:#818B98;
-    --accent:#0969DA; --accent-dim:#A5C8F0; --on-accent:#FFFFFF;
-    --warn:#9A6700; --danger:#CF222E; --danger-dim:#F3C5C9; --ok:#1A7F37;
-    --grad-accent:linear-gradient(135deg,#0969DA 0%,#218BFF 100%);
-    --grad-surface:linear-gradient(180deg,rgba(0,0,0,.015),rgba(0,0,0,0));
-    --pass:#1A7F37; --pass-dim:rgba(26,127,55,.13); --pass-deep:#d7f0dd;
-    --fail:#CF222E; --fail-dim:rgba(207,34,46,.12); --fail-deep:#f7d4d7;
-    --manual:#9A6700; --manual-dim:rgba(154,103,0,.14); --manual-deep:#f0e3c4;
-    --info:#0969DA; --info-dim:rgba(9,105,218,.12);
-  }
-
-  /* ---- theme picker (top bar) ---- */
-  .themepick{display:flex;align-items:center;gap:7px;margin-inline-end:8px}
-  .themepick .tplabel{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600}
-  .swatch{width:20px;height:20px;border-radius:6px;border:1px solid var(--border-2);padding:0;
-    background:linear-gradient(135deg,var(--sb) 0 50%,var(--sw) 50% 100%);
-    cursor:pointer;transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease}
-  .swatch:hover{transform:translateY(-1px);border-color:var(--accent)}
-  .swatch.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-dim)}
-
-  /* ---- license status chip (premium signal, tenant-level) ---- */
-  .licchip{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;
-    color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:6px 12px;white-space:nowrap;
-    background:linear-gradient(180deg,color-mix(in srgb,var(--text) 5%,transparent),transparent),var(--panel-2);
-    transition:color .2s ease,border-color .2s ease,box-shadow .2s ease}
-  .licchip .licdot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--faint);
-    box-shadow:0 0 0 3px color-mix(in srgb,var(--faint) 20%,transparent)}
-  .licchip.ok{color:var(--accent);border-color:var(--accent-dim);
-    box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 18%,transparent),0 6px 20px -10px color-mix(in srgb,var(--accent) 55%,transparent)}
-  .licchip.ok .licdot{background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 28%,transparent)}
-  .licchip.bad{color:var(--danger);border-color:var(--danger-dim)}
-  .licchip.bad .licdot{background:var(--danger);box-shadow:0 0 0 3px color-mix(in srgb,var(--danger) 28%,transparent)}
-
-  /* ---- grouped overview cards (Members / Guests / Devices) ---- */
-  .cards.overview{grid-template-columns:repeat(3,1fr)}
-  .card.ov{display:block;width:100%;text-align:start;font:inherit;color:inherit;padding:0;cursor:pointer}
-  .card.ov .ov-top{display:block;padding:16px 18px 13px}
-  .card.ov .k{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600}
-  .card.ov .ov-top .v{display:block;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;
-    line-height:1.1;letter-spacing:-.02em;margin-top:5px;color:var(--text)}
-  .card.ov .ov-sub{display:block;padding:11px 18px;border-top:1px solid var(--border);
-    background:color-mix(in srgb,var(--warn) 8%,transparent)}
-  .card.ov .ov-sub .v{display:block;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:21px;
-    line-height:1.1;margin-top:3px;color:var(--warn)}
-  .card.ov .ov-go{position:absolute;top:15px;inset-inline-end:16px;font-size:11px;font-weight:600;
-    color:var(--accent);opacity:0;transition:opacity .15s ease}
-  .card.ov:hover .ov-go,.card.ov.active .ov-go{opacity:1}
-  .card.ov.active{border-color:var(--accent);
-    box-shadow:0 0 0 1px var(--accent),0 14px 34px -18px color-mix(in srgb,var(--accent) 65%,transparent)}
-  .cards .card.ov.active::before{background:var(--accent)}
-
-  /* ---- premium polish ---- */
-  /* tabular figures so the count-up animation never shifts card width */
-  .card.ov .v{font-variant-numeric:tabular-nums}
-  /* one-time sheen sweep when a card becomes the active list */
-  .card.ov::after{content:"";position:absolute;inset:0;pointer-events:none;
-    background:linear-gradient(105deg,transparent 30%,color-mix(in srgb,var(--accent) 20%,transparent) 47%,transparent 64%);
-    transform:translateX(-120%);opacity:0}
-  @media (prefers-reduced-motion: no-preference){
-    .card.ov.active::after{animation:cardSheen .9s ease-out .05s 1}
-  }
-  @keyframes cardSheen{0%{transform:translateX(-120%);opacity:0}16%{opacity:1}100%{transform:translateX(120%);opacity:0}}
-  /* smooth colour crossfade while switching themes (added briefly by JS) */
-  :root.theme-anim *{transition:background-color .35s ease,color .35s ease,border-color .35s ease !important}
-  /* crisp keyboard focus rings — mouse clicks stay clean */
-  .btn:focus-visible,.tab:focus-visible,.swatch:focus-visible,.card.ov:focus-visible,
-  .navhead:focus-visible,.filterbar input:focus-visible,.filterbar select:focus-visible{
-    outline:2px solid var(--accent);outline-offset:2px}
   body{background:
     radial-gradient(1100px 520px at 80% -10%, rgba(0,228,188,.06), transparent 60%),
     radial-gradient(900px 520px at 3% 0%, rgba(90,169,255,.05), transparent 55%),
@@ -407,7 +271,7 @@
     background-attachment:fixed;}
   ::selection{background:rgba(0,228,188,.26)}
   ::-webkit-scrollbar{width:11px;height:11px}
-  ::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:8px;border:3px solid var(--bg)}
+  ::-webkit-scrollbar-thumb{background:#28323f;border-radius:8px;border:3px solid var(--bg)}
   ::-webkit-scrollbar-thumb:hover{background:#3a4756}
   /* tier-3 elevation for floating layers (modals, settings popover, tooltip) */
   .modal,.settings{background:var(--surface-3);box-shadow:var(--elev-2)}
@@ -426,7 +290,7 @@
 
   /* ---- tabs ---- */
   .tab{border-radius:7px;transition:background .15s,color .15s,box-shadow .15s}
-  .tab.active{background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 16%,transparent),color-mix(in srgb,var(--accent) 4%,transparent));box-shadow:inset 2px 0 0 var(--accent)}
+  .tab.active{background:linear-gradient(90deg,rgba(0,228,188,.16),rgba(0,228,188,.04));box-shadow:inset 2px 0 0 var(--accent)}
   .cnt.pulse{animation:badgePulse .55s ease}
   @keyframes badgePulse{0%{transform:scale(1)}35%{transform:scale(1.45);color:var(--accent)}100%{transform:scale(1)}}
 
@@ -588,18 +452,6 @@
     <div class="wordmark">TENANT GUARD<small>Entra security &amp; compliance console</small></div>
   </div>
   <div class="spacer"></div>
-  <div class="themepick" id="themepick">
-    <span class="tplabel">Theme</span>
-    <button class="swatch" type="button" data-theme="midnight"  style="--sw:#00E4BC;--sb:#0A0E14" title="Midnight"></button>
-    <button class="swatch" type="button" data-theme="nord"      style="--sw:#88C0D0;--sb:#2E3440" title="Nord"></button>
-    <button class="swatch" type="button" data-theme="dracula"   style="--sw:#BD93F9;--sb:#282A36" title="Dracula"></button>
-    <button class="swatch" type="button" data-theme="tokyo"     style="--sw:#7AA2F7;--sb:#1A1B26" title="Tokyo Night"></button>
-    <button class="swatch" type="button" data-theme="solarized" style="--sw:#268BD2;--sb:#FDF6E3" title="Solarized Light"></button>
-    <button class="swatch" type="button" data-theme="github"    style="--sw:#0969DA;--sb:#FFFFFF" title="GitHub Light"></button>
-  </div>
-  <div class="licchip" id="licChip" title="Entra ID premium licensing (P1/P2)">
-    <span class="licdot"></span><span id="licText">Checking license…</span>
-  </div>
   <div class="who" id="whoami"></div>
   <button class="btn ghost" id="btnSettings">Settings</button>
   <button class="btn ghost" id="btnSignout">Sign out</button>
@@ -980,22 +832,12 @@
         <button class="btn ghost" id="fClear">Clear filters</button>
       </div>
 
-      <div class="cards overview" id="cards">
-        <button type="button" class="card ov" data-ovtab="member" aria-label="View dormant members">
-          <span class="ov-top"><span class="k">Total members</span><span class="v" id="ovMemTotal">—</span></span>
-          <span class="ov-sub"><span class="k">Dormant members</span><span class="v" id="ovMemDorm">—</span></span>
-          <span class="ov-go">View →</span>
-        </button>
-        <button type="button" class="card ov" data-ovtab="guest" aria-label="View dormant guests">
-          <span class="ov-top"><span class="k">Total guests</span><span class="v" id="ovGuestTotal">—</span></span>
-          <span class="ov-sub"><span class="k">Dormant guests</span><span class="v" id="ovGuestDorm">—</span></span>
-          <span class="ov-go">View →</span>
-        </button>
-        <button type="button" class="card ov" data-ovtab="device" aria-label="View stale devices">
-          <span class="ov-top"><span class="k">Total devices</span><span class="v" id="ovDevTotal">—</span></span>
-          <span class="ov-sub"><span class="k">Stale devices</span><span class="v" id="ovDevStale">—</span></span>
-          <span class="ov-go">View →</span>
-        </button>
+      <div class="cards" id="cards">
+        <div class="card"><div class="k" id="dCard1k">Scanned</div><div class="v" id="dCard1v">—</div></div>
+        <div class="card warn"><div class="k" id="dCard2k">Dormant</div><div class="v" id="dCard2v">—</div></div>
+        <div class="card warn"><div class="k" id="dCard3k">Never signed in</div><div class="v" id="dCard3v">—</div></div>
+        <div class="card warn"><div class="k" id="dCard4k">Unlicensed</div><div class="v" id="dCard4v">—</div></div>
+        <div class="card accent"><div class="k">Premium / license</div><div class="v" id="cLic" style="font-size:18px;padding-top:6px">—</div></div>
       </div>
 
       <div class="cards info4 hide" id="infoCards">
@@ -1350,7 +1192,7 @@ async function loadDirectory(){
       el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Loaded ${allUsers.length} users…</td></tr>`;
     }
     licensePremium = true;
-    setLicChip("ok","Entra ID P1 / P2");
+    el("cLic").textContent = "P1 / P2 ✓"; el("cLic").style.color="var(--accent)";
     render();
   }catch(e){
     handleGraphError(e);
@@ -1361,7 +1203,7 @@ function handleGraphError(e){
   let msg = "Graph request failed.";
   if(/RequestFromNonPremiumTenant/i.test(e.body||"")){
     msg = "This tenant has no Entra ID P1/P2 license — sign-in activity is unavailable.";
-    licensePremium=false; setLicChip("bad","No P1 / P2 license");
+    el("cLic").textContent="none ✗"; el("cLic").style.color="var(--danger)";
   } else if(e.status===403){ msg="403 — admin consent not granted, or you lack the directory role. Use Settings → Grant admin consent."; }
   else if(e.status===401){ msg="401 — token rejected. Try signing out and back in."; }
   else if(e.status===429){ msg="429 — Graph throttling. Wait a moment and reload."; }
@@ -2170,17 +2012,18 @@ function fillDormCards(k1,v1,k2,v2,k3,v3,k4,v4){
   el("dCard4k").textContent=k4; el("dCard4v").textContent=n(v4);
 }
 function setDormantCards(members, guests, stale){
-  const set = (id,raw) => { const e=el(id); if(e) animateCount(e, raw); };
-  const memScanned   = allUsers.filter(u=>(u.userType||"Member")!=="Guest" && u.id!==account.localAccountId).length;
-  const guestScanned = allUsers.filter(u=>(u.userType||"Member")==="Guest").length;
-  set("ovMemTotal",   memScanned);
-  set("ovMemDorm",    members.length);
-  set("ovGuestTotal", guestScanned);
-  set("ovGuestDorm",  guests.length);
-  set("ovDevTotal",   devicesLoaded ? allDevices.length : "—");
-  set("ovDevStale",   devicesLoaded ? stale.length      : "—");
-  // highlight whichever entity's table is currently open
-  document.querySelectorAll(".card.ov").forEach(c => c.classList.toggle("active", c.dataset.ovtab===tab));
+  if(tab==="member"){
+    const scanned = allUsers.filter(u=>(u.userType||"Member")!=="Guest" && u.id!==account.localAccountId).length;
+    fillDormCards("Members scanned", scanned, "Dormant members", members.length,
+      "Never signed in", members.filter(x=>x._never).length, "Unlicensed", members.filter(x=>!hasLicense(x)).length);
+  } else if(tab==="guest"){
+    const scanned = allUsers.filter(u=>(u.userType||"Member")==="Guest").length;
+    fillDormCards("Guests scanned", scanned, "Dormant guests", guests.length,
+      "Never signed in", guests.filter(x=>x._never).length, "Unlicensed", guests.filter(x=>!hasLicense(x)).length);
+  } else if(tab==="device"){
+    fillDormCards("Devices scanned", devicesLoaded ? allDevices.length : "—", "Stale devices", stale.length,
+      "Never signed in", stale.filter(x=>x._never).length, "Disabled", stale.filter(x=>x.accountEnabled===false).length);
+  }
 }
 
 function setInfoCards(k1,v1,k2,v2,k3,v3,k4,v4){
@@ -2191,9 +2034,7 @@ function setInfoCards(k1,v1,k2,v2,k3,v3,k4,v4){
 }
 function entraLink(path){ return `https://entra.microsoft.com/#view/${path}`; }
 function setFilterCount(shown, total){
-  const e = el("filterCount");
-  e.innerHTML = shown===total ? `<b>${total}</b> rows` : `<b>${shown}</b> of ${total} rows`;
-  e.classList.toggle("filtered", shown!==total);
+  el("filterCount").innerHTML = shown===total ? `<b>${total}</b> rows` : `<b>${shown}</b> of ${total} rows`;
 }
 /* set a sidebar count badge and pulse it when the value changes */
 function setCnt(id, val){
@@ -3844,63 +3685,6 @@ document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
   const loader = LOADER_BY_TAB[tab];
   if(loader && !loader[0]()){ loader[1](); } else { render(); }
 });
-
-/* ===== theme switcher — 6 palettes, remembered across reloads ===== */
-const TG_THEMES = ["midnight","nord","dracula","tokyo","solarized","github"];
-function setTheme(name){
-  if(!TG_THEMES.includes(name)) name = "midnight";
-  const root = document.documentElement;
-  let reduce=false; try{ reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
-  if(!reduce){                                  // briefly enable a colour crossfade
-    root.classList.add("theme-anim");
-    clearTimeout(root._themeT);
-    root._themeT = setTimeout(()=> root.classList.remove("theme-anim"), 420);
-  }
-  root.setAttribute("data-theme", name);
-  try{ localStorage.setItem("tg-theme", name); }catch(e){}
-  document.querySelectorAll(".swatch").forEach(s => s.classList.toggle("on", s.dataset.theme===name));
-}
-document.querySelectorAll(".swatch").forEach(s => s.addEventListener("click", ()=> setTheme(s.dataset.theme)));
-(function(){ let t="midnight"; try{ t = localStorage.getItem("tg-theme") || "midnight"; }catch(e){} setTheme(t); })();
-
-/* ===== Entra premium-license status chip ===== */
-function setLicChip(state, text){
-  const c = el("licChip"); if(!c) return;
-  c.classList.remove("ok","bad");
-  if(state==="ok" || state==="bad") c.classList.add(state);
-  const t = el("licText"); if(t) t.textContent = text;
-}
-
-/* ===== gentle count-up animation for the overview KPI numbers ===== */
-function animateCount(elm, value){
-  // non-numeric (e.g. "—"): set directly, cancel any running animation
-  if(typeof value !== "number" || !isFinite(value)){
-    if(elm._raf){ cancelAnimationFrame(elm._raf); elm._raf=null; }
-    elm.textContent = value; elm._cv = null; return;
-  }
-  let reduce=false; try{ reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
-  const from = (typeof elm._cv === "number") ? elm._cv : 0;
-  if(from === value || reduce){               // unchanged or motion-reduced: snap to value
-    if(elm._raf){ cancelAnimationFrame(elm._raf); elm._raf=null; }
-    elm.textContent = value.toLocaleString(); elm._cv = value; return;
-  }
-  elm._cv = value;
-  if(elm._raf) cancelAnimationFrame(elm._raf);
-  const dur = 650, t0 = performance.now(), ease = p => 1 - Math.pow(1 - p, 3);
-  const step = (t) => {
-    const p = Math.min(1, (t - t0) / dur);
-    elm.textContent = Math.round(from + (value - from) * ease(p)).toLocaleString();
-    if(p < 1){ elm._raf = requestAnimationFrame(step); }
-    else { elm._raf = null; elm.textContent = value.toLocaleString(); }
-  };
-  elm._raf = requestAnimationFrame(step);
-}
-
-/* ===== clickable overview cards → open the matching list ===== */
-document.querySelectorAll(".card.ov").forEach(c => c.addEventListener("click", ()=>{
-  const t = document.querySelector(`.tab[data-tab="${c.dataset.ovtab}"]`);
-  if(t) t.click();
-}));
 el("btnSummary").onclick = ()=> exportSummary(tab==="cmmc2"?"cmmc2":(tab==="cmmc"?"cmmc":"baseline"));
 
 /* ====================================================================
