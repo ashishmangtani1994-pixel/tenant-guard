@@ -9,10 +9,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   :root{
-    --bg:#0E1117; --panel:#161B22; --panel-2:#1B222C; --border:#232A33;
-    --text:#E6EDF3; --muted:#8B98A5; --faint:#5B6671;
-    --accent:#4DD0C4; --accent-dim:#2C7A74;
-    --warn:#E0A500; --danger:#E5484D; --danger-dim:#7A2A2C; --ok:#3FB950;
+    /* elevation: 4 tiers — canvas → surface-1 → surface-2 → surface-3 */
+    --bg:#0A0E14; --panel:#11161F; --panel-2:#161D28; --surface-3:#1C2430;
+    --border:#222B38; --border-2:#2C3744;
+    --text:#E8EEF5; --muted:#A6B2C2; --faint:#6E7B8A;
+    --accent:#00E4BC; --accent-dim:#0C6F60;     /* brand / info — never a status */
+    --warn:#F5B53B; --danger:#FF5B66; --danger-dim:#7E2A30; --ok:#2FD98B;
     --radius:10px; --mono:'JetBrains Mono',monospace;
   }
   *{box-sizing:border-box}
@@ -137,7 +139,7 @@
   /* keep the identity column from blowing out the table width on long external (#EXT#) UPNs */
   tbody td:nth-child(2){max-width:340px}
   .pill{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;letter-spacing:.03em}
-  .pill.member{background:rgba(77,208,196,.12);color:var(--accent)}
+  .pill.member{background:rgba(0,228,188,.12);color:var(--accent)}
   .pill.guest{background:rgba(224,165,0,.13);color:var(--warn)}
   .pill.off{background:rgba(139,152,165,.12);color:var(--muted)}
   .pill.lic-yes{background:rgba(63,185,80,.14);color:var(--ok)}
@@ -250,26 +252,30 @@
      ===============  PREMIUM REDESIGN — design system + dashboard  =========
      ======================================================================== */
   :root{
-    --pass:#34D399; --pass-dim:rgba(52,211,153,.14); --pass-deep:#0c2e25;
-    --fail:#F87171; --fail-dim:rgba(248,113,113,.14); --fail-deep:#3a1416;
-    --manual:#FBBF24; --manual-dim:rgba(251,191,36,.13); --manual-deep:#3a2c08;
-    --info:#60A5FA; --info-dim:rgba(96,165,250,.14);
-    --grad-accent:linear-gradient(135deg,#5BE0D3 0%,#2C9C93 100%);
-    --grad-surface:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0));
-    --elev-1:0 1px 2px rgba(0,0,0,.35);
-    --elev-2:0 10px 34px -8px rgba(0,0,0,.55);
-    --glow-accent:0 0 0 1px rgba(77,208,196,.35),0 8px 28px -10px rgba(77,208,196,.35);
+    /* STATUS = signal. Isolated from the cyan brand so an at-risk state can never look calm. */
+    --pass:#2FD98B; --pass-dim:rgba(47,217,139,.15); --pass-deep:#0c3024;     /* enforced / protected */
+    --fail:#FF5B66; --fail-dim:rgba(255,91,102,.15); --fail-deep:#3c1518;     /* exposure */
+    --manual:#F5B53B; --manual-dim:rgba(245,181,59,.14); --manual-deep:#3a2c08; /* partial / report-only */
+    --info:#5AA9FF; --info-dim:rgba(90,169,255,.14);                          /* neutral / Secure Score */
+    --grad-accent:linear-gradient(135deg,#00E4BC 0%,#0BA88E 100%);
+    --grad-surface:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,0));
+    --elev-1:0 1px 2px rgba(0,0,0,.5);
+    --elev-2:0 14px 40px -10px rgba(0,0,0,.65);
+    --glow-accent:0 0 0 1px rgba(0,228,188,.35),0 10px 30px -10px rgba(0,228,188,.32);
     --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:22px;
   }
   body{background:
-    radial-gradient(1100px 520px at 78% -8%, rgba(77,208,196,.07), transparent 60%),
-    radial-gradient(900px 500px at 5% 0%, rgba(96,165,250,.05), transparent 55%),
+    radial-gradient(1100px 520px at 80% -10%, rgba(0,228,188,.06), transparent 60%),
+    radial-gradient(900px 520px at 3% 0%, rgba(90,169,255,.05), transparent 55%),
     var(--bg);
     background-attachment:fixed;}
-  ::selection{background:rgba(77,208,196,.28)}
+  ::selection{background:rgba(0,228,188,.26)}
   ::-webkit-scrollbar{width:11px;height:11px}
-  ::-webkit-scrollbar-thumb{background:#2a323d;border-radius:8px;border:3px solid var(--bg)}
-  ::-webkit-scrollbar-thumb:hover{background:#3a444f}
+  ::-webkit-scrollbar-thumb{background:#28323f;border-radius:8px;border:3px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:#3a4756}
+  /* tier-3 elevation for floating layers (modals, settings popover, tooltip) */
+  .modal,.settings{background:var(--surface-3);box-shadow:var(--elev-2)}
+  #tooltip{background:var(--surface-3)}
 
   /* headings / numerals */
   .display{font-family:'Space Grotesk',sans-serif;font-weight:700;letter-spacing:-.01em}
@@ -278,13 +284,13 @@
   .btn{border-radius:var(--r-sm);transition:border-color .16s,background .16s,box-shadow .16s,transform .08s}
   .btn:hover{box-shadow:var(--elev-1)}
   .btn:active{transform:translateY(1px)}
-  .btn.primary{background:var(--grad-accent);box-shadow:0 6px 18px -8px rgba(77,208,196,.6)}
+  .btn.primary{background:var(--grad-accent);box-shadow:0 6px 18px -8px rgba(0,228,188,.6)}
   .btn.glow{border-color:var(--accent-dim);color:var(--accent)}
   .btn.glow:hover{box-shadow:var(--glow-accent)}
 
   /* ---- tabs ---- */
   .tab{border-radius:7px;transition:background .15s,color .15s,box-shadow .15s}
-  .tab.active{background:linear-gradient(90deg,rgba(77,208,196,.16),rgba(77,208,196,.04));box-shadow:inset 2px 0 0 var(--accent)}
+  .tab.active{background:linear-gradient(90deg,rgba(0,228,188,.16),rgba(0,228,188,.04));box-shadow:inset 2px 0 0 var(--accent)}
   .cnt.pulse{animation:badgePulse .55s ease}
   @keyframes badgePulse{0%{transform:scale(1)}35%{transform:scale(1.45);color:var(--accent)}100%{transform:scale(1)}}
 
@@ -327,7 +333,7 @@
   tbody tr[data-accent="low"] td:first-child{border-left-color:var(--info)}
   tbody tr[data-accent="pass"] td:first-child{border-left-color:var(--pass)}
   tbody tr[data-accent="manual"] td:first-child{border-left-color:var(--faint)}
-  tbody tr.clickrow:hover{background:linear-gradient(90deg,rgba(77,208,196,.06),transparent)}
+  tbody tr.clickrow:hover{background:linear-gradient(90deg,rgba(0,228,188,.06),transparent)}
   a.rowlink{display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-size:11px;font-family:var(--mono);text-decoration:none;opacity:.8}
   a.rowlink:hover{opacity:1;text-decoration:underline}
 
@@ -433,8 +439,8 @@
 <!-- glyph: a fading concentric "pulse" = decaying sign-in signal -->
 <svg width="0" height="0" style="position:absolute"><defs>
   <symbol id="glyph" viewBox="0 0 32 32">
-    <circle cx="16" cy="16" r="3.4" fill="#4DD0C4"/>
-    <circle cx="16" cy="16" r="7.5" fill="none" stroke="#4DD0C4" stroke-width="1.7" opacity=".65"/>
+    <circle cx="16" cy="16" r="3.4" fill="#00E4BC"/>
+    <circle cx="16" cy="16" r="7.5" fill="none" stroke="#00E4BC" stroke-width="1.7" opacity=".65"/>
     <circle cx="16" cy="16" r="11.5" fill="none" stroke="#E0A500" stroke-width="1.5" opacity=".4" stroke-dasharray="3 4"/>
     <circle cx="16" cy="16" r="15" fill="none" stroke="#E5484D" stroke-width="1.3" opacity=".22" stroke-dasharray="2 5"/>
   </symbol>
@@ -2476,17 +2482,17 @@ function _animateCount(node, to, suffix){
   (function step(t){ const k=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-k,3);
     node.textContent=Math.round(to*e)+(suffix||""); if(k<1) requestAnimationFrame(step); })(t0);
 }
-function gaugeColor(p){ return p>=80?"#34D399":(p>=50?"#FBBF24":"#F87171"); }
+function gaugeColor(p){ return p>=80?"#2FD98B":(p>=50?"#F5B53B":"#FF5B66"); }
 function svgGauge(pct){
   const arc="M20,100 A80,80 0 0 1 180,100";
   return `<svg viewBox="0 0 200 116" role="img" aria-label="Overall posture ${pct}%">
     <defs><linearGradient id="ggrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#F87171"/><stop offset=".5" stop-color="#FBBF24"/><stop offset="1" stop-color="#34D399"/></linearGradient></defs>
-    <path d="${arc}" fill="none" stroke="#212a33" stroke-width="14" stroke-linecap="round"/>
+      <stop offset="0" stop-color="#FF5B66"/><stop offset=".5" stop-color="#F5B53B"/><stop offset="1" stop-color="#2FD98B"/></linearGradient></defs>
+    <path d="${arc}" fill="none" stroke="#1F2733" stroke-width="14" stroke-linecap="round"/>
     <path class="gauge-prog" d="${arc}" fill="none" stroke="url(#ggrad)" stroke-width="14" stroke-linecap="round"
       pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
     <text x="100" y="84" text-anchor="middle" class="gauge-val" fill="${gaugeColor(pct)}" id="gaugeNum">0%</text>
-    <text x="100" y="104" text-anchor="middle" font-size="10.5" fill="#5B6671">controls passing</text></svg>`;
+    <text x="100" y="104" text-anchor="middle" font-size="10.5" fill="#6E7B8A">controls passing</text></svg>`;
 }
 function animateGauge(box, pct){
   const p=box.querySelector(".gauge-prog"), n=box.querySelector("#gaugeNum");
@@ -2499,15 +2505,15 @@ function svgRadar(cats){
   const pt=(i,r)=>[cx+Math.cos(ang(i))*r, cy+Math.sin(ang(i))*r];
   let grid="", axes="", labels="";
   [0.25,0.5,0.75,1].forEach(f=>{ const pts=cats.map((_,i)=>pt(i,R*f).map(z=>z.toFixed(1)).join(",")).join(" ");
-    grid+=`<polygon points="${pts}" fill="none" stroke="#212a33" stroke-width="1"/>`; });
+    grid+=`<polygon points="${pts}" fill="none" stroke="#1F2733" stroke-width="1"/>`; });
   cats.forEach((c,i)=>{ const [x,y]=pt(i,R);
-    axes+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#212a33" stroke-width="1"/>`;
+    axes+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#1F2733" stroke-width="1"/>`;
     const [lx,ly]=pt(i,R+16); const anch=Math.abs(lx-cx)<10?"middle":(lx>cx?"start":"end");
-    labels+=`<text x="${lx.toFixed(1)}" y="${(ly+(ly<cy?-1:9)).toFixed(1)}" text-anchor="${anch}" font-size="10.5" font-weight="600" fill="#9aa6b2">${escapeHtml(c.label)}</text>`;
-    labels+=`<text x="${lx.toFixed(1)}" y="${(ly+(ly<cy?11:21)).toFixed(1)}" text-anchor="${anch}" font-size="9.5" fill="#5B6671">${Math.round(c.pct)}%</text>`; });
+    labels+=`<text x="${lx.toFixed(1)}" y="${(ly+(ly<cy?-1:9)).toFixed(1)}" text-anchor="${anch}" font-size="10.5" font-weight="600" fill="#A6B2C2">${escapeHtml(c.label)}</text>`;
+    labels+=`<text x="${lx.toFixed(1)}" y="${(ly+(ly<cy?11:21)).toFixed(1)}" text-anchor="${anch}" font-size="9.5" fill="#6E7B8A">${Math.round(c.pct)}%</text>`; });
   const data=cats.map((c,i)=>pt(i,R*Math.max(0,Math.min(1,c.pct/100))).map(z=>z.toFixed(1)).join(",")).join(" ");
   return `<svg viewBox="0 0 280 280">${grid}${axes}
-    <polygon class="radar-data" points="${data}" fill="rgba(77,208,196,.20)" stroke="#4DD0C4" stroke-width="2" style="transform:scale(.04);opacity:0"/>${labels}</svg>`;
+    <polygon class="radar-data" points="${data}" fill="rgba(0,228,188,.20)" stroke="#00E4BC" stroke-width="2" style="transform:scale(.04);opacity:0"/>${labels}</svg>`;
 }
 function animateRadar(box){ const g=box.querySelector(".radar-data"); if(g) requestAnimationFrame(()=>{ g.style.transform="scale(1)"; g.style.opacity="1"; }); }
 function renderSevStrip(sev){
@@ -2538,8 +2544,8 @@ function svgSpark(runs){
   const min=Math.min(...runs.map(r=>r.score))-2, max=Math.max(...runs.map(r=>r.score))+2;
   const yy=s=> h-p-((s-min)/Math.max(1,max-min))*(h-2*p);
   const pts=runs.map((r,i)=>`${xs[i].toFixed(1)},${yy(r.score).toFixed(1)}`).join(" ");
-  const d=Math.round(runs[runs.length-1].score-runs[runs.length-2].score), col=d>=0?"#34D399":"#F87171";
-  return `<svg viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="#4DD0C4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  const d=Math.round(runs[runs.length-1].score-runs[runs.length-2].score), col=d>=0?"#2FD98B":"#FF5B66";
+  return `<svg viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="#00E4BC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     <circle cx="${xs[xs.length-1].toFixed(1)}" cy="${yy(runs[runs.length-1].score).toFixed(1)}" r="3" fill="${col}"/></svg>
     <div class="lbl">This run <b style="color:${col}">${d>=0?"+":""}${d}%</b> vs last</div>`;
 }
