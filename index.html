@@ -239,6 +239,13 @@
     box-shadow:0 12px 30px rgba(0,0,0,.4);display:none;max-width:90vw}
   .toast.show{display:block}
 
+  /* ---- custom hover tooltip (rendered on body, never clipped) ---- */
+  #tooltip{position:fixed;z-index:200;pointer-events:none;display:none;max-width:340px;
+    background:var(--panel-2);border:1px solid var(--border);border-radius:9px;
+    padding:9px 12px;font-size:12px;line-height:1.55;color:var(--text);white-space:pre-line;
+    box-shadow:0 12px 34px -8px rgba(0,0,0,.6);font-weight:500}
+  #tooltip.show{display:block;animation:fadeUp .12s ease}
+
   /* ========================================================================
      ===============  PREMIUM REDESIGN — design system + dashboard  =========
      ======================================================================== */
@@ -1017,6 +1024,21 @@ function entityType(){ return tab==="device" ? "device" : "user"; }
 const $ = s => document.querySelector(s);
 const el = (id) => document.getElementById(id);
 function toast(msg, isErr){ const t=el("toast"); t.textContent=msg; t.className="toast show"+(isErr?" err":""); clearTimeout(t._t); t._t=setTimeout(()=>t.className="toast",4200); }
+/* ---- custom hover tooltip: any element with [data-tip] shows a floating bubble ---- */
+const _tt = document.createElement("div"); _tt.id = "tooltip"; document.body.appendChild(_tt);
+function _ttShow(text, x, y){
+  _tt.textContent = text; _tt.classList.add("show");
+  const w = _tt.offsetWidth, h = _tt.offsetHeight;
+  let nx = x + 14, ny = y + 16;
+  if(nx + w > window.innerWidth - 8)  nx = Math.max(8, window.innerWidth - w - 8);
+  if(ny + h > window.innerHeight - 8) ny = y - h - 12;
+  _tt.style.left = nx + "px"; _tt.style.top = Math.max(8, ny) + "px";
+}
+function _ttHide(){ _tt.classList.remove("show"); }
+document.addEventListener("mouseover", e=>{ const t = e.target.closest && e.target.closest("[data-tip]"); if(t) _ttShow(t.getAttribute("data-tip"), e.clientX, e.clientY); });
+document.addEventListener("mousemove", e=>{ if(!_tt.classList.contains("show")) return; const t = e.target.closest && e.target.closest("[data-tip]"); if(t) _ttShow(t.getAttribute("data-tip"), e.clientX, e.clientY); else _ttHide(); });
+document.addEventListener("mouseout", e=>{ const t = e.target.closest && e.target.closest("[data-tip]"); if(t) _ttHide(); });
+document.addEventListener("scroll", _ttHide, true);
 function fmtDate(d){ if(!d) return "—"; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return "—"; return dt.toISOString().slice(0,10); }
 function daysSince(d){ if(!d) return null; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return null; return Math.floor((Date.now()-dt)/864e5); }
 function yn(b){ return b ? "yes" : "no"; }
@@ -3508,8 +3530,9 @@ function renderUsers(rows){
       : `<span class="pill member">Member</span>`;
     const offPill = u.accountEnabled===false ? `&#32;<span class="pill off">disabled</span>` : "";
     const lns = licenseNames(u);
+    const licTip = lns.length>1 ? escapeHtml("Assigned licenses:\n• " + lns.join("\n• ")) : "";
     const licPill = lns.length
-      ? `<span class="pill lic-yes" title="${escapeHtml(lns.join(', '))}">${escapeHtml(lns[0])}${lns.length>1?` +${lns.length-1}`:""}</span>`
+      ? `<span class="pill lic-yes"${lns.length>1?` data-tip="${licTip}" style="cursor:help"`:""}>${escapeHtml(lns[0])}${lns.length>1?` +${lns.length-1}`:""}</span>`
       : `<span class="pill lic-no">Unlicensed</span>`;
     return `<tr data-id="${u.id}">
       <td><input type="checkbox" class="rowchk" data-id="${u.id}"></td>
