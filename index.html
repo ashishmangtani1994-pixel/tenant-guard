@@ -68,7 +68,8 @@
   /* ---------- workspace: left nav + content ---------- */
   .workspace{display:flex;gap:22px;align-items:flex-start}
   .sidenav{width:226px;flex:0 0 auto;background:var(--panel);border:1px solid var(--border);
-    border-radius:var(--radius);padding:10px;position:sticky;top:78px}
+    border-radius:var(--radius);padding:10px;position:sticky;top:78px;
+    max-height:calc(100vh - 96px);overflow-y:auto;overscroll-behavior:contain}
   .content{flex:1;min-width:0}
   .navgroup{margin-bottom:4px}
   .navhead{display:flex;align-items:center;gap:9px;width:100%;border:none;background:transparent;color:var(--text);
@@ -412,7 +413,7 @@
   .hide{display:none!important}
   @media (max-width:900px){
     .workspace{flex-direction:column}
-    .sidenav{width:auto;position:static}
+    .sidenav{width:auto;position:static;max-height:none;overflow:visible}
     .cards{grid-template-columns:repeat(2,1fr)}
     .cards.info4{grid-template-columns:repeat(2,1fr)}
     .settings .grid{grid-template-columns:1fr}
@@ -1022,6 +1023,46 @@ function yn(b){ return b ? "yes" : "no"; }
 
 /* a user is "licensed" if Graph returns one or more assignedLicenses entries */
 function hasLicense(u){ return Array.isArray(u.assignedLicenses) && u.assignedLicenses.length > 0; }
+
+/* friendly names for the most common Microsoft SKUs (skuPartNumber → product name) */
+const SKU_NAMES = {
+  SPE_E5:"Microsoft 365 E5", SPE_E3:"Microsoft 365 E3", SPE_F1:"Microsoft 365 F3",
+  SPB:"Microsoft 365 Business Premium", O365_BUSINESS_ESSENTIALS:"M365 Business Basic",
+  O365_BUSINESS_PREMIUM:"M365 Business Standard", O365_BUSINESS:"Microsoft 365 Apps for Business",
+  OFFICESUBSCRIPTION:"Microsoft 365 Apps for Enterprise",
+  ENTERPRISEPACK:"Office 365 E3", ENTERPRISEPREMIUM:"Office 365 E5", STANDARDPACK:"Office 365 E1",
+  DESKLESSPACK:"Office 365 F3", DEVELOPERPACK:"Office 365 E3 (Developer)", ENTERPRISEPACKPLUS:"Office 365 E4",
+  EXCHANGESTANDARD:"Exchange Online (Plan 1)", EXCHANGEENTERPRISE:"Exchange Online (Plan 2)",
+  EXCHANGEDESKLESS:"Exchange Online Kiosk", EMS:"Enterprise Mobility + Security E3", EMSPREMIUM:"Enterprise Mobility + Security E5",
+  AAD_PREMIUM:"Entra ID P1", AAD_PREMIUM_P2:"Entra ID P2", AAD_BASIC:"Entra ID Basic",
+  POWER_BI_STANDARD:"Power BI (free)", POWER_BI_PRO:"Power BI Pro", FLOW_FREE:"Power Automate (free)",
+  PROJECTPROFESSIONAL:"Project Plan 3", PROJECTPREMIUM:"Project Plan 5", VISIOCLIENT:"Visio Plan 2",
+  WIN10_PRO_ENT_SUB:"Windows 10/11 Enterprise E3", WIN10_VDA_E3:"Windows E3", WINDOWS_STORE:"Windows Store",
+  TEAMS_EXPLORATORY:"Teams Exploratory", MCOEV:"Teams Phone", MCOMEETADV:"Teams Audio Conferencing",
+  MCOPSTN1:"Teams Domestic Calling", PHONESYSTEM_VIRTUALUSER:"Teams Phone Resource Account",
+  MEETING_ROOM:"Teams Rooms", DYN365_ENTERPRISE_PLAN1:"Dynamics 365 Plan 1",
+  Microsoft_365_Copilot:"Microsoft 365 Copilot", POWERAPPS_VIRAL:"Power Apps (trial)",
+  RIGHTSMANAGEMENT:"Azure Information Protection P1", IDENTITY_THREAT_PROTECTION:"Microsoft 365 E5 Security",
+  INFORMATION_PROTECTION_COMPLIANCE:"Microsoft 365 E5 Compliance", ATP_ENTERPRISE:"Defender for Office 365 (Plan 1)",
+  THREAT_INTELLIGENCE:"Defender for Office 365 (Plan 2)", WIN_DEF_ATP:"Defender for Endpoint",
+  CCIBOTS_PRIVPREV_VIRAL:"Copilot Studio (trial)"
+};
+function skuFriendly(part){ return SKU_NAMES[part] || (part ? part.replace(/_/g," ") : "Licensed"); }
+function skuNameMap(){ const m={}; for(const s of (allSkus||[])) m[s.skuId]=s.skuPartNumber; return m; }
+function licenseNames(u){
+  if(!Array.isArray(u.assignedLicenses) || !u.assignedLicenses.length) return [];
+  const byId = skuNameMap();
+  return u.assignedLicenses.map(l=> skuFriendly(byId[l.skuId]||""));
+}
+/* lazily pull the tenant's SKU catalogue so user rows can show product names */
+let skusLoading = false;
+async function ensureSkus(){
+  if(skusLoaded || skusLoading) return;
+  skusLoading = true;
+  try{ const tok = await token(READ_SCOPES); if(tok){ const r = await gget(`${GRAPH}/subscribedSkus`, tok); allSkus = r.value||[]; skusLoaded = true; } }catch(e){}
+  skusLoading = false;
+  if(tab==="member"||tab==="guest") render();
+}
 
 /* most-recent of interactive / non-interactive / successful sign-in */
 function lastActivity(u){
@@ -1705,7 +1746,7 @@ const HEAD_DEVICES = `<th style="width:34px"></th><th>Device</th><th>OS</th><th 
 const HEAD_RISKY   = `<th>User</th><th>Risk level</th><th>Risk state</th><th class="opt">Detail</th><th>Last updated</th><th></th>`;
 const HEAD_MFA     = `<th>User</th><th>Type</th><th>MFA registered</th><th>MFA capable</th><th>SSPR registered</th><th>Methods</th>`;
 const HEAD_CA      = `<th>Policy</th><th>State</th><th class="opt">Created</th><th>Modified</th><th></th>`;
-const HEAD_LICENSE = `<th>SKU</th><th>Enabled</th><th>Consumed</th><th>Available</th><th>Status</th>`;
+const HEAD_LICENSE = `<th>License (product)</th><th>Enabled</th><th>Consumed</th><th>Available</th><th>Status</th>`;
 const HEAD_HEALTH  = `<th>Issue</th><th>Service</th><th>Classification</th><th>Status</th><th>Last updated</th>`;
 const HEAD_BITLOCKER = `<th>Device</th><th>OS</th><th>BitLocker key</th><th>Encrypted</th><th class="opt">Key escrowed</th><th>Ownership</th>`;
 const HEAD_LAPS = `<th>Device</th><th>OS</th><th>LAPS key</th><th class="opt">Last backup</th><th>Ownership</th>`;
@@ -2877,7 +2918,7 @@ function renderLicense(){
     const enabled = s.prepaidUnits?.enabled||0, consumed = s.consumedUnits||0;
     const over = consumed > enabled;
     return `<tr>
-      <td><div class="uname">${escapeHtml(s.skuPartNumber||"—")}</div></td>
+      <td><div class="uname">${escapeHtml(skuFriendly(s.skuPartNumber))}</div><div class="upn">${escapeHtml(s.skuPartNumber||"")}</div></td>
       <td class="num">${enabled}</td>
       <td class="num">${consumed}</td>
       <td class="num">${Math.max(0, enabled-consumed)}</td>
@@ -3445,6 +3486,7 @@ function renderAvMalware(){
 }
 
 function renderUsers(rows){
+  ensureSkus();   // pull SKU catalogue so the License column can show product names
   const total = rows.length;
   view = applyUserFilters(rows).sort((a,b)=> b._inactive - a._inactive);
   setFilterCount(view.length, total);
@@ -3465,9 +3507,10 @@ function renderUsers(rows){
       ? `<span class="pill guest">Guest</span>`
       : `<span class="pill member">Member</span>`;
     const offPill = u.accountEnabled===false ? `&#32;<span class="pill off">disabled</span>` : "";
-    const licPill = hasLicense(u)
-      ? `<span class="pill lic-yes">Yes</span>`
-      : `<span class="pill lic-no">No</span>`;
+    const lns = licenseNames(u);
+    const licPill = lns.length
+      ? `<span class="pill lic-yes" title="${escapeHtml(lns.join(', '))}">${escapeHtml(lns[0])}${lns.length>1?` +${lns.length-1}`:""}</span>`
+      : `<span class="pill lic-no">Unlicensed</span>`;
     return `<tr data-id="${u.id}">
       <td><input type="checkbox" class="rowchk" data-id="${u.id}"></td>
       <td><div class="uname">${escapeHtml(u.displayName||"—")}</div><div class="upn">${escapeHtml(u.userPrincipalName||"")}</div></td>
@@ -3636,7 +3679,7 @@ const SCHED_COLS = {
     {k:"name",   l:"Display name",   on:true,  get:u=>u.displayName||"—"},
     {k:"upn",    l:"User principal name", on:true, get:u=>u.userPrincipalName||"—"},
     {k:"type",   l:"Type",           on:false, get:u=>u.userType||"Member"},
-    {k:"licensed",l:"Licensed",      on:true,  get:u=>hasLicense(u)?"Yes":"No"},
+    {k:"licensed",l:"License(s)",     on:true,  get:u=>{const n=licenseNames(u);return n.length?n.join("; "):"Unlicensed";}},
     {k:"last",   l:"Last activity",  on:true,  get:u=>u._never?"Never":fmtDate(u._last)},
     {k:"inactive",l:"Days inactive", on:true,  get:u=>u._never?"Never signed in":String(u._inactive)},
     {k:"enabled",l:"Account enabled",on:true,  get:u=>u.accountEnabled===false?"No":"Yes"},
