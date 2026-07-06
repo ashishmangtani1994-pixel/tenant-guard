@@ -1371,12 +1371,7 @@ function logLine(log,u,ok,extra){
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 
 /* ---------- boot ---------- */
-if(DEFAULT_CLIENT_ID==="REPLACE_WITH_YOUR_CLIENT_ID" && !localStorage.getItem(LS_CLIENT)){
-  // first-run: let admin paste a client id from the sign-in screen via Settings after a placeholder login
-  el("btnSignin").onclick = ()=> { el("topbar").classList.remove("hide"); el("signin").classList.add("hide"); el("app").classList.remove("hide"); el("settingsPanel").classList.remove("hide"); el("redirNote").textContent="Redirect URI: "+REDIRECT; toast("Paste your client ID, then Save & reload.", false); };
-} else {
-  initAuth().catch(e=>{ console.error(e); toast("Auth init failed: "+e.message, true); });
-}
+initAuth().catch(e=>{ console.error(e); toast("Auth init failed: "+e.message, true); });
 </script>
 </body>
 </html>
