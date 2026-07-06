@@ -117,6 +117,9 @@
   .card .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:600}
   .card .v{font-family:'Space Grotesk';font-weight:700;font-size:26px;margin-top:6px;letter-spacing:-.01em}
   .card.warn .v{color:var(--warn)} .card.danger .v{color:var(--danger)} .card.accent .v{color:var(--accent)}
+  .card.clickable{cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s}
+  .card.clickable:hover{border-color:var(--accent-dim);box-shadow:0 0 0 1px var(--accent-dim)}
+  .card.clickable:active{transform:scale(.98)}
   /* ---------- action bar ---------- */
   .actionbar{display:flex;align-items:center;gap:12px;margin-bottom:12px;min-height:36px}
   .actionbar .sel{font-size:13px;color:var(--muted)}
@@ -1960,33 +1963,44 @@ function render(){
   const dorm = computeDormant();
   const members = dorm.filter(u => (u.userType||"Member")!=="Guest");
   const guests  = dorm.filter(u => (u.userType||"Member")==="Guest");
-  el("cntMember").textContent = members.length;
-  el("cntGuest").textContent  = guests.length;
 
-  let stale = [];
+  // Apply filter bar so sidebar badges + KPI cards reflect active filters
+  const fMembers = applyUserFilters(members);
+  const fGuests  = applyUserFilters(guests);
+  setCnt("cntMember", fMembers.length);
+  setCnt("cntGuest",  fGuests.length);
+
+  let fStale = [];
   if(devicesLoaded){
-    stale = computeStaleDevices();
-    el("cntDevice").textContent = stale.length;
+    fStale = applyDeviceFilters(computeStaleDevices());
+    setCnt("cntDevice", fStale.length);
   }
-  if(riskyLoaded)  el("cntRisky").textContent  = allRisky.length;
-  if(mfaLoaded)    el("cntMfa").textContent    = allRegDetails.filter(r=>!r.isMfaRegistered).length;
-  if(caLoaded)     el("cntCa").textContent     = allCaPolicies.length;
-  if(skusLoaded)   el("cntLicense").textContent= allSkus.length;
-  if(healthLoaded) el("cntHealth").textContent = allHealthIssues.filter(h=>!h.isResolved).length;
-  if(avLoaded){ const o=avOverview||{}; el("cntAntivirus").textContent = Math.max(0,(o.totalReportedDeviceCount||0)-(o.cleanDeviceCount||0)); }
-  if(bitlockerLoaded) el("cntBitlocker").textContent = bitlockerRows().filter(d=>d._status==="missing").length;
-  if(lapsLoaded)      el("cntLaps").textContent = lapsRows().filter(d=>d._status==="missing").length;
-  if(devicesLoaded)   el("cntPatching").textContent = patchingRows().filter(d=>d._status==="behind").length;
-  if(mdmLoaded){ el("cntDevComp").textContent = mdmDevices.filter(d=>d.complianceState==="noncompliant").length;
-                 el("cntJail").textContent = mdmDevices.filter(d=>String(d.jailBroken).toLowerCase()==="true").length; }
-  if(privLoaded)      el("cntPriv").textContent = privRoles.filter(u=>u.mfa===false).length;
-  if(secLoaded && secScore) el("cntSec").textContent = (secScore.maxScore?Math.round((secScore.currentScore||0)/secScore.maxScore*100):0)+"%";
-  if(legacyLoaded)    el("cntLegacy").textContent = legacyAvailable ? legacySignins.length : "0";
-  if(appCredsLoaded)  el("cntAppCreds").textContent = appCreds.filter(c=>c._status==="expired"||c._status==="expiring").length;
-  if(oauthLoaded)     el("cntOauth").textContent = oauthGrants.filter(g=>g.consentType==="AllPrincipals").length;
 
-  // KPI cards are scoped to the ACTIVE dormant view, not the whole tenant
-  if(!isInfoTab()) setDormantCards(members, guests, stale);
+  // Info tab badges — reflect search filter when active
+  const q = (el("fSearch").value||"").trim().toLowerCase();
+  if(riskyLoaded)  setCnt("cntRisky",    allRisky.filter(r=> !q||((r.userDisplayName||"")+" "+(r.userPrincipalName||"")).toLowerCase().includes(q)).length);
+  if(mfaLoaded)    setCnt("cntMfa",      allRegDetails.filter(r=> (!q||((r.userDisplayName||"")+" "+(r.userPrincipalName||"")).toLowerCase().includes(q)) && !r.isMfaRegistered).length);
+  if(caLoaded)     setCnt("cntCa",       allCaPolicies.filter(p=> !q||(p.displayName||"").toLowerCase().includes(q)).length);
+  if(skusLoaded)   setCnt("cntLicense",  allSkus.filter(s=> !q||(s.skuPartNumber||"").toLowerCase().includes(q)).length);
+  if(healthLoaded) setCnt("cntHealth",   allHealthIssues.filter(h=> (!q||(h.title||"").toLowerCase().includes(q)||(h.service||"").toLowerCase().includes(q)) && !h.isResolved).length);
+  if(avLoaded){ const o=avOverview||{}; setCnt("cntAntivirus", Math.max(0,(o.totalReportedDeviceCount||0)-(o.cleanDeviceCount||0))); }
+  if(bitlockerLoaded) setCnt("cntBitlocker", bitlockerRows().filter(d=>d._status==="missing").length);
+  if(lapsLoaded)      setCnt("cntLaps",      lapsRows().filter(d=>d._status==="missing").length);
+  if(devicesLoaded)   setCnt("cntPatching",  patchingRows().filter(d=>d._status==="behind").length);
+  if(mdmLoaded){ setCnt("cntDevComp", mdmDevices.filter(d=>d.complianceState==="noncompliant").length);
+                 setCnt("cntJail",    mdmDevices.filter(d=>String(d.jailBroken).toLowerCase()==="true").length); }
+  if(privLoaded)      setCnt("cntPriv",     privRoles.filter(u=>u.mfa===false).length);
+  if(secLoaded && secScore) setCnt("cntSec", (secScore.maxScore?Math.round((secScore.currentScore||0)/secScore.maxScore*100):0)+"%");
+  if(legacyLoaded)    setCnt("cntLegacy",    legacyAvailable ? legacySignins.length : "0");
+  if(appCredsLoaded)  setCnt("cntAppCreds",  appCreds.filter(c=>c._status==="expired"||c._status==="expiring").length);
+  if(oauthLoaded)     setCnt("cntOauth",     oauthGrants.filter(g=>g.consentType==="AllPrincipals").length);
+
+  // KPI cards — use filtered counts so they match what the table shows
+  if(!isInfoTab()) setDormantCards(fMembers, fGuests, fStale);
+
+  // Highlight the active sidebar tab
+  document.querySelectorAll(".tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.tab === tab));
 
   // antivirus sets its own header (per sub-mode) inside renderAntivirus
   if(tab==="antivirus"){ renderAntivirus(); return; }
@@ -1999,7 +2013,7 @@ function render(){
        devcompliance:renderDevCompliance, jailbroken:renderJailbroken, privileged:renderPrivileged, securescore:renderSecScore, legacyauth:renderLegacyAuth, appcreds:renderAppCreds, oauth:renderOauth })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
-    renderUsers(tab==="member"?members:guests);
+    renderUsers(tab==="member" ? fMembers : fGuests);
   }
 }
 
@@ -3515,14 +3529,13 @@ function renderAvMalware(){
 
 function renderUsers(rows){
   ensureSkus();   // pull SKU catalogue so the License column can show product names
-  const total = rows.length;
-  view = applyUserFilters(rows).sort((a,b)=> b._inactive - a._inactive);
-  setFilterCount(view.length, total);
+  view = rows.slice().sort((a,b)=> b._inactive - a._inactive);
+  setFilterCount(view.length, view.length);
   const thr = +el("thresh").value;
   const tb = el("tbody");
   if(!view.length){
-    const why = total ? "No rows match the current filters." : `No ${tab==="member"?"members":"guests"} inactive beyond ${thr} days.`;
-    tb.innerHTML = `<tr><td colspan="8" class="empty"><div class="big">${total?"No matches":"Nothing dormant here"}</div>${why}</td></tr>`;
+    const why = `No ${tab==="member"?"members":"guests"} match the current filters or threshold.`;
+    tb.innerHTML = `<tr><td colspan="8" class="empty"><div class="big">Nothing to show</div>${why}</td></tr>`;
     el("selAll").checked=false; updateSelection(); return;
   }
   tb.innerHTML = view.map(u=>{
@@ -3557,14 +3570,13 @@ function renderUsers(rows){
 
 function renderDevices(){
   const all = computeStaleDevices();
-  const total = all.length;
   view = applyDeviceFilters(all).sort((a,b)=> b._inactive - a._inactive);
-  setFilterCount(view.length, total);
+  setFilterCount(view.length, view.length);
   const thr = +el("thresh").value;
   const tb = el("tbody");
   if(!view.length){
-    const why = total ? "No devices match the current filters." : `No devices inactive beyond ${thr} days.`;
-    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="big">${total?"No matches":"Nothing stale here"}</div>${why}</td></tr>`;
+    const why = all.length ? "No devices match the current filters." : `No devices inactive beyond ${thr} days.`;
+    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="big">${all.length?"No matches":"Nothing stale here"}</div>${why}</td></tr>`;
     el("selAll").checked=false; updateSelection(); return;
   }
   tb.innerHTML = view.map(d=>{
@@ -3677,14 +3689,24 @@ const LOADER_BY_TAB = { device:[()=>devicesLoaded, loadDevices], risky:[()=>risk
   privileged:[()=>privLoaded, loadPrivileged], securescore:[()=>secLoaded, loadSecScore],
   legacyauth:[()=>legacyLoaded, loadLegacyAuth], appcreds:[()=>appCredsLoaded, loadAppCreds],
   oauth:[()=>oauthLoaded, loadOauth] };
-document.querySelectorAll(".tab").forEach(t=> t.onclick=()=>{
-  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-  t.classList.add("active"); tab=t.dataset.tab;
-  _bizKey="";   // force the dashboard to re-animate when (re)entering a baseline/cmmc tab
-  const c=document.querySelector(".content"); if(c){ c.classList.remove("fade"); void c.offsetWidth; c.classList.add("fade"); }
+function switchTab(newTab){
+  tab = newTab;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab===tab));
+  _bizKey="";  // force baseline dashboard to re-animate on re-entry
+  const c = document.querySelector(".content"); if(c){ c.classList.remove("fade"); void c.offsetWidth; c.classList.add("fade"); }
   const loader = LOADER_BY_TAB[tab];
   if(loader && !loader[0]()){ loader[1](); } else { render(); }
+}
+document.querySelectorAll(".tab").forEach(t => t.onclick = ()=> switchTab(t.dataset.tab));
+
+/* Dormant KPI card (dCard2 = "Dormant / Stale devices" number) — click to stay on current tab,
+   acts as a visual signal. Wire with clickable class so it has pointer + hover ring. */
+["dCard2","dCard3","dCard4"].forEach(id=>{
+  const c = el(id)?.closest(".card"); if(!c) return;
+  c.classList.add("clickable");
+  c.onclick = ()=> render(); // re-render current tab (useful after filter changes)
 });
+
 el("btnSummary").onclick = ()=> exportSummary(tab==="cmmc2"?"cmmc2":(tab==="cmmc"?"cmmc":"baseline"));
 
 /* ====================================================================
