@@ -65,14 +65,38 @@
   .req li{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted)}
   .req li code{font-family:var(--mono);color:var(--accent);font-size:12px}
   .dot-tick{color:var(--accent);flex:0 0 auto;margin-top:1px}
+  /* ---------- app body layout ---------- */
+  main{max-width:1280px;margin:0 auto;padding:26px 0 80px}
+  .app-layout{display:flex;gap:0;align-items:flex-start}
+  /* ---------- left sidebar ---------- */
+  .sidebar{
+    width:210px;flex:0 0 210px;
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px 10px;margin:0 20px 0 22px;
+    position:sticky;top:70px;
+  }
+  .nav-group{margin-bottom:6px}
+  .nav-group:last-child{margin-bottom:0}
+  .nav-group-label{
+    font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--faint);font-weight:700;padding:8px 10px 4px;
+  }
+  /* ---------- content area ---------- */
+  .content-area{flex:1;min-width:0;padding-right:22px}
   /* ---------- controls ---------- */
   .controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;margin-bottom:20px}
-  .tabset{display:flex;gap:4px;background:var(--panel);border:1px solid var(--border);
-    border-radius:9px;padding:4px}
-  .tab{border:none;background:transparent;color:var(--muted);padding:8px 16px;border-radius:6px;
-    font-size:13px;font-weight:600}
-  .tab.active{background:var(--panel-2);color:var(--text)}
-  .tab .cnt{margin-left:7px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .tabset{display:flex;flex-direction:column;gap:2px;width:100%}
+  .tab{
+    border:none;background:transparent;color:var(--muted);
+    padding:8px 10px;border-radius:6px;
+    font-size:12.5px;font-weight:600;
+    text-align:left;width:100%;
+    display:flex;justify-content:space-between;align-items:center;
+    transition:background .12s,color .12s;
+  }
+  .tab:hover{background:var(--panel-2);color:var(--text)}
+  .tab.active{background:var(--accent-dim);color:var(--text)}
+  .tab .cnt{font-family:var(--mono);font-size:11px;color:var(--faint);flex:0 0 auto}
   .tab.active .cnt{color:var(--accent)}
   .field{display:flex;flex-direction:column;gap:6px}
   .field label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600}
@@ -178,6 +202,14 @@
   @keyframes sp{to{transform:rotate(360deg)}}
   .loadrow{padding:50px;text-align:center;color:var(--muted)}
   .hide{display:none!important}
+  @media (max-width:900px){
+    .app-layout{flex-direction:column}
+    .sidebar{width:100%;flex:none;position:static;margin:0 0 16px 0;padding:12px}
+    .tabset{flex-direction:row;flex-wrap:wrap;gap:4px}
+    .tab{width:auto;padding:7px 12px;font-size:12px}
+    .content-area{padding-right:0}
+    main{padding-left:16px;padding-right:16px}
+  }
   @media (max-width:760px){
     .cards{grid-template-columns:repeat(2,1fr)}
     .settings .grid{grid-template-columns:1fr}
@@ -257,17 +289,39 @@
     </div>
   </div>
 
+  <div class="app-layout">
+
+    <!-- ===== LEFT SIDEBAR ===== -->
+    <nav class="sidebar">
+      <div class="nav-group">
+        <div class="nav-group-label">Dormant &amp; Stale</div>
+        <div class="tabset">
+          <button class="tab active" data-tab="member">Dormant members <span class="cnt" id="cntMember">—</span></button>
+          <button class="tab" data-tab="guest">Dormant guests <span class="cnt" id="cntGuest">—</span></button>
+          <button class="tab" data-tab="device">Stale devices <span class="cnt" id="cntDevice">—</span></button>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Security &amp; Identity</div>
+        <div class="tabset">
+          <button class="tab" data-tab="risky">Risky users <span class="cnt" id="cntRisky">—</span></button>
+          <button class="tab" data-tab="mfa">MFA coverage <span class="cnt" id="cntMfa">—</span></button>
+          <button class="tab" data-tab="ca">Cond. Access <span class="cnt" id="cntCa">—</span></button>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Tenant</div>
+        <div class="tabset">
+          <button class="tab" data-tab="license">Licenses <span class="cnt" id="cntLicense">—</span></button>
+          <button class="tab" data-tab="health">Service health <span class="cnt" id="cntHealth">—</span></button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="content-area">
+
   <div class="controls">
-    <div class="tabset">
-      <button class="tab active" data-tab="member">Dormant members <span class="cnt" id="cntMember">—</span></button>
-      <button class="tab" data-tab="guest">Dormant guests <span class="cnt" id="cntGuest">—</span></button>
-      <button class="tab" data-tab="device">Stale devices <span class="cnt" id="cntDevice">—</span></button>
-      <button class="tab" data-tab="risky">Risky users <span class="cnt" id="cntRisky">—</span></button>
-      <button class="tab" data-tab="mfa">MFA coverage <span class="cnt" id="cntMfa">—</span></button>
-      <button class="tab" data-tab="ca">Conditional Access <span class="cnt" id="cntCa">—</span></button>
-      <button class="tab" data-tab="license">Licenses <span class="cnt" id="cntLicense">—</span></button>
-      <button class="tab" data-tab="health">Service health <span class="cnt" id="cntHealth">—</span></button>
-    </div>
     <div class="field" id="threshField">
       <label>Inactive for at least</label>
       <div class="row">
@@ -370,7 +424,10 @@
         <tr><td colspan="8" class="loadrow"><span class="spin"></span> Loading directory…</td></tr>
       </tbody>
     </table>
-  </div>
+  </div><!-- /tablewrap -->
+
+    </div><!-- /content-area -->
+  </div><!-- /app-layout -->
 </main>
 
 <!-- ==== DELETE MODAL ======== -->
