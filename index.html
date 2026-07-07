@@ -535,10 +535,17 @@
   <div class="workspace">
     <!-- ==== LEFT NAV — collapsible sections ==== -->
     <aside class="sidenav" id="sidenav">
-      <div class="navgroup" data-group="baseline">
-        <button class="navhead" data-grouphead="baseline"><span class="caret">▾</span> Microsoft Security Baseline</button>
+      <div class="navgroup" data-group="posture">
+        <button class="navhead" data-grouphead="posture"><span class="caret">▾</span> Posture</button>
         <div class="navitems">
-          <button class="tab" data-tab="baseline">Baseline checks <span class="cnt" id="cntBaseline">—</span></button>
+          <button class="tab active" data-tab="recommendations">Recommendations <span class="cnt" id="cntRec">—</span></button>
+        </div>
+      </div>
+      <div class="navgroup" data-group="baseline">
+        <button class="navhead" data-grouphead="baseline"><span class="caret">▾</span> Security Frameworks</button>
+        <div class="navitems">
+          <button class="tab" data-tab="baseline">MS Security Baseline <span class="cnt" id="cntBaseline">—</span></button>
+          <button class="tab" data-tab="cis">CIS Benchmark v4 <span class="cnt" id="cntCis">—</span></button>
           <button class="tab" data-tab="cmmc">CMMC Level 1 <span class="cnt" id="cntCmmc">—</span></button>
           <button class="tab" data-tab="cmmc2">CMMC Level 2 <span class="cnt" id="cntCmmc2">—</span></button>
         </div>
@@ -546,7 +553,7 @@
       <div class="navgroup" data-group="dormant">
         <button class="navhead" data-grouphead="dormant"><span class="caret">▾</span> Dormant Status</button>
         <div class="navitems">
-          <button class="tab active" data-tab="member">Dormant members <span class="cnt" id="cntMember">—</span></button>
+          <button class="tab" data-tab="member">Dormant members <span class="cnt" id="cntMember">—</span></button>
           <button class="tab" data-tab="guest">Dormant guests <span class="cnt" id="cntGuest">—</span></button>
           <button class="tab" data-tab="device">Stale devices <span class="cnt" id="cntDevice">—</span></button>
         </div>
@@ -830,6 +837,26 @@
           <label>Severity</label>
           <select id="fCmmc2Sev"><option value="">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
         </div>
+        <div class="field hide" id="wrapCisCat">
+          <label>Section</label>
+          <select id="fCisCat"><option value="">All</option></select>
+        </div>
+        <div class="field hide" id="wrapCisStatus">
+          <label>Result</label>
+          <select id="fCisStatus"><option value="">All</option><option value="pass">Passed</option><option value="fail">Failed</option><option value="manual">Manual</option></select>
+        </div>
+        <div class="field hide" id="wrapCisSev">
+          <label>Severity</label>
+          <select id="fCisSev"><option value="">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+        </div>
+        <div class="field hide" id="wrapRecState">
+          <label>Status</label>
+          <select id="fRecState"><option value="">All</option><option value="open">Open</option><option value="resolved">Resolved</option></select>
+        </div>
+        <div class="field hide" id="wrapRecSev">
+          <label>Severity</label>
+          <select id="fRecSev"><option value="">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+        </div>
         <span class="grow"></span>
         <span class="count" id="filterCount"></span>
         <button class="btn ghost" id="fClear">Clear filters</button>
@@ -1021,10 +1048,10 @@ let legacySignins = [];     let legacyLoaded = false; let legacyAvailable = true
 let appCreds = [];          let appCredsLoaded = false; let appCredsAvailable = true; // app secrets/certs
 let oauthGrants = [];       let oauthLoaded = false;                            // OAuth consent grants
 let view = [];              // filtered rows for current tab
-let tab = "member";
+let tab = "recommendations";
 let licensePremium = null;
 
-const INFO_TABS = ["baseline","cmmc","cmmc2","risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching",
+const INFO_TABS = ["recommendations","baseline","cmmc","cmmc2","cis","risky","mfa","ca","license","health","antivirus","bitlocker","laps","patching",
   "devcompliance","privileged","securescore","jailbroken","legacyauth","appcreds","oauth"];
 function isInfoTab(){ return INFO_TABS.includes(tab); }
 function entityType(){ return tab==="device" ? "device" : "user"; }
@@ -1164,6 +1191,7 @@ function enterApp(){
   el("cfgAuthority").value = authority();
   fillPatchSettings();
   loadDirectory();
+  ensureBaselineData();   // parallel: powers the Recommendations landing tab + frameworks
   try{ applyDormantDeepLink(); }catch(e){}
   try{ checkSchedulesDue(); }catch(e){}
 }
@@ -1717,11 +1745,14 @@ const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatu
   "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth","wrapLapsOs","wrapLapsStatus","wrapPatchView",
   "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent",
   "wrapBaseCat","wrapBaseStatus","wrapBaseSev","wrapCmmcCat","wrapCmmcStatus","wrapCmmcSev",
-  "wrapCmmc2Cat","wrapCmmc2Status","wrapCmmc2Sev"];
+  "wrapCmmc2Cat","wrapCmmc2Status","wrapCmmc2Sev","wrapCisCat","wrapCisStatus","wrapCisSev",
+  "wrapRecState","wrapRecSev"];
 const FILTERS_BY_TAB = {
+  recommendations:["wrapRecState","wrapRecSev"],
   baseline:["wrapBaseCat","wrapBaseStatus","wrapBaseSev"],
   cmmc:["wrapCmmcCat","wrapCmmcStatus","wrapCmmcSev"],
   cmmc2:["wrapCmmc2Cat","wrapCmmc2Status","wrapCmmc2Sev"],
+  cis:["wrapCisCat","wrapCisStatus","wrapCisSev"],
   member:["wrapType","wrapLicense","wrapStatus"],
   guest: ["wrapType","wrapLicense","wrapStatus"],
   device:["wrapOs","wrapOwn","wrapStatus"],
@@ -1743,9 +1774,11 @@ const FILTERS_BY_TAB = {
   oauth:["wrapOaConsent"]
 };
 const SEARCH_PLACEHOLDER = {
+  recommendations:"recommendation, control or mapping…",
   baseline:"control, check or finding…",
   cmmc:"control, family or check…",
   cmmc2:"practice, family or 3.x.x…",
+  cis:"control, section or check…",
   device:"device name or OS…", risky:"name or UPN…", mfa:"name or UPN…",
   ca:"policy name…", license:"SKU…", health:"issue or service…", bitlocker:"device name…",
   patching:"device name or build…", antivirus:"device or malware…", laps:"device name…",
@@ -1755,7 +1788,7 @@ const SEARCH_PLACEHOLDER = {
 
 function syncFilterBar(){
   const info = isInfoTab();
-  const dash = (tab==="baseline"||tab==="cmmc"||tab==="cmmc2");   // tabs that use the executive dashboard
+  const dash = (tab==="baseline"||tab==="cmmc"||tab==="cmmc2"||tab==="cis");   // tabs that use the executive dashboard
   const show = FILTERS_BY_TAB[tab] || [];
   ALL_FILTER_WRAPS.forEach(id=> el(id).classList.toggle("hide", !show.includes(id)));
   el("fSearch").placeholder = SEARCH_PLACEHOLDER[tab] || "name or UPN…";
@@ -1793,6 +1826,8 @@ const HEAD_AV_ENDPOINTS = `<th>Device</th><th>Managed by</th><th>Malware protect
 const HEAD_BASELINE = `<th>Result</th><th>Control</th><th>Microsoft Security Baseline</th><th>Category</th><th>Severity</th><th class="opt">Finding</th>`;
 const HEAD_CMMC = `<th>Result</th><th>Control</th><th>CMMC Level 1 Security Baseline</th><th>Family</th><th>Severity</th><th class="opt">Assessment</th>`;
 const HEAD_CMMC2 = `<th>Result</th><th>Practice</th><th>CMMC Level 2 Security Baseline</th><th>Family</th><th>Severity</th><th class="opt">Assessment</th>`;
+const HEAD_CIS = `<th>Result</th><th>Control</th><th>CIS Microsoft 365 Benchmark v4.0</th><th>Section</th><th>Severity</th><th class="opt">Assessment</th>`;
+const HEAD_REC = `<th>Status</th><th>Recommendation</th><th>Severity</th><th>Action</th><th class="opt">Live finding</th>`;
 
 /* ========
    MICROSOFT SECURITY BASELINE
@@ -1960,6 +1995,8 @@ function render(){
   setCnt("cntBaseline", effectiveBaseline().filter(c=>c.status==="fail").length);
   setCnt("cntCmmc", effectiveCMMC().filter(c=>c.status==="fail").length);
   setCnt("cntCmmc2", effectiveCMMC2().filter(c=>c.status==="fail").length);
+  setCnt("cntCis", effectiveCIS().filter(c=>c.status==="fail").length);
+  setCnt("cntRec", computeRecommendations().filter(r=>r.state==="fail").length);
   const dorm = computeDormant();
   const members = dorm.filter(u => (u.userType||"Member")!=="Guest");
   const guests  = dorm.filter(u => (u.userType||"Member")==="Guest");
@@ -2005,11 +2042,11 @@ function render(){
   // antivirus sets its own header (per sub-mode) inside renderAntivirus
   if(tab==="antivirus"){ renderAntivirus(); return; }
 
-  const heads = { baseline:HEAD_BASELINE, cmmc:HEAD_CMMC, cmmc2:HEAD_CMMC2, device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
+  const heads = { recommendations:HEAD_REC, baseline:HEAD_BASELINE, cmmc:HEAD_CMMC, cmmc2:HEAD_CMMC2, cis:HEAD_CIS, device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
     devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH };
   if(heads[tab]){
     el("theadRow").innerHTML = heads[tab];
-    ({ baseline:renderBaseline, cmmc:renderCMMC, cmmc2:renderCMMC2, device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching,
+    ({ recommendations:renderRecommendations, baseline:renderBaseline, cmmc:renderCMMC, cmmc2:renderCMMC2, cis:renderCIS, device:renderDevices, risky:renderRisky, mfa:renderMfa, ca:renderCa, license:renderLicense, health:renderHealth, bitlocker:renderBitlocker, laps:renderLaps, patching:renderPatching,
        devcompliance:renderDevCompliance, jailbroken:renderJailbroken, privileged:renderPrivileged, securescore:renderSecScore, legacyauth:renderLegacyAuth, appcreds:renderAppCreds, oauth:renderOauth })[tab]();
   } else {
     el("theadRow").innerHTML = HEAD_USERS;
@@ -2106,7 +2143,7 @@ async function ensureBaselineData(force){
     }
   }catch(e){ /* best effort — unresolved sources simply fall through to Manual */ }
   baselineDataLoaded=true; baselineLoading=false;
-  if(tab==="baseline") render();
+  if(tab==="baseline"||tab==="cmmc"||tab==="cmmc2"||tab==="cis"||tab==="recommendations") render();
 }
 
 /* ---- Conditional Access matchers ---- */
@@ -2489,6 +2526,197 @@ const CMMC2_DATA = [
 ];
 
 /* ====================================================================
+   CIS Microsoft 365 Foundations Benchmark v4.0.0
+   Same 3-tier resolution engine (live Graph → Secure Score → manual).
+   Sections mirror the official CIS document; the highest-impact and
+   automatable recommendations are wired to live checks, the remainder
+   resolve to Secure Score or Manual so the whole benchmark is trackable.
+   IG columns: L1 = baseline hygiene, L2 = defense-in-depth.
+   ==================================================================== */
+const FAMILY_NAMES_CIS = {
+  "1":"Microsoft 365 Admin Center", "2":"Microsoft 365 Defender",
+  "3":"Microsoft Purview", "5":"Microsoft Entra ID", "6":"Exchange Online",
+  "7":"SharePoint & OneDrive", "8":"Microsoft Teams" };
+/* CIS-specific live checks reuse the same globals ensureBaselineData populates */
+const CIS_CHECKS = {
+  "cis-mfa-all":     ()=>caEval("mfa-all"),
+  "cis-mfa-admin":   ()=>caEval("mfa-admin"),
+  "cis-legacy":      ()=>caEval("legacy-block"),
+  "cis-risk-signin": ()=>caEval("signin-risk"),
+  "cis-risk-user":   ()=>caEval("user-risk"),
+  "cis-device-comp": ()=>caEval("device-compliant"),
+  "cis-authstrength":()=>caEval("authstrength-admin"),
+  "cis-mfa-reg":     ()=>{ if(!mfaLoaded||!allRegDetails.length) return null; const n=allRegDetails.filter(r=>!r.isMfaRegistered).length; return {status:n===0?"pass":"fail", evidence:`${n} user(s) not registered for MFA.`, link:entraLink("Microsoft_AAD_IAM/AuthenticationMethodsMenuBlade")}; },
+  "cis-ga-count":    ()=>{ if(!bGAs) return null; const n=bGAs.length; return {status:(n>=2&&n<=4)?"pass":"fail", evidence:`${n} Global Administrator(s) (CIS recommends 2–4).`, link:ROLE_LINK}; },
+  "cis-guest-role":  ()=>{ if(!bAuthz) return null; const ok=bAuthz.guestUserRoleId==="10dae51f-b6af-4016-8d66-8c2a99b929b3"; return {status:ok?"pass":"fail", evidence:ok?"Guest access is set to the most restrictive role.":"Guest permissions are not the most restrictive.", link:REL_LINK}; },
+  "cis-user-consent":()=>{ if(!bAuthz) return null; const pol=bAuthz.permissionGrantPolicyIdsAssignedToDefaultUserRole||(bAuthz.defaultUserRolePermissions?.permissionGrantPoliciesAssigned)||[]; const ok=!pol.length||!pol.some(x=>/low|ManagePermissionGrantsForSelf/i.test(String(x))); return {status:ok?"pass":"fail", evidence:ok?"Users cannot consent to third-party apps.":"Users can consent to some third-party apps.", link:entraLink("Microsoft_AAD_IAM/ConsentPoliciesMenuBlade/~/UserSettings")}; },
+  "cis-app-register":()=>{ if(!bAuthz) return null; const ok=bAuthz.defaultUserRolePermissions?.allowedToCreateApps===false; return {status:ok?"pass":"fail", evidence:`Users ${ok?"cannot":"can"} register applications.`, link:entraLink("Microsoft_AAD_IAM/UserManagementMenuBlade/~/UserSettings")}; },
+  "cis-pw-expiry":   ()=>{ if(!bDomains.length) return null; const e=bDomains.filter(d=>d.passwordValidityPeriodInDays!=null&&d.passwordValidityPeriodInDays<2147483647); return {status:e.length===0?"pass":"fail", evidence:e.length===0?"Password expiration is disabled (set to never) on all domains.":`${e.length} domain(s) still expire passwords.`, link:entraLink("Microsoft_AAD_IAM/PasswordResetMenuBlade")}; },
+  "cis-stale-dev":   ()=>{ if(!devicesLoaded) return null; const cut=Date.now()-90*864e5; const n=allDevices.filter(d=>{const t=d.approximateLastSignInDateTime;return t&&new Date(t).getTime()<cut;}).length; return {status:n===0?"pass":"fail", evidence:`${n} device(s) inactive for 90+ days.`, link:entraLink("Microsoft_AAD_Devices/DevicesMenuBlade/~/Devices")}; },
+  "cis-dormant":     ()=>{ if(!allUsers.length) return null; const n=bDormantCount(); return {status:n===0?"pass":"fail", evidence:`${n} enabled account(s) inactive 45+ days.`, link:entraLink("Microsoft_AAD_UsersAndTenants/UserManagementMenuBlade/~/AllUsers")}; }
+};
+const CIS_DATA = [
+  /* ---- 1. Microsoft 365 Admin Center ---- */
+  {family:"1", id:"1.1.1", ig:"L1", title:"Ensure Administrative accounts are cloud-only, separate & unassigned licenses", subs:[
+    {name:"Administrative accounts are dedicated and cloud-only", manualId:"CIS:1.1.1", sev:"high"}]},
+  {family:"1", id:"1.1.3", ig:"L1", title:"Ensure that between two and four global admins are designated", subs:[
+    {name:"Two to four Global Administrators are assigned", key:"cis-ga-count", sev:"high"}]},
+  {family:"1", id:"1.1.4", ig:"L1", title:"Ensure administrative accounts use licenses with a reduced application footprint", subs:[
+    {name:"Admin accounts avoid broad app licensing", manualId:"CIS:1.1.4"}]},
+  {family:"1", id:"1.2.1", ig:"L2", title:"Ensure that only organizationally managed/approved public groups exist", subs:[
+    {name:"Only approved public groups exist", manualId:"CIS:1.2.1"}]},
+  {family:"1", id:"1.2.2", ig:"L1", title:"Ensure sign-in to shared mailboxes is blocked", subs:[
+    {name:"Shared mailbox sign-in is blocked", manualId:"CIS:1.2.2", sev:"medium"}]},
+  {family:"1", id:"1.3.1", ig:"L1", title:"Ensure the 'Password expiration policy' is set to 'Set passwords to never expire'", subs:[
+    {name:"Passwords are set to never expire", key:"cis-pw-expiry"}]},
+  {family:"1", id:"1.3.3", ig:"L2", title:"Ensure 'External sharing' of calendars is not available", subs:[
+    {name:"External calendar sharing is disabled", manualId:"CIS:1.3.3", sev:"low"}]},
+  {family:"1", id:"1.3.6", ig:"L1", title:"Ensure the customer lockbox feature is enabled", subs:[
+    {name:"Customer Lockbox is enabled", ss:["customer lockbox"], manualId:"CIS:1.3.6"}]},
+
+  /* ---- 2. Microsoft 365 Defender ---- */
+  {family:"2", id:"2.1.1", ig:"L2", title:"Ensure Safe Links for Office Applications is Enabled", subs:[
+    {name:"Safe Links policy protects Office apps", ss:["safe links"], manualId:"CIS:2.1.1", sev:"medium"}]},
+  {family:"2", id:"2.1.2", ig:"L1", title:"Ensure the Common Attachment Types Filter is enabled", subs:[
+    {name:"Common attachment types filter is on", ss:["safe attachment","malware filter"], manualId:"CIS:2.1.2", sev:"high"}]},
+  {family:"2", id:"2.1.3", ig:"L1", title:"Ensure notifications for internal users sending malware is Enabled", subs:[
+    {name:"Internal malware notifications enabled", ss:["malware"], manualId:"CIS:2.1.3"}]},
+  {family:"2", id:"2.1.4", ig:"L2", title:"Ensure Safe Attachments policy is enabled", subs:[
+    {name:"Safe Attachments policy is enabled", ss:["safe attachment"], manualId:"CIS:2.1.4", sev:"high"}]},
+  {family:"2", id:"2.1.5", ig:"L2", title:"Ensure Safe Attachments for SharePoint, OneDrive, and Teams is Enabled", subs:[
+    {name:"Safe Attachments covers SPO/OneDrive/Teams", ss:["safe attachment"], manualId:"CIS:2.1.5"}]},
+  {family:"2", id:"2.1.6", ig:"L1", title:"Ensure Exchange Online Spam Policies are set to notify administrators", subs:[
+    {name:"Outbound spam notifies admins", ss:["spam"], manualId:"CIS:2.1.6"}]},
+  {family:"2", id:"2.1.7", ig:"L2", title:"Ensure that an anti-phishing policy has been created", subs:[
+    {name:"Anti-phishing policy exists", ss:["anti-phishing","antiphishing"], manualId:"CIS:2.1.7", sev:"high"}]},
+  {family:"2", id:"2.1.9", ig:"L1", title:"Ensure that DKIM is enabled for all Exchange Online Domains", subs:[
+    {name:"DKIM is enabled on all domains", ss:["dkim"], manualId:"CIS:2.1.9", sev:"medium"}]},
+  {family:"2", id:"2.4.1", ig:"L1", title:"Ensure Priority account protection is enabled and configured", subs:[
+    {name:"Priority account protection configured", manualId:"CIS:2.4.1"}]},
+
+  /* ---- 3. Microsoft Purview ---- */
+  {family:"3", id:"3.1.1", ig:"L1", title:"Ensure Microsoft 365 audit log search is Enabled", subs:[
+    {name:"Unified audit log search is enabled", ss:["audit"], manualId:"CIS:3.1.1", sev:"high"}]},
+  {family:"3", id:"3.2.1", ig:"L2", title:"Ensure DLP policies are enabled", subs:[
+    {name:"Data Loss Prevention policies are enabled", ss:["dlp","data loss prevention"], manualId:"CIS:3.2.1", sev:"high"}]},
+  {family:"3", id:"3.2.2", ig:"L2", title:"Ensure DLP policies are enabled for Microsoft Teams", subs:[
+    {name:"DLP policy covers Teams", ss:["dlp"], manualId:"CIS:3.2.2"}]},
+  {family:"3", id:"3.3.1", ig:"L2", title:"Ensure SharePoint Online Information Protection policies are set up and used", subs:[
+    {name:"Sensitivity labels are configured", ss:["sensitivity label","information protection"], manualId:"CIS:3.3.1"}]},
+
+  /* ---- 5. Microsoft Entra ID ---- */
+  {family:"5", id:"5.1.2.2", ig:"L1", title:"Ensure third-party integrated applications are not allowed", subs:[
+    {name:"Users cannot register third-party apps", key:"cis-app-register", sev:"medium"}]},
+  {family:"5", id:"5.1.2.3", ig:"L1", title:"Ensure 'Restrict non-admin users from creating tenants' is set to 'Yes'", subs:[
+    {name:"Non-admins cannot create tenants", manualId:"CIS:5.1.2.3"}]},
+  {family:"5", id:"5.1.2.6", ig:"L1", title:"Ensure guest user access is restricted", subs:[
+    {name:"Guest access is set to most restrictive", key:"cis-guest-role", sev:"medium"}]},
+  {family:"5", id:"5.1.5.1", ig:"L1", title:"Ensure user consent to apps accessing company data on their behalf is not allowed", subs:[
+    {name:"User consent to apps is disabled", key:"cis-user-consent", sev:"high"}]},
+  {family:"5", id:"5.1.6.1", ig:"L2", title:"Ensure that collaboration invitations are sent to allowed domains only", subs:[
+    {name:"Guest invitations limited to allowed domains", manualId:"CIS:5.1.6.1"}]},
+  {family:"5", id:"5.1.8.1", ig:"L1", title:"Ensure that password hash sync is enabled for hybrid deployments", subs:[
+    {name:"Password hash sync is enabled (hybrid)", manualId:"CIS:5.1.8.1"}]},
+  {family:"5", id:"5.2.2.1", ig:"L1", title:"Ensure multifactor authentication is enabled for all users", subs:[
+    {name:"MFA enforced for all users via Conditional Access", key:"cis-mfa-all", sev:"critical"},
+    {name:"All users are registered for MFA", key:"cis-mfa-reg", sev:"critical"}]},
+  {family:"5", id:"5.2.2.2", ig:"L1", title:"Ensure multifactor authentication is enabled for all administrative roles", subs:[
+    {name:"MFA enforced for admin roles", key:"cis-mfa-admin", sev:"critical"}]},
+  {family:"5", id:"5.2.2.3", ig:"L1", title:"Enable Conditional Access policies to block legacy authentication", subs:[
+    {name:"Legacy authentication is blocked", key:"cis-legacy", sev:"critical"}]},
+  {family:"5", id:"5.2.2.4", ig:"L1", title:"Ensure Sign-in frequency is enabled and browser sessions are not persistent for Administrative users", subs:[
+    {name:"Admin sign-in frequency / no persistent browser", manualId:"CIS:5.2.2.4", sev:"medium"}]},
+  {family:"5", id:"5.2.2.6", ig:"L2", title:"Enable Identity Protection user risk policies", subs:[
+    {name:"User-risk policy is enforced", key:"cis-risk-user", sev:"high"}]},
+  {family:"5", id:"5.2.2.7", ig:"L2", title:"Enable Identity Protection sign-in risk policies", subs:[
+    {name:"Sign-in-risk policy is enforced", key:"cis-risk-signin", sev:"high"}]},
+  {family:"5", id:"5.2.2.9", ig:"L1", title:"Ensure a managed device is required for authentication", subs:[
+    {name:"Compliant/hybrid-joined device required", key:"cis-device-comp", sev:"medium"}]},
+  {family:"5", id:"5.2.3.1", ig:"L1", title:"Ensure Microsoft Authenticator is configured to protect against MFA fatigue", subs:[
+    {name:"Number matching & context enabled in Authenticator", manualId:"CIS:5.2.3.1", sev:"medium"}]},
+  {family:"5", id:"5.2.3.2", ig:"L1", title:"Ensure custom banned passwords lists are used", subs:[
+    {name:"Custom banned password list configured", manualId:"CIS:5.2.3.2"}]},
+  {family:"5", id:"5.2.3.3", ig:"L2", title:"Ensure password protection is enabled for on-prem Active Directory", subs:[
+    {name:"On-prem Entra Password Protection deployed", manualId:"CIS:5.2.3.3"}]},
+  {family:"5", id:"5.2.4.1", ig:"L1", title:"Ensure 'Phishing-resistant MFA strength' is required for Administrators", subs:[
+    {name:"Phishing-resistant auth strength for admins", key:"cis-authstrength", sev:"high"}]},
+  {family:"5", id:"5.3.1", ig:"L2", title:"Ensure 'Privileged Identity Management' is used to manage roles", subs:[
+    {name:"PIM manages privileged role activation", ss:["privileged identity management","pim"], manualId:"CIS:5.3.1", sev:"high"}]},
+  {family:"5", id:"5.3.2", ig:"L1", title:"Ensure 'Access reviews' for Guest Users are configured", subs:[
+    {name:"Access reviews configured for guests", ss:["access review"], manualId:"CIS:5.3.2"}]},
+  {family:"5", id:"5.3.3", ig:"L2", title:"Ensure 'Access reviews' for privileged roles are configured", subs:[
+    {name:"Access reviews configured for privileged roles", ss:["access review"], manualId:"CIS:5.3.3", sev:"medium"}]},
+
+  /* ---- 6. Exchange Online ---- */
+  {family:"6", id:"6.1.1", ig:"L1", title:"Ensure 'AuditDisabled' organizationally is set to 'False'", subs:[
+    {name:"Mailbox auditing is enabled org-wide", ss:["mailbox audit","audit"], manualId:"CIS:6.1.1", sev:"medium"}]},
+  {family:"6", id:"6.1.2", ig:"L1", title:"Ensure mailbox auditing for E3 users is Enabled", subs:[
+    {name:"Mailbox auditing enabled for all users", manualId:"CIS:6.1.2"}]},
+  {family:"6", id:"6.2.1", ig:"L1", title:"Ensure all forms of mail forwarding are blocked and/or disabled", subs:[
+    {name:"External auto-forwarding is blocked", ss:["mail forwarding","forwarding"], manualId:"CIS:6.2.1", sev:"high"}]},
+  {family:"6", id:"6.2.2", ig:"L1", title:"Ensure mail transport rules do not whitelist specific domains", subs:[
+    {name:"No transport rules whitelist domains", manualId:"CIS:6.2.2", sev:"medium"}]},
+  {family:"6", id:"6.2.3", ig:"L2", title:"Ensure email from external senders is identified", subs:[
+    {name:"External sender tagging is enabled", ss:["external sender","external email"], manualId:"CIS:6.2.3"}]},
+  {family:"6", id:"6.3.1", ig:"L2", title:"Ensure users installing Outlook add-ins is not allowed", subs:[
+    {name:"Users cannot install Outlook add-ins", manualId:"CIS:6.3.1"}]},
+  {family:"6", id:"6.5.1", ig:"L1", title:"Ensure modern authentication for Exchange Online is enabled", subs:[
+    {name:"Modern authentication enabled for EXO", ss:["modern authentication"], manualId:"CIS:6.5.1", sev:"high"}]},
+  {family:"6", id:"6.5.2", ig:"L1", title:"Ensure MailTips are enabled for end users", subs:[
+    {name:"MailTips are enabled", manualId:"CIS:6.5.2", sev:"low"}]},
+  {family:"6", id:"6.5.3", ig:"L2", title:"Ensure additional storage providers are restricted in Outlook on the web", subs:[
+    {name:"Third-party storage restricted in OWA", manualId:"CIS:6.5.3"}]},
+
+  /* ---- 7. SharePoint & OneDrive ---- */
+  {family:"7", id:"7.2.1", ig:"L1", title:"Ensure modern authentication for SharePoint applications is required", subs:[
+    {name:"Legacy auth blocked for SharePoint", manualId:"CIS:7.2.1", sev:"medium"}]},
+  {family:"7", id:"7.2.3", ig:"L1", title:"Ensure external content sharing is restricted", subs:[
+    {name:"External sharing set to 'Existing guests' or stricter", manualId:"CIS:7.2.3", sev:"high"}]},
+  {family:"7", id:"7.2.4", ig:"L2", title:"Ensure OneDrive content sharing is restricted", subs:[
+    {name:"OneDrive external sharing restricted", manualId:"CIS:7.2.4", sev:"medium"}]},
+  {family:"7", id:"7.2.9", ig:"L1", title:"Ensure guest access to a site or OneDrive will expire automatically", subs:[
+    {name:"Guest access expiration is configured", manualId:"CIS:7.2.9"}]},
+  {family:"7", id:"7.2.10", ig:"L1", title:"Ensure reauthentication with verification code is restricted", subs:[
+    {name:"Guest link reauthentication interval set", manualId:"CIS:7.2.10"}]},
+  {family:"7", id:"7.3.1", ig:"L2", title:"Ensure Office 365 SharePoint infected files are disallowed for download", subs:[
+    {name:"Infected file download is blocked", manualId:"CIS:7.3.1"}]},
+
+  /* ---- 8. Microsoft Teams ---- */
+  {family:"8", id:"8.1.1", ig:"L2", title:"Ensure external file sharing in Teams is enabled for only approved cloud storage services", subs:[
+    {name:"Only approved cloud storage in Teams", manualId:"CIS:8.1.1"}]},
+  {family:"8", id:"8.2.1", ig:"L1", title:"Ensure 'external access' is restricted in the Teams admin center", subs:[
+    {name:"Teams external access is restricted", manualId:"CIS:8.2.1", sev:"medium"}]},
+  {family:"8", id:"8.5.1", ig:"L2", title:"Ensure anonymous users can't join a meeting", subs:[
+    {name:"Anonymous meeting join disabled", manualId:"CIS:8.5.1"}]},
+  {family:"8", id:"8.5.2", ig:"L1", title:"Ensure anonymous users and dial-in callers can't start a meeting", subs:[
+    {name:"Anonymous users can't start meetings", manualId:"CIS:8.5.2"}]},
+  {family:"8", id:"8.5.7", ig:"L2", title:"Ensure external participants can't give or request control", subs:[
+    {name:"External participants can't take control", manualId:"CIS:8.5.7"}]},
+  {family:"8", id:"8.6.1", ig:"L1", title:"Ensure users can report security concerns in Teams", subs:[
+    {name:"Report-a-message enabled in Teams", manualId:"CIS:8.6.1"}]}
+];
+/* resolve CIS checks: live CIS check → shared secure-score → manual */
+function resolveCISCheck(s, ov){
+  if(s.key && CIS_CHECKS[s.key]){ let r=null; try{ r=CIS_CHECKS[s.key](); }catch(e){} if(r) return {...r, source:"live"}; }
+  if(s.ss){ const ss=secureScoreForFrags(s.ss); if(ss) return {...ss, source:"securescore"}; }
+  const set = ov[s.manualId];
+  return { status:set||"manual", source:"manual",
+    evidence: set ? `Manually marked ${set==="pass"?"Passed":"Failed"}.` : "No automatic data source — set manually once implemented." };
+}
+function effectiveCIS(){
+  const ov = manualOverrides();
+  return CIS_DATA.map(c=>{
+    const subs = c.subs.map(s=>{ const r=resolveCISCheck(s, ov); return {...s, status:r.status, source:r.source, evidence:r.evidence, link:r.link||null, policies:r.policies||null}; });
+    let status, severity;
+    if(subs.some(s=>s.status==="fail")){ status="fail"; severity = subs.filter(s=>s.status==="fail").map(s=>s.sev).find(Boolean)||"high"; }
+    else if(subs.some(s=>s.status==="manual")){ status="manual"; }
+    else { status="pass"; }
+    const srcs=[...new Set(subs.map(s=>s.source))];
+    return {...c, category:c.family, subs, status, severity, source: srcs.length===1?srcs[0]:"mixed" };
+  });
+}
+
+/* ====================================================================
    DASHBOARD — animated inline-SVG charts (no external libraries)
    ==================================================================== */
 function _animateCount(node, to, suffix){
@@ -2591,7 +2819,7 @@ function renderBizDash(kind, DATA){
   DATA.filter(c=>c.status==="fail").forEach(c=>{ if(c.severity&&sev[c.severity]!=null) sev[c.severity]++; });
   const sv=el("bdSev"); sv.innerHTML=renderSevStrip(sev);
   sv.querySelectorAll(".sevcell").forEach(cell=> cell.onclick=()=>{
-    const map={baseline:["fBaseSev","fBaseStatus"],cmmc:["fCmmcSev","fCmmcStatus"],cmmc2:["fCmmc2Sev","fCmmc2Status"]};
+    const map={baseline:["fBaseSev","fBaseStatus"],cmmc:["fCmmcSev","fCmmcStatus"],cmmc2:["fCmmc2Sev","fCmmc2Status"],cis:["fCisSev","fCisStatus"]};
     const [sevSel,stSel]=map[kind]||map.baseline;
     el(sevSel).value=cell.dataset.sev; el(stSel).value="fail"; render();
   });
@@ -2601,7 +2829,7 @@ function skeletonRows(cols){
 }
 /* branded, client-ready summary (opens a print-optimised page) */
 function exportSummary(kind){
-  const DATA = kind==="cmmc2"?effectiveCMMC2():(kind==="cmmc"?effectiveCMMC():effectiveBaseline());
+  const DATA = kind==="cis"?effectiveCIS():(kind==="cmmc2"?effectiveCMMC2():(kind==="cmmc"?effectiveCMMC():effectiveBaseline()));
   const titleTxt = kind==="cmmc2"?"CMMC Level 2 Security Baseline":(kind==="cmmc"?"CMMC Level 1 Security Baseline":"Microsoft Security Baseline");
   const total=DATA.length, passed=DATA.filter(c=>c.status==="pass").length, failed=DATA.filter(c=>c.status==="fail").length, manual=DATA.filter(c=>c.status==="manual").length;
   const evald=passed+failed, score=evald?Math.round(passed/evald*100):0;
@@ -2788,7 +3016,8 @@ function srcChip(src, c){
 /* framework-generic render/filter/modal — shared by CMMC L1 and L2 */
 const FW_CFG = {
   cmmc:  { eff:effectiveCMMC,  cat:"fCmmcCat",  st:"fCmmcStatus",  sv:"fCmmcSev",  names:FAMILY_NAMES,  total:()=>CMMC_DATA.length },
-  cmmc2: { eff:effectiveCMMC2, cat:"fCmmc2Cat", st:"fCmmc2Status", sv:"fCmmc2Sev", names:FAMILY_NAMES2, total:()=>CMMC2_DATA.length }
+  cmmc2: { eff:effectiveCMMC2, cat:"fCmmc2Cat", st:"fCmmc2Status", sv:"fCmmc2Sev", names:FAMILY_NAMES2, total:()=>CMMC2_DATA.length },
+  cis:   { eff:effectiveCIS,   cat:"fCisCat",   st:"fCisStatus",   sv:"fCisSev",   names:FAMILY_NAMES_CIS, total:()=>CIS_DATA.length }
 };
 function renderFramework(kind){
   const cfg = FW_CFG[kind];
@@ -2867,6 +3096,181 @@ function openFrameworkEvidence(kind, cid){
 }
 function renderCMMC(){ renderFramework("cmmc"); }
 function renderCMMC2(){ renderFramework("cmmc2"); }
+function renderCIS(){ renderFramework("cis"); }
+
+/* ====================================================================
+   RECOMMENDATIONS — the "1-shot" prioritized remediation engine.
+   Every entry maps to a LIVE check that already runs against Graph, so
+   once the admin implements the fix and reloads, the item auto-flips to
+   Resolved (no manual marking needed). Ordered by severity × impact.
+   Each carries: what, why, how-to-fix steps, portal deep-link, and the
+   framework controls it satisfies (CIS / CMMC / Baseline cross-mapped).
+   ==================================================================== */
+const REMEDIATION = [
+  { id:"mfa-all", sev:"critical", check:()=>caEval("mfa-all"),
+    title:"Enforce MFA for all users",
+    why:"Accounts without MFA are the single biggest breach vector — password-only sign-in is trivially phished. Microsoft reports MFA blocks 99.2% of account-compromise attacks.",
+    fix:["Entra admin center → Protection → Conditional Access → New policy","Assign to All users (exclude a break-glass account)","Grant → Require multifactor authentication → enable the policy"],
+    link:entraLink("Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies"),
+    maps:["CIS 5.2.2.1","CMMC IA-2","Baseline"] },
+  { id:"mfa-admin", sev:"critical", check:()=>caEval("mfa-admin"),
+    title:"Require MFA for all administrator roles",
+    why:"Privileged accounts are the highest-value target. A single admin compromise without MFA can mean full tenant takeover.",
+    fix:["Conditional Access → New policy","Assign to the directory-role set (Global Admin, and all privileged roles)","Grant → Require multifactor authentication"],
+    link:entraLink("Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies"),
+    maps:["CIS 5.2.2.2","CMMC AC-2"] },
+  { id:"legacy-block", sev:"critical", check:()=>caEval("legacy-block"),
+    title:"Block legacy authentication",
+    why:"Legacy protocols (IMAP, POP, SMTP AUTH, older Office) can't enforce MFA and are used in the majority of password-spray attacks.",
+    fix:["Conditional Access → New policy","Assign to All users","Conditions → Client apps → Exchange ActiveSync + other clients","Grant → Block access"],
+    link:entraLink("Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies"),
+    maps:["CIS 5.2.2.3","CMMC IA-2","Baseline"] },
+  { id:"authstrength-admin", sev:"high", check:()=>caEval("authstrength-admin"),
+    title:"Require phishing-resistant MFA for admins",
+    why:"Standard MFA (SMS/app-approve) can still be phished or fatigue-bombed. Phishing-resistant methods (FIDO2, Windows Hello, certificate) close that gap for your most privileged users.",
+    fix:["Conditional Access → New policy targeting admin roles","Grant → Require authentication strength → Phishing-resistant MFA"],
+    link:entraLink("Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies"),
+    maps:["CIS 5.2.4.1"] },
+  { id:"signin-risk", sev:"high", check:()=>caEval("signin-risk"),
+    title:"Enable a sign-in risk policy",
+    why:"Identity Protection scores each sign-in for risk (impossible travel, anonymous IP, leaked credentials). A risk policy auto-challenges or blocks suspicious sign-ins in real time.",
+    fix:["Conditional Access → New policy","Conditions → Sign-in risk → High, Medium","Grant → Require MFA (or block)"],
+    link:entraLink("Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies"),
+    maps:["CIS 5.2.2.7"] },
+  { id:"user-risk", sev:"high", check:()=>caEval("user-risk"),
+    title:"Enable a user risk policy",
+    why:"When a user is flagged high-risk (e.g. leaked credentials on the dark web), a user-risk policy forces a secure password change before further access.",
+    fix:["Conditional Access → New policy","Conditions → User risk → High","Grant → Require password change"],
+    link:entraLink("Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies"),
+    maps:["CIS 5.2.2.6"] },
+  { id:"device-compliant", sev:"medium", check:()=>caEval("device-compliant"),
+    title:"Require a compliant / hybrid-joined device",
+    why:"Requiring managed devices ensures access only from endpoints you can attest are encrypted, patched, and Defender-protected.",
+    fix:["Conditional Access → New policy","Grant → Require device to be marked as compliant (or Hybrid Entra joined)"],
+    link:entraLink("Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies"),
+    maps:["CIS 5.2.2.9","CMMC IA-2"] },
+  { id:"mfa-reg", sev:"high", check:()=>CIS_CHECKS["cis-mfa-reg"](),
+    title:"Get every user registered for MFA",
+    why:"An enforcement policy only helps once users have actually registered a method. Unregistered users get blocked or fall through gaps.",
+    fix:["Identity → Monitoring → Authentication methods → Registration campaign","Nudge unregistered users, or run a registration drive"],
+    link:entraLink("Microsoft_AAD_IAM/AuthenticationMethodsMenuBlade"),
+    maps:["CIS 5.2.2.1"] },
+  { id:"user-consent", sev:"high", check:()=>CIS_CHECKS["cis-user-consent"](),
+    title:"Disable user consent to third-party apps",
+    why:"Illicit-consent phishing tricks users into granting OAuth access to malicious apps. Restricting consent to admins (with an admin-consent workflow) shuts this down.",
+    fix:["Entra → Enterprise applications → Consent and permissions → User consent settings","Set to 'Do not allow user consent'","Optionally enable the admin consent request workflow"],
+    link:entraLink("Microsoft_AAD_IAM/ConsentPoliciesMenuBlade/~/UserSettings"),
+    maps:["CIS 5.1.5.1"] },
+  { id:"app-register", sev:"medium", check:()=>CIS_CHECKS["cis-app-register"](),
+    title:"Prevent users from registering applications",
+    why:"Unrestricted app registration lets any user create service principals that can become persistence or exfiltration channels.",
+    fix:["Entra → Users → User settings → App registrations → set to No"],
+    link:entraLink("Microsoft_AAD_IAM/UserManagementMenuBlade/~/UserSettings"),
+    maps:["CIS 5.1.2.2","CMMC AC-2"] },
+  { id:"ga-count", sev:"high", check:()=>CIS_CHECKS["cis-ga-count"](),
+    title:"Keep Global Administrators between 2 and 4",
+    why:"Too few risks lockout; too many widens the attack surface. CIS recommends 2–4, all cloud-only, all with phishing-resistant MFA, ideally activated via PIM.",
+    fix:["Entra → Roles and administrators → Global Administrator","Remove excess assignments; move day-to-day work to least-privilege roles"],
+    link:ROLE_LINK,
+    maps:["CIS 1.1.3","CMMC AC-2"] },
+  { id:"guest-role", sev:"medium", check:()=>CIS_CHECKS["cis-guest-role"](),
+    title:"Restrict guest user permissions",
+    why:"By default guests can enumerate users, groups and other directory objects. Restricting them to the most limited role prevents reconnaissance.",
+    fix:["Entra → External identities → External collaboration settings","Guest user access → 'most restrictive'"],
+    link:REL_LINK,
+    maps:["CIS 5.1.2.6","CMMC AC-1"] },
+  { id:"pw-expiry", sev:"low", check:()=>CIS_CHECKS["cis-pw-expiry"](),
+    title:"Set passwords to never expire",
+    why:"Forced periodic expiry drives weaker, patterned passwords and more reuse. Modern guidance (NIST, Microsoft, CIS) is to disable expiration and rely on MFA + banned-password + risk detection.",
+    fix:["Microsoft 365 admin center → Settings → Org settings → Security & privacy → Password expiration policy","Tick 'Set passwords to never expire'"],
+    link:entraLink("Microsoft_AAD_IAM/PasswordResetMenuBlade"),
+    maps:["CIS 1.3.1"] },
+  { id:"dormant", sev:"medium", check:()=>CIS_CHECKS["cis-dormant"](),
+    title:"Disable or remove dormant accounts",
+    why:"Inactive enabled accounts are unmonitored footholds. Disable after 45 days of inactivity and remove after review.",
+    fix:["Use the Dormant members tab here to identify and action them","Disable first, delete after a hold period"],
+    link:entraLink("Microsoft_AAD_UsersAndTenants/UserManagementMenuBlade/~/AllUsers"),
+    maps:["CMMC AC-1"] },
+  { id:"stale-dev", sev:"medium", check:()=>CIS_CHECKS["cis-stale-dev"](),
+    title:"Remove stale devices (90+ days inactive)",
+    why:"Devices that haven't checked in for months clutter compliance reporting and may be lost/decommissioned endpoints still holding tokens.",
+    fix:["Use the Stale devices tab to review and delete","Confirm the device is truly retired before removing"],
+    link:entraLink("Microsoft_AAD_Devices/DevicesMenuBlade/~/Devices"),
+    maps:["CMMC IA-1"] }
+];
+function computeRecommendations(){
+  return REMEDIATION.map(r=>{
+    let res=null; try{ res=r.check(); }catch(e){}
+    const state = !res ? "unknown" : res.status;   // pass | fail | unknown(data not loaded)
+    return { ...r, state, evidence: res ? res.evidence : "Load the relevant data (sign in and open the Security tabs) to evaluate this automatically.", liveLink: (res&&res.link)||r.link };
+  });
+}
+const SEV_RANK = { critical:0, high:1, medium:2, low:3 };
+function renderRecommendations(){
+  ensureBaselineData();
+  const tb = el("tbody");
+  const all = computeRecommendations();
+  // KPI cards
+  const open = all.filter(r=>r.state==="fail");
+  const resolved = all.filter(r=>r.state==="pass");
+  const crit = open.filter(r=>r.sev==="critical").length;
+  const score = all.length ? Math.round(resolved.length/all.length*100) : 0;
+  setInfoCards("Open actions", open.length, "Critical open", crit, "Resolved", resolved.length, "Remediation score", score+"%");
+
+  // filter
+  const q = searchVal(), st = v("fRecState"), sv = v("fRecSev");
+  let rows = all.filter(r=>{
+    if(st==="open" && r.state!=="fail") return false;
+    if(st==="resolved" && r.state!=="pass") return false;
+    if(sv && r.sev!==sv) return false;
+    if(q && !((r.title+" "+r.why+" "+r.maps.join(" ")).toLowerCase().includes(q))) return false;
+    return true;
+  });
+  // open first, then by severity
+  rows.sort((a,b)=>{
+    const sa = a.state==="fail"?0:(a.state==="unknown"?1:2), sb = b.state==="fail"?0:(b.state==="unknown"?1:2);
+    if(sa!==sb) return sa-sb;
+    return SEV_RANK[a.sev]-SEV_RANK[b.sev];
+  });
+  view = rows; setFilterCount(rows.length, all.length);
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="5" class="empty"><div class="big">Nothing to show</div>No recommendations match the current filters.</td></tr>`; return; }
+
+  const statePill = s => s==="pass" ? `<span class="pill pass">✓ Resolved</span>`
+    : (s==="fail" ? `<span class="pill fail">● Open</span>` : `<span class="pill na">Not evaluated</span>`);
+  tb.innerHTML = rows.map(r=>`<tr class="clickrow" data-accent="${r.state==="fail"?r.sev:r.state}" data-rid="${r.id}" title="View remediation steps">
+      <td>${statePill(r.state)}</td>
+      <td><div class="uname">${escapeHtml(r.title)}</div><div class="upn" style="font-family:inherit;color:var(--muted)">${r.maps.map(m=>`<span class="srcchip">${escapeHtml(m)}</span>`).join("")}</div></td>
+      <td><span class="sev ${r.sev}">${r.sev}</span></td>
+      <td class="num">${r.state==="fail"?"Action needed":(r.state==="pass"?"Done":"—")}</td>
+      <td class="opt">${escapeHtml((r.evidence||"").slice(0,90))}</td>
+    </tr>`).join("");
+  tb.querySelectorAll("tr.clickrow").forEach(tr=> tr.onclick=()=>openRecEvidence(tr.dataset.rid));
+}
+function openRecEvidence(rid){
+  const r = computeRecommendations().find(x=>x.id===rid); if(!r) return;
+  const stPill = r.state==="pass" ? `<span class="pill pass">✓ Resolved</span>`
+    : (r.state==="fail" ? `<span class="pill fail">● Open</span>` : `<span class="pill na">Not evaluated</span>`);
+  el("evPill").innerHTML = stPill;
+  el("evTitle").textContent = r.title;
+  el("evCat").innerHTML = `<span class="sev ${r.sev}">${r.sev}</span> &nbsp; Satisfies: ${r.maps.map(m=>escapeHtml(m)).join(" · ")}`;
+  el("evBody").innerHTML = `
+    <div class="evrow"><div class="sdot ${r.state==='pass'?'pass':(r.state==='fail'?'fail':'na')}">${r.state==='pass'?'✓':(r.state==='fail'?'✕':'○')}</div>
+      <div style="flex:1">
+        <div class="evname">Current status</div>
+        <div class="evdetail">${escapeHtml(r.evidence||"")}</div>
+      </div></div>
+    <div class="evrow"><div class="sdot na">i</div><div style="flex:1">
+      <div class="evname">Why it matters</div>
+      <div class="evdetail">${escapeHtml(r.why)}</div></div></div>
+    <div class="evrow"><div class="sdot na">→</div><div style="flex:1">
+      <div class="evname">How to fix</div>
+      <div class="evdetail"><ol style="margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px">${r.fix.map(f=>`<li>${escapeHtml(f)}</li>`).join("")}</ol></div>
+      <div class="evpolicies"><div class="evpol"><a href="${r.liveLink}" target="_blank" rel="noopener">Open the right portal blade</a><span class="open">↗</span></div></div>
+    </div></div>
+    ${r.state==="fail" ? `<div class="schnote" style="margin-top:6px">After you implement this, click <b>↻ Reload</b> — Tenant Guard re-checks against Microsoft Graph and this item will automatically move to <b>Resolved</b> once the change is live. No manual marking needed.</div>` : ""}
+    ${r.state==="pass" ? `<div class="schnote" style="margin-top:6px;background:rgba(63,185,80,.09);border-color:rgba(63,185,80,.3)">Verified live against Microsoft Graph — this control is currently satisfied.</div>` : ""}`;
+  el("evScrim").classList.add("show");
+}
 
 function renderRisky(){
   view = applyRiskyFilters(allRisky);
@@ -3649,13 +4053,15 @@ el("btnRefresh").onclick = ()=>{
  "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
  "fPatchRel","fPatchStatus","fAvMode","fAvHealth","fLapsOs","fLapsStatus","fPatchView",
  "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent",
- "fBaseCat","fBaseStatus","fBaseSev","fCmmcCat","fCmmcStatus","fCmmcSev","fCmmc2Cat","fCmmc2Status","fCmmc2Sev"].forEach(id=> el(id).onchange = render);
+ "fBaseCat","fBaseStatus","fBaseSev","fCmmcCat","fCmmcStatus","fCmmcSev","fCmmc2Cat","fCmmc2Status","fCmmc2Sev",
+ "fCisCat","fCisStatus","fCisSev","fRecState","fRecSev"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
    "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
    "fPatchRel","fPatchStatus","fLapsOs","fLapsStatus",
    "fDcState","fDcOs","fJailStatus","fPrivMfa","fSecCat","fAcStatus","fAcType","fOaConsent",
-   "fBaseCat","fBaseStatus","fBaseSev","fCmmcCat","fCmmcStatus","fCmmcSev","fCmmc2Cat","fCmmc2Status","fCmmc2Sev"].forEach(id=> el(id).value="");
+   "fBaseCat","fBaseStatus","fBaseSev","fCmmcCat","fCmmcStatus","fCmmcSev","fCmmc2Cat","fCmmc2Status","fCmmc2Sev",
+   "fCisCat","fCisStatus","fCisSev","fRecState","fRecSev"].forEach(id=> el(id).value="");
   el("fAvMode").value="endpoints"; el("fAvHealth").value="unhealthy";   // antivirus keeps sensible defaults
   el("fPatchView").value="devices";
   render();
@@ -3707,7 +4113,7 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = ()=> switchTab(t.data
   c.onclick = ()=> render(); // re-render current tab (useful after filter changes)
 });
 
-el("btnSummary").onclick = ()=> exportSummary(tab==="cmmc2"?"cmmc2":(tab==="cmmc"?"cmmc":"baseline"));
+el("btnSummary").onclick = ()=> exportSummary(tab==="cis"?"cis":(tab==="cmmc2"?"cmmc2":(tab==="cmmc"?"cmmc":"baseline")));
 
 /* ====================================================================
    SCHEDULED REPORTS — Dormant members / guests / Stale devices
