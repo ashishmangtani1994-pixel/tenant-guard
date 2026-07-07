@@ -2293,71 +2293,79 @@ const CMMC_CHECKS = {
   "stale-45":     ()=>{ if(!devicesLoaded) return null; const cut=Date.now()-45*864e5; const n=allDevices.filter(d=>{const t=d.approximateLastSignInDateTime;return t&&new Date(t).getTime()<cut;}).length; return {status:n===0?"pass":"fail", evidence:`${n} device(s) have not checked in for 45+ days.`, link:entraLink("Microsoft_AAD_Devices/DevicesMenuBlade/~/Devices")}; }
 };
 const CMMC_DATA = [
-  {family:"AC", id:"AC-1", title:"Limit information system access to authorized users, processes acting on behalf of authorized users, or devices", subs:[
+  /* ---- Access Control (AC) — 4 practices ---- */
+  {family:"AC", id:"AC.L1-3.1.1", title:"Authorized Access Control — limit system access to authorized users, processes acting on behalf of users, and devices", subs:[
     {name:"Users are enrolled in MFA and covered by a policy", key:"mfa-enrolled", sev:"critical"},
-    {name:"Dormant accounts are disabled after 45 days", key:"dormant", sev:"medium"},
-    {name:"Guest users have limited access to properties and memberships of directory objects", key:"guest-limited"},
-    {name:"Only users with the Guest Inviter Role are allowed to invite external users", key:"guest-inviter", sev:"low"},
-    {name:"Groups are inventoried and periodically reviewed for data access", manualId:"AC-1:groups"},
-    {name:"Ensure that only organizationally managed/approved public groups exist", manualId:"AC-1:public-groups"}]},
-  {family:"AC", id:"AC-2", title:"Limit information system access to the types of transactions and functions that authorized users are permitted to execute", subs:[
-    {name:"Ensure that between two and four global admins are designated", key:"global-admins", sev:"high"},
-    {name:"Ensure 'Privileged Identity Management' is used to manage roles", ss:["privileged identity management","pim"], manualId:"AC-2:pim"},
-    {name:"Non-admin users shall be prevented from providing consent to 3rd party applications", key:"nonadmin-consent"},
-    {name:"Only Admins shall be allowed to register 3rd party applications", key:"apps-register"}]},
-  {family:"AC", id:"AC-3", title:"Verify and control/limit connections to external information system", subs:[
-    {name:"Block access outside your country's IP", manualId:"AC-3:country-ip"},
-    {name:"A conditional access policy is enabled which requires guest users to use MFA", manualId:"AC-3:guest-mfa", sev:"low"},
-    {name:"Ensure the connection filter IP allow list is not used", manualId:"AC-3:conn-allow", sev:"low"},
-    {name:"Ensure the connection filter safe list is off", manualId:"AC-3:conn-safe"},
-    {name:"Ensure external domains are restricted in the Teams admin center", manualId:"AC-3:teams-ext"},
-    {name:"Cloud App Discovery is configured and apps are periodically reviewed", ss:["defender for cloud apps","cloud app"], manualId:"AC-3:cloud-app"}]},
-  {family:"AC", id:"AC-4", title:"Control information posted or processed on publicly accessible information systems", subs:[
-    {name:"Data loss prevention policies shall be configured", ss:["dlp","data loss prevention"], manualId:"AC-4:dlp"},
-    {name:"Information Protection Labels shall be configured", ss:["sensitivity label","information protection"], manualId:"AC-4:labels"},
-    {name:"Ensure external content sharing is restricted", manualId:"AC-4:ext-sharing"},
-    {name:"Ensure link sharing is restricted in SharePoint and OneDrive", manualId:"AC-4:link-sharing"}]},
-  {family:"IA", id:"IA-1", title:"Identify information system users, processes, or devices", subs:[
-    {name:"Users Are Authenticated with Unique Credentials", manualId:"IA-1:unique-creds"},
-    {name:"All Devices shall be inventoried and periodically reviewed", key:"dev-inventory"},
-    {name:"Devices shall be deleted that haven't checked in for over 45 days", key:"stale-45", sev:"medium"}]},
-  {family:"IA", id:"IA-2", title:"Authenticate users, processes, or devices", subs:[
-    {name:"MFA is enforced for all users", key:"mfa-all"},
-    {name:"Managed Devices shall be required for authentication", key:"managed-dev", sev:"medium"},
-    {name:"Passwords shall not expire", key:"password-exp"},
-    {name:"Legacy Authentication shall be blocked", key:"legacy-auth"}]},
-  {family:"MP", id:"MP-1", title:"Sanitize or destroy information system media containing FCI before disposal or reuse", subs:[
-    {name:"All Managed Devices shall be enrolled in Intune", manualId:"MP-1:intune-enroll", sev:"medium"},
-    {name:"Retention Policies shall be configured", ss:["retention"], manualId:"MP-1:retention"},
-    {name:"Encryption shall be required on all devices", ss:["bitlocker","encryption"], manualId:"MP-1:encryption", sev:"high"}]},
-  {family:"PE", id:"PE-1", title:"Limit physical access to organizational information systems to authorized individuals", subs:[
-    {name:"Devices compliance policies shall be configured for every supported device platform", manualId:"PE-1:compliance-platform", sev:"low"},
-    {name:"Noncompliant devices shall be blocked from accessing corporate resources", key:"managed-dev", sev:"medium"}]},
-  {family:"PE", id:"PE-2", title:"Escort visitors and monitor visitor activity; maintain audit logs of physical access; and control and manage physical access devices", subs:[
-    {name:"Physical access controls are implemented, logged, and monitored", manualId:"PE-2:physical"}]},
-  {family:"SC", id:"SC-1", title:"Monitor, control, and protect organizational communications at the external boundaries and key internal boundaries of the information systems", subs:[
-    {name:"Safe Attachment Policies are configured", ss:["safe attachment"], manualId:"SC-1:safe-attach"},
-    {name:"Safe Links policies are configured", ss:["safe links"], manualId:"SC-1:safe-links", sev:"medium"},
-    {name:"App Protection policies should be created for mobile devices", ss:["app protection"], manualId:"SC-1:app-protect"},
-    {name:"Ensure email from external senders is identified", ss:["external sender","external email"], manualId:"SC-1:ext-sender"},
-    {name:"Ensure all forms of mail forwarding are blocked and/or disabled", ss:["mail forwarding","forwarding"], manualId:"SC-1:mail-fwd", sev:"high"}]},
-  {family:"SC", id:"SC-2", title:"Implement subnetworks for publicly accessible system components", subs:[
-    {name:"Subnetworks for publicly accessible components are implemented", manualId:"SC-2:subnets"}]},
-  {family:"SI", id:"SI-1", title:"Identify, report, and correct information system flaws in a timely manner", subs:[
-    {name:"Secure Score Recommendations shall be monitored and implemented", manualId:"SI-1:secscore"},
-    {name:"Windows Update Rings shall be configured for Windows Devices", manualId:"SI-1:update-rings", sev:"critical"},
-    {name:"Patches/vendor mitigations for critical vulnerabilities applied within 48 hours", manualId:"SI-1:patch-48h", sev:"high"}]},
-  {family:"SI", id:"SI-2", title:"Provide protection from malicious code at appropriate locations", subs:[
-    {name:"Microsoft Defender Antivirus is deployed via Intune", ss:["defender antivirus","microsoft defender antivirus"], manualId:"SI-2:defender-av", sev:"high"},
-    {name:"Devices shall be enrolled for Defender for Business or Defender for Endpoint", ss:["defender for endpoint","endpoint detection"], manualId:"SI-2:defender-edr"},
-    {name:"Attack Surface Reduction rules shall be configured", ss:["attack surface reduction"], manualId:"SI-2:asr", sev:"medium"}]},
-  {family:"SI", id:"SI-3", title:"Update malicious code protection mechanisms when new releases are available", subs:[
-    {name:"Microsoft Defender Antivirus is deployed via Intune", ss:["defender antivirus","microsoft defender antivirus"], manualId:"SI-3:defender-av", sev:"high"}]},
-  {family:"SI", id:"SI-4", title:"Perform periodic scans and real-time scans of files from external sources", subs:[
-    {name:"Safe Links policies are configured", ss:["safe links"], manualId:"SI-4:safe-links", sev:"medium"},
-    {name:"Safe Attachment Policies are configured", ss:["safe attachment"], manualId:"SI-4:safe-attach"},
-    {name:"Microsoft Defender Antivirus is deployed via Intune", ss:["defender antivirus"], manualId:"SI-4:defender-av", sev:"high"},
-    {name:"Microsoft Office macro antivirus scanning is enabled", manualId:"SI-4:macro-av", sev:"low"}]}
+    {name:"Dormant/inactive accounts are disabled", key:"dormant", sev:"medium"},
+    {name:"Guest users have limited access to directory objects", key:"guest-limited"},
+    {name:"Groups are inventoried and periodically reviewed for data access", manualId:"AC.L1-3.1.1:groups"},
+    {name:"Only organizationally approved public groups exist", manualId:"AC.L1-3.1.1:public-groups"}]},
+  {family:"AC", id:"AC.L1-3.1.2", title:"Transaction & Function Control — limit access to the types of transactions and functions authorized users may execute", subs:[
+    {name:"Between two and four Global Administrators are designated", key:"global-admins", sev:"high"},
+    {name:"Least privilege is enforced (PIM used to manage roles)", ss:["privileged identity management","pim"], manualId:"AC.L1-3.1.2:pim"},
+    {name:"Non-admin users cannot consent to third-party applications", key:"nonadmin-consent"},
+    {name:"Only admins can register third-party applications", key:"apps-register"}]},
+  {family:"AC", id:"AC.L1-3.1.20", title:"External Connections — verify and control/limit connections to and use of external information systems", subs:[
+    {name:"External sharing is restricted (SharePoint/OneDrive)", manualId:"AC.L1-3.1.20:ext-sharing"},
+    {name:"External domains are restricted in the Teams admin center", manualId:"AC.L1-3.1.20:teams-ext"},
+    {name:"Managed/compliant device required for access", key:"managed-dev", sev:"medium"},
+    {name:"Cloud App Discovery is configured and apps periodically reviewed", ss:["defender for cloud apps","cloud app"], manualId:"AC.L1-3.1.20:cloud-app"}]},
+  {family:"AC", id:"AC.L1-3.1.22", title:"Control Public Information — control information posted or processed on publicly accessible systems", subs:[
+    {name:"Data Loss Prevention policies are configured", ss:["dlp","data loss prevention"], manualId:"AC.L1-3.1.22:dlp"},
+    {name:"Sensitivity/Information Protection labels are configured", ss:["sensitivity label","information protection"], manualId:"AC.L1-3.1.22:labels"},
+    {name:"A designated process reviews content before public posting", manualId:"AC.L1-3.1.22:review"}]},
+
+  /* ---- Identification & Authentication (IA) — 2 practices ---- */
+  {family:"IA", id:"IA.L1-3.5.1", title:"Identification — identify system users, processes acting on behalf of users, and devices", subs:[
+    {name:"Users are authenticated with unique credentials (no shared accounts)", manualId:"IA.L1-3.5.1:unique-creds"},
+    {name:"All devices are inventoried and periodically reviewed", key:"dev-inventory"},
+    {name:"Stale devices are removed after inactivity", key:"stale-45", sev:"medium"}]},
+  {family:"IA", id:"IA.L1-3.5.2", title:"Authentication — authenticate (or verify) the identities of users, processes, or devices before granting access", subs:[
+    {name:"MFA is enforced for all users", key:"mfa-all", sev:"critical"},
+    {name:"Legacy authentication is blocked", key:"legacy-auth", sev:"critical"},
+    {name:"Passwords are set to never expire (modern guidance)", key:"password-exp"},
+    {name:"Default credentials on devices are changed before use", manualId:"IA.L1-3.5.2:default-creds"}]},
+
+  /* ---- Media Protection (MP) — 1 practice ---- */
+  {family:"MP", id:"MP.L1-3.8.3", title:"Media Disposal — sanitize or destroy system media containing FCI before disposal or release for reuse", subs:[
+    {name:"A data retention & disposal policy is documented", ss:["retention"], manualId:"MP.L1-3.8.3:retention"},
+    {name:"Device/media sanitization (e.g. Autopilot reset, wipe) is enforced", manualId:"MP.L1-3.8.3:sanitize"},
+    {name:"Disk encryption is required on all devices", ss:["bitlocker","encryption"], manualId:"MP.L1-3.8.3:encryption", sev:"high"}]},
+
+  /* ---- Physical Protection (PE) — 4 practices ---- */
+  {family:"PE", id:"PE.L1-3.10.1", title:"Limit Physical Access — limit physical access to systems, equipment, and operating environments to authorized individuals", subs:[
+    {name:"Physical access to facilities and equipment is restricted to authorized staff", manualId:"PE.L1-3.10.1:limit"}]},
+  {family:"PE", id:"PE.L1-3.10.3", title:"Escort Visitors — escort visitors and monitor visitor activity", subs:[
+    {name:"Visitors are escorted and their activity monitored", manualId:"PE.L1-3.10.3:escort"}]},
+  {family:"PE", id:"PE.L1-3.10.4", title:"Physical Access Logs — maintain audit logs of physical access", subs:[
+    {name:"Physical access to facilities is logged and retained", manualId:"PE.L1-3.10.4:logs"}]},
+  {family:"PE", id:"PE.L1-3.10.5", title:"Manage Physical Access — control and manage physical access devices (keys, badges, locks)", subs:[
+    {name:"Keys, badges and other physical access devices are inventoried and controlled", manualId:"PE.L1-3.10.5:devices"}]},
+
+  /* ---- System & Communications Protection (SC) — 2 practices ---- */
+  {family:"SC", id:"SC.L1-3.13.1", title:"Boundary Protection — monitor, control, and protect communications at external and key internal boundaries", subs:[
+    {name:"Safe Attachments policy is configured", ss:["safe attachment"], manualId:"SC.L1-3.13.1:safe-attach"},
+    {name:"Safe Links policy is configured", ss:["safe links"], manualId:"SC.L1-3.13.1:safe-links", sev:"medium"},
+    {name:"All forms of mail auto-forwarding are blocked", ss:["mail forwarding","forwarding"], manualId:"SC.L1-3.13.1:mail-fwd", sev:"high"},
+    {name:"A firewall / boundary protection is in place at the network edge", manualId:"SC.L1-3.13.1:firewall"}]},
+  {family:"SC", id:"SC.L1-3.13.5", title:"Public-Access System Separation — implement subnetworks for publicly accessible components, separated from internal networks", subs:[
+    {name:"Publicly accessible systems are physically or logically separated from internal networks (DMZ)", manualId:"SC.L1-3.13.5:dmz"}]},
+
+  /* ---- System & Information Integrity (SI) — 4 practices ---- */
+  {family:"SI", id:"SI.L1-3.14.1", title:"Flaw Remediation — identify, report, and correct system flaws in a timely manner", subs:[
+    {name:"Windows Update rings / patch policy are configured", manualId:"SI.L1-3.14.1:update-rings", sev:"critical"},
+    {name:"Patches for critical vulnerabilities are applied promptly", manualId:"SI.L1-3.14.1:patch-timely", sev:"high"},
+    {name:"Secure Score recommendations are monitored and remediated", manualId:"SI.L1-3.14.1:secscore"}]},
+  {family:"SI", id:"SI.L1-3.14.2", title:"Malicious Code Protection — provide protection from malicious code at appropriate locations", subs:[
+    {name:"Microsoft Defender Antivirus is deployed via Intune", ss:["defender antivirus","microsoft defender antivirus"], manualId:"SI.L1-3.14.2:defender-av", sev:"high"},
+    {name:"Devices are onboarded to Defender for Business/Endpoint", ss:["defender for endpoint","endpoint detection"], manualId:"SI.L1-3.14.2:defender-edr"},
+    {name:"Attack Surface Reduction rules are configured", ss:["attack surface reduction"], manualId:"SI.L1-3.14.2:asr", sev:"medium"}]},
+  {family:"SI", id:"SI.L1-3.14.4", title:"Update Malicious Code Protection — update malicious code protection mechanisms when new releases are available", subs:[
+    {name:"Antivirus definitions/engine update automatically", ss:["defender antivirus","microsoft defender antivirus"], manualId:"SI.L1-3.14.4:av-update", sev:"high"}]},
+  {family:"SI", id:"SI.L1-3.14.5", title:"System & File Scanning — perform periodic system scans and real-time scans of files from external sources", subs:[
+    {name:"Real-time protection and scheduled scans are enabled", ss:["defender antivirus"], manualId:"SI.L1-3.14.5:realtime", sev:"high"},
+    {name:"Safe Attachments scans files in SharePoint/OneDrive/Teams", ss:["safe attachment"], manualId:"SI.L1-3.14.5:safe-attach"},
+    {name:"Office macro antivirus scanning is enabled", manualId:"SI.L1-3.14.5:macro-av", sev:"low"}]}
 ];
 function resolveCheck(s, ov){
   if(s.key && CMMC_CHECKS[s.key]){ let r=null; try{ r=CMMC_CHECKS[s.key](); }catch(e){} if(r) return {...r, source:"live"}; }
