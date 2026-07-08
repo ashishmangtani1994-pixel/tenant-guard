@@ -10,12 +10,13 @@
 <style>
   :root{
     /* elevation: 4 tiers — canvas → surface-1 → surface-2 → surface-3 */
-    --bg:#0A0E14; --panel:#11161F; --panel-2:#161D28; --surface-3:#1C2430;
-    --border:#222B38; --border-2:#2C3744;
-    --text:#E8EEF5; --muted:#A6B2C2; --faint:#6E7B8A;
-    --accent:#00E4BC; --accent-dim:#0C6F60;     /* brand / info — never a status */
-    --warn:#F5B53B; --danger:#FF5B66; --danger-dim:#7E2A30; --ok:#2FD98B;
-    --radius:10px; --mono:'JetBrains Mono',monospace;
+    --bg:#070A12; --panel:#0E1322; --panel-2:#141B2E; --surface-3:#1B2440;
+    --border:#243052; --border-2:#31406B;
+    --text:#EEF2FB; --muted:#A9B4CE; --faint:#6C7896;
+    --accent:#22D3EE; --accent-2:#8B5CF6; --accent-3:#EC4899; --accent-dim:#155E75;
+    --warn:#FBBF24; --danger:#FB5B6E; --danger-dim:#7E2A30; --ok:#34D399;
+    --grad:linear-gradient(115deg,#22D3EE 0%,#8B5CF6 55%,#EC4899 100%);
+    --radius:14px; --mono:'JetBrains Mono',monospace;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
@@ -436,6 +437,82 @@
     thead th.opt,tbody td.opt{display:none}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  /* ==================================================================
+     NEON GLASS REDESIGN - layered overrides (loaded last, so they win)
+     ================================================================== */
+  body{position:relative}
+  body::before{
+    content:""; position:fixed; inset:0; z-index:-2; pointer-events:none;
+    background:
+      radial-gradient(900px 500px at 12% -10%, rgba(139,92,246,.22), transparent 60%),
+      radial-gradient(800px 480px at 88% 0%,  rgba(34,211,238,.16), transparent 60%),
+      radial-gradient(900px 600px at 50% 115%, rgba(236,72,153,.14), transparent 60%),
+      var(--bg);
+  }
+  body::after{
+    content:""; position:fixed; inset:-40%; z-index:-1; pointer-events:none; opacity:.5;
+    background:conic-gradient(from 0deg at 50% 50%, transparent 0 70%, rgba(139,92,246,.06) 78%, rgba(34,211,238,.07) 86%, transparent 94%);
+    animation:tgspin 60s linear infinite;
+  }
+  @keyframes tgspin{to{transform:rotate(360deg)}}
+  header.topbar{
+    background:rgba(10,14,26,.72); backdrop-filter:blur(14px) saturate(1.4);
+    border-bottom:1px solid rgba(139,92,246,.25);
+    box-shadow:0 10px 34px -18px rgba(139,92,246,.45);
+  }
+  .wordmark{
+    background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent;
+    letter-spacing:.18em;
+  }
+  .wordmark small{color:var(--faint); -webkit-text-fill-color:var(--faint)}
+  .hero h1{
+    font-size:38px;
+    background:linear-gradient(100deg,#fff 20%,#a5f3fc 55%,#c4b5fd 80%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .hero .glyph-lg{filter:drop-shadow(0 0 22px rgba(34,211,238,.55))}
+  .btn{border-radius:12px}
+  .btn.primary{
+    background:var(--grad); color:#fff; border:none; font-weight:700;
+    box-shadow:0 6px 22px -6px rgba(139,92,246,.65), 0 2px 10px -4px rgba(34,211,238,.5);
+    transition:transform .15s, box-shadow .2s, filter .2s;
+  }
+  .btn.primary:hover{background:var(--grad); filter:brightness(1.12); transform:translateY(-1px);
+    box-shadow:0 10px 30px -8px rgba(236,72,153,.6), 0 4px 14px -4px rgba(34,211,238,.55)}
+  .btn.glow{border-color:rgba(34,211,238,.4); box-shadow:0 0 14px -4px rgba(34,211,238,.5)}
+  .btn:hover{border-color:var(--accent)}
+  .sidenav, .card, .panel, .req, .filterbar, .tablewrap, .modal, .drawer{
+    background:linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,0)), var(--panel);
+    border-color:var(--border);
+  }
+  .sidenav{backdrop-filter:blur(10px); box-shadow:0 18px 50px -30px rgba(0,0,0,.8)}
+  .sidenav a.active, .sidenav button.active, .nav-item.active{
+    background:linear-gradient(90deg, rgba(34,211,238,.16), rgba(139,92,246,.16)) !important;
+    box-shadow:inset 3px 0 0 var(--accent);
+    color:var(--text) !important;
+  }
+  .card{position:relative; overflow:hidden; transition:transform .18s, box-shadow .22s, border-color .22s}
+  .card::before{
+    content:""; position:absolute; inset:0 0 auto 0; height:2px;
+    background:var(--grad); opacity:.65;
+  }
+  .card:hover{transform:translateY(-3px); border-color:var(--border-2);
+    box-shadow:0 18px 40px -22px rgba(139,92,246,.55)}
+  table thead th{
+    background:linear-gradient(180deg, rgba(139,92,246,.12), rgba(139,92,246,.03));
+    border-bottom:1px solid rgba(139,92,246,.3);
+  }
+  tbody tr:hover{background:rgba(34,211,238,.05)}
+  ::selection{background:rgba(139,92,246,.45)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:linear-gradient(var(--accent-2),var(--accent));border-radius:8px}
+  ::-webkit-scrollbar-track{background:transparent}
+  .toast{border:1px solid rgba(34,211,238,.4); box-shadow:0 10px 34px -14px rgba(34,211,238,.5)}
+  .pill{border-radius:999px}
+  input,select,textarea{border-radius:10px !important}
+  input:focus,select:focus,textarea:focus{outline:none; border-color:var(--accent) !important;
+    box-shadow:0 0 0 3px rgba(34,211,238,.18)}
+
 </style>
 </head>
 <body>
@@ -456,6 +533,7 @@
   </div>
   <div class="spacer"></div>
   <div class="who" id="whoami"></div>
+  <button class="btn primary" id="btnXlsx">⬇ Full report (.xlsx)</button>
   <button class="btn ghost" id="btnSettings">Settings</button>
   <button class="btn ghost" id="btnSignout">Sign out</button>
 </header>
@@ -993,6 +1071,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 /* ========
    CONFIG  — set DEFAULT_CLIENT_ID to your multi-tenant SPA app.
@@ -4122,6 +4201,158 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = ()=> switchTab(t.data
 });
 
 el("btnSummary").onclick = ()=> exportSummary(tab==="cis"?"cis":(tab==="cmmc2"?"cmmc2":(tab==="cmmc"?"cmmc":"baseline")));
+
+/* ====================================================================
+   FULL TENANT REPORT (.xlsx) — mirrors the consultant workbook layout
+   (Global Admins, Dormant Users, Guest Users, Users without MFA, weak
+   MFA, Risky Users, Break Glass, Total Users, CA Policies, Licenses,
+   devices, stale/non-compliant/unencrypted/Win10, app creds, OAuth…)
+   Sheets are built from whatever has been loaded; empty datasets are
+   skipped so a fresh sign-in still produces a valid workbook.
+   ==================================================================== */
+function _wkAdd(wb, name, head, rows){
+  if(!rows || !rows.length) return;
+  const aoa = [head, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = head.map((h,i)=>({ wch: Math.min(48, Math.max(String(h).length+2,
+    ...aoa.slice(1,200).map(r=> String(r[i]??"").length+2))) }));
+  ws["!autofilter"] = { ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:rows.length, c:head.length-1}}) };
+  XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
+}
+function _uRow(u){
+  const la = lastActivity(u);
+  return [u.displayName||"", u.userPrincipalName||"", u.userType||"Member",
+          u.accountEnabled===false?"No":"Yes", licenseNames(u),
+          la ? daysSince(la) : "-", fmtDate(u.createdDateTime)];
+}
+const _U_HEAD = ["Name","UPN","User Type","Account Enabled","Assigned Licenses","Days Since Login","Created Date"];
+
+async function exportFullReport(){
+  if(typeof XLSX === "undefined") return toast("Spreadsheet library not loaded (check network).", true);
+  if(!allUsers.length) return toast("Load the directory first — sign in and open a user view.", true);
+  const btn = el("btnXlsx"); btn.disabled = true; btn.textContent = "Building report…";
+  try{
+    await ensureSkus().catch(()=>{});
+    const wb = XLSX.utils.book_new();
+    const mfaByUpn = new Map(allRegDetails.map(r=>[String(r.userPrincipalName||"").toLowerCase(), r]));
+
+    /* --- Global Admins --- */
+    const gas = (privLoaded?privRoles:[]).filter(p=> (p.roles||[]).some(r=>/global administrator/i.test(r)));
+    _wkAdd(wb, "Global Admins", ["Display Name","UPN","Account Enabled","MFA Registered","Roles"],
+      gas.map(p=>[p.displayName||"", p.upn||"", p.accountEnabled===false?"No":"Yes",
+        p.mfa===null?"Unknown":(p.mfa?"TRUE":"FALSE"), (p.roles||[]).join(", ")]));
+
+    /* --- Dormant / Stale --- */
+    _wkAdd(wb, "Dormant Users", [..._U_HEAD, "Days Inactive","Never Signed In"],
+      computeDormant().map(u=>[..._uRow(u), u._inactive, u._never?"Yes":"No"]));
+
+    /* --- Guest Users --- */
+    _wkAdd(wb, "Guest Users", _U_HEAD,
+      allUsers.filter(u=>(u.userType||"Member")==="Guest").map(_uRow));
+
+    /* --- Users without MFA / weak MFA --- */
+    if(mfaLoaded){
+      _wkAdd(wb, "Users without MFA", ["Name","UPN","MFA Registered","MFA Capable","SSPR Registered","Methods"],
+        allRegDetails.filter(r=>!r.isMfaRegistered).map(r=>[r.userDisplayName||"", r.userPrincipalName||"",
+          "FALSE", r.isMfaCapable?"TRUE":"FALSE", r.isSsprRegistered?"TRUE":"FALSE",
+          (r.methodsRegistered||[]).join(", ")]));
+      const weak = allRegDetails.filter(r=> r.isMfaRegistered &&
+        (r.methodsRegistered||[]).length &&
+        (r.methodsRegistered||[]).every(m=>/sms|mobilePhone|voice|email|alternate/i.test(m)));
+      _wkAdd(wb, "Users with weak MFA", ["Name","UPN","Methods Registered"],
+        weak.map(r=>[r.userDisplayName||"", r.userPrincipalName||"", (r.methodsRegistered||[]).join(", ")]));
+    }
+
+    /* --- Risky users --- */
+    _wkAdd(wb, "Risky Users", ["Name","UPN","Risk Level","Risk State","Risk Detail","Last Updated"],
+      (allRisky||[]).map(r=>[r.userDisplayName||"", r.userPrincipalName||"", r.riskLevel||"",
+        r.riskState||"", r.riskDetail||"", fmtDate(r.riskLastUpdatedDateTime)]));
+
+    /* --- Break glass --- */
+    _wkAdd(wb, "Break Glass Users", _U_HEAD,
+      allUsers.filter(u=>/break.?glass|emergency/i.test((u.displayName||"")+(u.userPrincipalName||""))).map(_uRow));
+
+    /* --- Total users --- */
+    _wkAdd(wb, "Total Users", _U_HEAD, allUsers.map(_uRow));
+
+    /* --- Conditional Access --- */
+    _wkAdd(wb, "Conditional Access Policies", ["Name","State","Created","Modified"],
+      (allCaPolicies||[]).map(p=>[p.displayName||"", p.state||"", fmtDate(p.createdDateTime), fmtDate(p.modifiedDateTime)]));
+
+    /* --- Licenses --- */
+    _wkAdd(wb, "Licenses", ["License","SKU Part Number","Total","Assigned","Available"],
+      (allSkus||[]).map(s=>{ const tot=s.prepaidUnits?.enabled??0, used=s.consumedUnits??0;
+        return [skuFriendly(s.skuPartNumber), s.skuPartNumber||"", tot, used, tot-used]; }));
+
+    /* --- Devices (Entra) --- */
+    _wkAdd(wb, "Entra Devices", ["Name","OS","OS Version","Enabled","Trust Type","Last Sign-in","Days Since Sign-in","Created"],
+      (allDevices||[]).map(d=>[d.displayName||"", d.operatingSystem||"", d.operatingSystemVersion||"",
+        d.accountEnabled===false?"No":"Yes", d.trustType||"", fmtDate(d.approximateLastSignInDateTime),
+        d.approximateLastSignInDateTime?daysSince(d.approximateLastSignInDateTime):"-", fmtDate(d.createdDateTime)]));
+
+    /* --- Intune managed devices + derived sheets --- */
+    const mdm = (mdmLoaded && mdmDevices.length) ? mdmDevices : (allManagedDevices||[]);
+    _wkAdd(wb, "Intune Devices", ["Name","OS","OS Version","Ownership","Compliance","Encrypted","Jailbroken","Last Sync"],
+      mdm.map(d=>[d.deviceName||"", d.operatingSystem||"", d.osVersion||"", d.managedDeviceOwnerType||"",
+        d.complianceState||"", d.isEncrypted===undefined?"":(d.isEncrypted?"Yes":"No"),
+        d.jailBroken===undefined?"":d.jailBroken, fmtDate(d.lastSyncDateTime)]));
+    _wkAdd(wb, "Non-Compliant Devices", ["Name","OS","OS Version","Compliance","Last Sync"],
+      mdm.filter(d=>(d.complianceState||"").toLowerCase()==="noncompliant")
+         .map(d=>[d.deviceName||"", d.operatingSystem||"", d.osVersion||"", d.complianceState||"", fmtDate(d.lastSyncDateTime)]));
+    _wkAdd(wb, "Devices without Encryption", ["Name","OS","OS Version","Compliance"],
+      (allManagedDevices||[]).filter(d=>d.isEncrypted===false)
+        .map(d=>[d.deviceName||"", d.operatingSystem||"", d.osVersion||"", d.complianceState||""]));
+    _wkAdd(wb, "Personal Devices", ["Name","OS","OS Version","Compliance","Last Sync"],
+      mdm.filter(d=>/personal/i.test(d.managedDeviceOwnerType||""))
+         .map(d=>[d.deviceName||"", d.operatingSystem||"", d.osVersion||"", d.complianceState||"", fmtDate(d.lastSyncDateTime)]));
+    _wkAdd(wb, "Windows 10 Devices", ["Name","OS","OS Version","Last Sign-in"],
+      (allDevices||[]).filter(d=>/windows/i.test(d.operatingSystem||"") && /^10\./.test(d.operatingSystemVersion||"") &&
+        !( +String(d.operatingSystemVersion).split(".")[2] >= 22000 ))
+        .map(d=>[d.displayName||"", d.operatingSystem||"", d.operatingSystemVersion||"", fmtDate(d.approximateLastSignInDateTime)]));
+    _wkAdd(wb, "Stale Devices", ["Name","OS","OS Version","Days Inactive","Never Signed In","Created"],
+      computeStaleDevices().map(d=>[d.displayName||"", d.operatingSystem||"", d.operatingSystemVersion||"",
+        d._inactive, d._never?"Yes":"No", fmtDate(d.createdDateTime)]));
+
+    /* --- Advanced security --- */
+    _wkAdd(wb, "Legacy Auth Sign-ins", ["User","UPN","App","Client App","When"],
+      (legacySignins||[]).map(s=>[s.userDisplayName||"", s.userPrincipalName||"", s.appDisplayName||"",
+        s.clientAppUsed||"", fmtDate(s.createdDateTime)]));
+    _wkAdd(wb, "App Credentials", ["Application","Type","Expires","Days To Expiry"],
+      (appCreds||[]).map(c=>[c.app||c.appName||"", c.type||"", fmtDate(c.endDateTime||c.end),
+        c.endDateTime?daysSince(c.endDateTime)!==null?-daysSince(c.endDateTime):"":""]));
+    _wkAdd(wb, "OAuth Consent Grants", ["Application","Consent Type","Principal","Scopes"],
+      (oauthGrants||[]).map(g=>[g.app||g.clientName||g.clientId||"", g.consentType||"",
+        g.principal||g.principalId||"", g.scope||""]));
+
+    /* --- Summary sheet first --- */
+    const summary = [["Tenant Guard — Full Security Report"],
+      ["Generated", new Date().toISOString().slice(0,19).replace("T"," ")],
+      ["Signed-in admin", account?.username||""],
+      [],
+      ["Metric","Count"],
+      ["Total users", allUsers.length],
+      ["Guests", allUsers.filter(u=>(u.userType||"Member")==="Guest").length],
+      ["Dormant users", computeDormant().length],
+      ["Users without MFA", mfaLoaded? allRegDetails.filter(r=>!r.isMfaRegistered).length : "not loaded"],
+      ["Risky users", allRisky.length||0],
+      ["Global admins", gas.length||"open Privileged view to populate"],
+      ["Entra devices", allDevices.length||0],
+      ["Stale devices", allDevices.length?computeStaleDevices().length:0],
+      ["Conditional Access policies", allCaPolicies.length||0],
+      ["Secure Score", secScore? `${secScore.currentScore}/${secScore.maxScore}`:"not loaded"]];
+    const sws = XLSX.utils.aoa_to_sheet(summary);
+    sws["!cols"] = [{wch:34},{wch:30}];
+    XLSX.utils.book_append_sheet(wb, sws, "Summary");
+    wb.SheetNames.unshift(wb.SheetNames.pop());   // move Summary first
+
+    if(wb.SheetNames.length <= 1) return toast("Nothing to export yet — open a few views so data loads.", true);
+    const org = (account?.username||"tenant").split("@")[1]?.split(".")[0] || "tenant";
+    XLSX.writeFile(wb, `${org}-security-report-${new Date().toISOString().slice(0,10)}.xlsx`);
+    toast(`Report exported — ${wb.SheetNames.length} sheets.`);
+  }catch(e){ console.error(e); toast("Export failed: "+(e.message||e), true); }
+  finally{ btn.disabled=false; btn.textContent="⬇ Full report (.xlsx)"; }
+}
+el("btnXlsx").onclick = exportFullReport;
 
 /* ====================================================================
    SCHEDULED REPORTS — Dormant members / guests / Stale devices
