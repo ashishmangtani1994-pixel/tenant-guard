@@ -4326,14 +4326,26 @@ async function exportFullReport(){
       (oauthGrants||[]).map(g=>[g.app||g.clientName||g.clientId||"", g.consentType||"",
         g.principal||g.principalId||"", g.scope||""]));
 
-    /* --- Compliance frameworks (same engine as the on-screen assessments) --- */
+    /* --- Compliance frameworks (same engine as the on-screen assessments).
+       Pull live baseline inputs + Secure Score first so checks resolve from
+       tenant data; anything without a data source correctly stays "manual". --- */
+    try{ btn.textContent="Building… compliance data"; await ensureBaselineData(); }catch(e){}
+    try{ if(!secLoaded){ const t=await token(READ_SCOPES);
+      const r=await gget(`${GRAPH}/security/secureScores?$top=1`, t);
+      const s=(r.value||[])[0]; if(s){ secScore=s; secLoaded=true; } } }catch(e){}
     const _fwSheet = (name, rows)=> _wkAdd(wb, name,
       ["Control ID","Family / Category","Control","Check","Status","Severity","Source","Evidence"],
       (rows||[]).flatMap(c=> (c.subs||[{name:"",status:c.status,evidence:c.evidence}]).map(s=>[
         c.id||"", c.family||c.category||"", c.title||"", s.name||"",
         String(s.status||c.status||"").toUpperCase(),
         s.sev||c.severity||"", s.source||c.source||"", s.evidence||""])));
-    try{ _fwSheet("Microsoft Security Baseline", effectiveBaseline()); }catch(e){}
+    /* Baseline subs are control *definitions* with placeholder statuses — never
+       tenant data. Export one row per control using the RESOLVED status only. */
+    try{ _wkAdd(wb, "Microsoft Security Baseline",
+      ["Control ID","Category","Control","Status","Severity","Source","Evidence","Requirements"],
+      effectiveBaseline().map(c=>[c.id||"", c.category||"", c.title||"",
+        String(c.status||"").toUpperCase(), c.severity||"", c.source||"",
+        c.evidence||"", (c.subs||[]).map(s=>s.name).join("; ")])); }catch(e){}
     try{ _fwSheet("CMMC Level 1", effectiveCMMC()); }catch(e){}
     try{ _fwSheet("NIST 800-171 (CMMC L2)", effectiveCMMC2()); }catch(e){}
     try{ _fwSheet("CIS Foundations Benchmark", effectiveCIS()); }catch(e){}
