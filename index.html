@@ -1083,7 +1083,9 @@ const GRAPH_BETA = "https://graph.microsoft.com/beta";
 const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All",
   "IdentityRiskyUser.Read.All","Policy.Read.All","UserAuthenticationMethod.Read.All","ServiceHealth.Read.All",
   "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All","DeviceLocalCredential.ReadBasic.All",
-  "SecurityEvents.Read.All","Application.Read.All"];
+  "SecurityEvents.Read.All","Application.Read.All",
+  "DeviceManagementConfiguration.Read.All","DeviceManagementApps.Read.All","IdentityRiskEvent.Read.All",
+  "Reports.Read.All","Sites.Read.All","SharePointTenantSettings.Read.All"];
 const WRITE_SCOPES = ["User.ReadWrite.All"];
 // Mail.Send lets the signed-in admin send the report; Mail.Send.Shared adds "send-as" a
 // shared mailbox / distribution sender the admin has rights to. Requested on demand (popup
@@ -1329,7 +1331,7 @@ async function loadDevices(){
   try{
     const tok = await token(READ_SCOPES);
     if(!tok) return; // redirect in flight
-    const select = "id,displayName,deviceId,operatingSystem,operatingSystemVersion,deviceOwnership,accountEnabled,createdDateTime,approximateLastSignInDateTime";
+    const select = "id,displayName,deviceId,operatingSystem,operatingSystemVersion,deviceOwnership,trustType,accountEnabled,createdDateTime,approximateLastSignInDateTime";
     let url = `${GRAPH}/devices?$select=${select}&$top=500&$count=true`;
     allDevices = [];
     while(url){
@@ -4323,6 +4325,164 @@ async function exportFullReport(){
     _wkAdd(wb, "OAuth Consent Grants", ["Application","Consent Type","Principal","Scopes"],
       (oauthGrants||[]).map(g=>[g.app||g.clientName||g.clientId||"", g.consentType||"",
         g.principal||g.principalId||"", g.scope||""]));
+
+    /* --- Compliance frameworks (same engine as the on-screen assessments) --- */
+    const _fwSheet = (name, rows)=> _wkAdd(wb, name,
+      ["Control ID","Family / Category","Control","Check","Status","Severity","Source","Evidence"],
+      (rows||[]).flatMap(c=> (c.subs||[{name:"",status:c.status,evidence:c.evidence}]).map(s=>[
+        c.id||"", c.family||c.category||"", c.title||"", s.name||"",
+        String(s.status||c.status||"").toUpperCase(),
+        s.sev||c.severity||"", s.source||c.source||"", s.evidence||""])));
+    try{ _fwSheet("Microsoft Security Baseline", effectiveBaseline()); }catch(e){}
+    try{ _fwSheet("CMMC Level 1", effectiveCMMC()); }catch(e){}
+    try{ _fwSheet("NIST 800-171 (CMMC L2)", effectiveCMMC2()); }catch(e){}
+    try{ _fwSheet("CIS Foundations Benchmark", effectiveCIS()); }catch(e){}
+
+    /* ================================================================
+       LIVE TENANT EXTRAS — fetched fresh from Graph at export time.
+       Every block is best-effort: a missing licence/permission just
+       skips that sheet, never breaks the workbook.
+       ================================================================ */
+    const tok = await token(READ_SCOPES);
+    const _prog = t => { btn.textContent = "Building… " + t; };
+    const _gpage = async (url, cap=10)=>{ const out=[]; let p=0;
+      while(url && p++<cap){ const r=await gget(url, tok); out.push(...(r.value||[])); url=r["@odata.nextLink"]||null; } return out; };
+    const _grab = async (label, fn)=>{ _prog(label); try{ return await fn(); }catch(e){ console.warn("skip:",label,e); return null; } };
+
+    /* Risky Sign-ins (Identity Protection risk detections) */
+    const riskDet = await _grab("risky sign-ins", ()=> _gpage(`${GRAPH}/identityProtection/riskDetections?$top=500`, 4));
+    if(riskDet) _wkAdd(wb, "Risky Sign-ins", ["User","UPN","Risk Event","Risk Level","Risk State","Detection Time","IP","Location"],
+      riskDet.map(r=>[r.userDisplayName||"", r.userPrincipalName||"", r.riskEventType||"", r.riskLevel||"",
+        r.riskState||"", fmtDate(r.detectedDateTime), r.ipAddress||"",
+        [r.location?.city, r.location?.countryOrRegion].filter(Boolean).join(", ")]));
+
+    /* Domains */
+    const doms = await _grab("domains", ()=> _gpage(`${GRAPH}/domains`));
+    if(doms) _wkAdd(wb, "Domains", ["Domain","Verified","Default","Authentication Type","Supported Services"],
+      doms.map(d=>[d.id||"", d.isVerified?"Yes":"No", d.isDefault?"Yes":"No", d.authenticationType||"",
+        (d.supportedServices||[]).join(", ")]));
+
+    /* Named Locations */
+    const nls = await _grab("named locations", ()=> _gpage(`${GRAPH}/identity/conditionalAccess/namedLocations`));
+    if(nls) _wkAdd(wb, "Named Locations", ["Name","Type","Trusted","Details","Modified"],
+      nls.map(n=>{ const ip=/ipNamedLocation/i.test(n["@odata.type"]||"");
+        return [n.displayName||"", ip?"IP ranges":"Countries", ip?(n.isTrusted?"Yes":"No"):"",
+          ip?(n.ipRanges||[]).map(r=>r.cidrAddress).join(", "):(n.countriesAndRegions||[]).join(", "),
+          fmtDate(n.modifiedDateTime)]; }));
+
+    /* Enterprise Applications (service principals) */
+    const sps = await _grab("enterprise applications", ()=> _gpage(`${GRAPH}/servicePrincipals?$select=appId,displayName,accountEnabled,servicePrincipalType,appOwnerOrganizationId,createdDateTime&$top=500`, 6));
+    if(sps) _wkAdd(wb, "Enterprise Applications", ["Name","App Id","Enabled","Type","Created"],
+      sps.map(s=>[s.displayName||"", s.appId||"", s.accountEnabled===false?"No":"Yes",
+        s.servicePrincipalType||"", fmtDate(s.createdDateTime)]));
+
+    /* Intune: compliance policies, configuration profiles, apps, app protection */
+    const cpol = await _grab("compliance policies", ()=> _gpage(`${GRAPH}/deviceManagement/deviceCompliancePolicies`));
+    if(cpol) _wkAdd(wb, "Compliance Policies", ["Name","Platform","Description","Created","Modified"],
+      cpol.map(p=>[p.displayName||"", String(p["@odata.type"]||"").replace("#microsoft.graph.","").replace("CompliancePolicy",""),
+        p.description||"", fmtDate(p.createdDateTime), fmtDate(p.lastModifiedDateTime)]));
+    const cfgs = await _grab("configuration profiles", ()=> _gpage(`${GRAPH}/deviceManagement/deviceConfigurations`));
+    if(cfgs) _wkAdd(wb, "Configuration Profiles", ["Name","Type","Description","Created","Modified"],
+      cfgs.map(p=>[p.displayName||"", String(p["@odata.type"]||"").replace("#microsoft.graph.",""),
+        p.description||"", fmtDate(p.createdDateTime), fmtDate(p.lastModifiedDateTime)]));
+    const iapps = await _grab("Intune applications", ()=> _gpage(`${GRAPH}/deviceAppManagement/mobileApps?$top=500`, 4));
+    if(iapps) _wkAdd(wb, "Intune Applications", ["Name","Type","Publisher","Created","Assigned"],
+      iapps.map(a=>[a.displayName||"", String(a["@odata.type"]||"").replace("#microsoft.graph.",""),
+        a.publisher||"", fmtDate(a.createdDateTime), a.isAssigned===undefined?"":(a.isAssigned?"Yes":"No")]));
+    const mam = await _grab("app protection policies", ()=> _gpage(`${GRAPH}/deviceAppManagement/managedAppPolicies`));
+    if(mam) _wkAdd(wb, "Intune App Protection Policies", ["Name","Type","Description","Created","Modified"],
+      mam.map(p=>[p.displayName||"", String(p["@odata.type"]||"").replace("#microsoft.graph.",""),
+        p.description||"", fmtDate(p.createdDateTime), fmtDate(p.lastModifiedDateTime)]));
+
+    /* Authentication Method Policy */
+    const amp = await _grab("authentication method policy", async ()=> (await gget(`${GRAPH}/policies/authenticationMethodsPolicy`, tok)));
+    if(amp && amp.authenticationMethodConfigurations)
+      _wkAdd(wb, "Authentication Method Policy", ["Method","State"],
+        amp.authenticationMethodConfigurations.map(m=>[m.id||"", m.state||""]));
+
+    /* User Authentication Methods (from registration details) */
+    if(!mfaLoaded){ await _grab("auth methods", async ()=>{ allRegDetails = await _gpage(`${GRAPH}/reports/authenticationMethods/userRegistrationDetails?$top=200`, 20); mfaLoaded=true; }); }
+    if(allRegDetails.length)
+      _wkAdd(wb, "User Authentication Methods", ["Name","UPN","MFA Registered","MFA Capable","Default Method","Methods Registered"],
+        allRegDetails.map(r=>[r.userDisplayName||"", r.userPrincipalName||"",
+          r.isMfaRegistered?"TRUE":"FALSE", r.isMfaCapable?"TRUE":"FALSE",
+          r.defaultMfaMethod||r.userPreferredMethodForSecondaryAuthentication||"",
+          (r.methodsRegistered||[]).join(", ")]));
+
+    /* Users Excluded from MFA (CA policy exclusions) */
+    if(allCaPolicies.length){
+      const uById = new Map(allUsers.map(u=>[u.id,u]));
+      const rows=[];
+      for(const p of allCaPolicies){
+        const grants=(p.grantControls?.builtInControls||[]);
+        if(!grants.some(g=>/mfa/i.test(g))) continue;
+        for(const id of (p.conditions?.users?.excludeUsers||[])){
+          const u=uById.get(id);
+          rows.push([u?.displayName||id, u?.userPrincipalName||"", p.displayName||"", p.state||""]);
+        }
+      }
+      _wkAdd(wb, "Users Excluded from MFA", ["Name","UPN","Excluding Policy","Policy State"], rows);
+    }
+
+    /* Devices Not Enrolled in Intune (Entra minus Intune) */
+    if(allDevices.length && mdm.length){
+      const enrolled = new Set(mdm.map(d=>String(d.azureADDeviceId||"").toLowerCase()).filter(Boolean));
+      _wkAdd(wb, "Devices Not Enrolled in Intune", ["Name","OS","OS Version","Trust Type","Last Sign-in"],
+        allDevices.filter(d=> d.deviceId && !enrolled.has(String(d.deviceId).toLowerCase()))
+          .map(d=>[d.displayName||"", d.operatingSystem||"", d.operatingSystemVersion||"",
+            d.trustType||"", fmtDate(d.approximateLastSignInDateTime)]));
+    }
+
+    /* Devices that Need Patching (fleet-baseline engine) */
+    try{ if(allDevices.length){
+      const behind = patchingRows().filter(d=>d._status==="behind");
+      _wkAdd(wb, "Devices that Need Patching", ["Name","OS","Current Build","Target Build","Last Sign-in"],
+        behind.map(d=>[d.displayName||"", d._osLabel||d.operatingSystem||"", d.operatingSystemVersion||"",
+          d._target||"", fmtDate(d.approximateLastSignInDateTime)]));
+    }}catch(e){}
+
+    /* Teams (groups provisioned as Teams) */
+    const grps = await _grab("Teams", ()=> _gpage(`${GRAPH}/groups?$select=id,displayName,mail,visibility,createdDateTime,resourceProvisioningOptions&$top=500`, 6));
+    if(grps) _wkAdd(wb, "Teams", ["Team","Mail","Visibility","Created"],
+      grps.filter(g=>(g.resourceProvisioningOptions||[]).includes("Team"))
+          .map(g=>[g.displayName||"", g.mail||"", g.visibility||"", fmtDate(g.createdDateTime)]));
+
+    /* SharePoint sites + tenant settings */
+    const sites = await _grab("SharePoint sites", ()=> _gpage(`${GRAPH}/sites?search=*&$top=500`, 4));
+    if(sites) _wkAdd(wb, "SharePoint Sites", ["Site","URL","Created","Last Modified"],
+      sites.map(s=>[s.displayName||s.name||"", s.webUrl||"", fmtDate(s.createdDateTime), fmtDate(s.lastModifiedDateTime)]));
+    const spos = await _grab("SharePoint settings", async ()=> (await gget(`${GRAPH}/admin/sharepoint/settings`, tok)));
+    if(spos) _wkAdd(wb, "SharePoint Settings", ["Setting","Value"],
+      Object.entries(spos).filter(([k])=>!k.startsWith("@odata"))
+        .map(([k,v])=>[k, Array.isArray(v)?v.join(", "):(v&&typeof v==="object"?JSON.stringify(v):String(v??""))]));
+
+    /* Usage reports (beta JSON) — mailboxes, OneDrive, Teams activity.
+       Note: if the tenant conceals user details in reports, names show as hashes. */
+    const _num = x => { const n=parseFloat(x); return isNaN(n)?0:n; };
+    const mbx = await _grab("mailbox usage", ()=> _gpage(`${GRAPH_BETA}/reports/getMailboxUsageDetail(period='D90')?$format=application/json&$top=500`, 6));
+    if(mbx && mbx.length){
+      const mrow = m=>[m.displayName||"", m.userPrincipalName||"", m.itemCount??"",
+        (_num(m.storageUsedInBytes)/2**30).toFixed(2), (_num(m.prohibitSendReceiveQuotaInBytes)/2**30).toFixed(2),
+        m.prohibitSendReceiveQuotaInBytes?Math.round(_num(m.storageUsedInBytes)/_num(m.prohibitSendReceiveQuotaInBytes)*100)+"%":"",
+        m.lastActivityDate||"-", m.isDeleted?"Yes":"No"];
+      const MH=["Name","UPN","Item Count","Storage Used (GB)","Quota (GB)","% Used","Last Activity","Deleted"];
+      _wkAdd(wb, "Mailboxes", MH, mbx.map(mrow));
+      _wkAdd(wb, "Mailboxes Over 90%", MH,
+        mbx.filter(m=>_num(m.prohibitSendReceiveQuotaInBytes)>0 && _num(m.storageUsedInBytes)/_num(m.prohibitSendReceiveQuotaInBytes)>=0.9).map(mrow));
+      _wkAdd(wb, "Inactive Mailboxes", MH,
+        mbx.filter(m=>{ if(!m.lastActivityDate) return true; const d=daysSince(m.lastActivityDate); return d!==null && d>=90; }).map(mrow));
+    }
+    const od = await _grab("OneDrive usage", ()=> _gpage(`${GRAPH_BETA}/reports/getOneDriveUsageAccountDetail(period='D90')?$format=application/json&$top=500`, 6));
+    if(od) _wkAdd(wb, "OneDrive Storage Over 90%", ["Owner","UPN / Site","Storage Used (GB)","Allocated (GB)","% Used","Last Activity"],
+      od.filter(o=>_num(o.storageAllocatedInBytes)>0 && _num(o.storageUsedInBytes)/_num(o.storageAllocatedInBytes)>=0.9)
+        .map(o=>[o.ownerDisplayName||"", o.ownerPrincipalName||o.siteUrl||"",
+          (_num(o.storageUsedInBytes)/2**30).toFixed(2), (_num(o.storageAllocatedInBytes)/2**30).toFixed(2),
+          Math.round(_num(o.storageUsedInBytes)/_num(o.storageAllocatedInBytes)*100)+"%", o.lastActivityDate||"-"]));
+    const tact = await _grab("Teams activity", ()=> _gpage(`${GRAPH_BETA}/reports/getTeamsUserActivityUserDetail(period='D90')?$format=application/json&$top=500`, 6));
+    if(tact) _wkAdd(wb, "Inactive Teams Users", ["Name","UPN","Last Teams Activity","Days Inactive","Licensed"],
+      tact.filter(t=>{ if(!t.lastActivityDate) return true; const d=daysSince(t.lastActivityDate); return d!==null && d>=30; })
+        .map(t=>[t.displayName||"", t.userPrincipalName||"", t.lastActivityDate||"never",
+          t.lastActivityDate?daysSince(t.lastActivityDate):"-", t.isLicensed===undefined?"":(t.isLicensed?"Yes":"No")]));
 
     /* --- Summary sheet first --- */
     const summary = [["Tenant Guard — Full Security Report"],
