@@ -1058,6 +1058,15 @@
           <div style="font-size:11.5px;color:var(--faint);line-height:1.5">
             Channel 1 becomes the team's <b>first channel</b> — it takes that name instead of "General". Graph still won't let it be deleted afterwards (every team needs at least one channel), but it's never called "General" to begin with. Leave Channel 1 blank to keep the "General" default.
           </div>
+          <div class="field" style="position:relative">
+            <label>Add members</label>
+            <input type="text" id="teamMemberSearch" placeholder="Type a name or email…" autocomplete="off" />
+            <div id="teamMemberResults" class="hide" style="position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--panel);border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:220px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.15)"></div>
+          </div>
+          <div id="teamMemberChips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+          <div style="font-size:11.5px;color:var(--faint);line-height:1.5">
+            Results come straight from your directory as you type. Click a name to add them as a member — click their pill's role label to toggle member/owner.
+          </div>
         </div>
         <div class="foot" style="margin-top:20px;padding-top:0;border:none">
           <span style="flex:1"></span>
@@ -1203,8 +1212,10 @@ const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
 // Group.ReadWrite.All is needed to create a Microsoft 365 group/Team and its channels.
 // Files.ReadWrite.All is needed to create the folder structure AND to assign each folder its own
 // permission (which is what breaks inheritance — see breakInheritanceViaGraph below).
-// Requested on demand (same pattern as DEVICE_DELETE_SCOPES) only when "Create team" is clicked.
-const TEAM_SCOPES = ["Group.ReadWrite.All","Files.ReadWrite.All"];
+// User.ReadBasic.All powers the member-search typeahead against the directory.
+// TeamMember.ReadWrite.All is needed to actually add the picked people to the team.
+// Requested on demand (same pattern as DEVICE_DELETE_SCOPES) only when the Teams tab is used.
+const TEAM_SCOPES = ["Group.ReadWrite.All","Files.ReadWrite.All","User.ReadBasic.All","TeamMember.ReadWrite.All"];
 // Folder structure applied to every channel (including the default General channel).
 const TEAM_FOLDER_TREE = {
   "01_Workbench":    ["Drafts","Incoming","Working"],
@@ -1388,6 +1399,66 @@ function renderChannelFields(){
 el("teamChannelCount").oninput = renderChannelFields;
 renderChannelFields();
 
+/* Teams: member picker — live directory search + chip list, kept separate from
+   channel/folder creation so it works the same way regardless of team/channel state. */
+let selectedTeamMembers = []; // {id, displayName, mail, role: "member"|"owner"}
+
+function renderMemberChips(){
+  const wrap = el("teamMemberChips");
+  wrap.innerHTML = selectedTeamMembers.map((m,i)=>`
+    <span class="chip" style="display:inline-flex;align-items:center;gap:6px;background:var(--panel2,var(--panel));border:1px solid var(--border);border-radius:999px;padding:4px 6px 4px 12px;font-size:12.5px">
+      ${escapeHtml(m.displayName)}
+      <button type="button" class="chipRoleToggle" data-i="${i}" style="border:none;background:none;color:${m.role==="owner"?"var(--accent,#6366f1)":"var(--muted)"};cursor:pointer;font-size:11px;padding:2px 4px" title="Toggle member/owner">${m.role==="owner"?"★ owner":"member"}</button>
+      <button type="button" class="chipRemove" data-i="${i}" style="border:none;background:none;color:var(--danger);cursor:pointer;font-weight:700;font-size:14px;line-height:1;padding:2px 4px">×</button>
+    </span>`).join("");
+  wrap.querySelectorAll(".chipRemove").forEach(b=> b.onclick = ()=>{ selectedTeamMembers.splice(+b.dataset.i,1); renderMemberChips(); });
+  wrap.querySelectorAll(".chipRoleToggle").forEach(b=> b.onclick = ()=>{ const m=selectedTeamMembers[+b.dataset.i]; m.role = m.role==="owner"?"member":"owner"; renderMemberChips(); });
+}
+
+async function searchDirectoryUsers(query){
+  const tok = await token(TEAM_SCOPES);
+  const q = query.replace(/"/g,'\\"');
+  const url = `${GRAPH}/users?$search="displayName:${encodeURIComponent(q)}" OR "mail:${encodeURIComponent(q)}"&$select=id,displayName,mail,userPrincipalName&$top=8&$orderby=displayName`;
+  const r = await fetch(url, { headers:{ Authorization:`Bearer ${tok}`, ConsistencyLevel:"eventual" } });
+  if(!r.ok) throw new Error(`Directory search failed (${r.status})`);
+  return (await r.json()).value || [];
+}
+
+let memberSearchTimer = null;
+el("teamMemberSearch").oninput = (e)=>{
+  clearTimeout(memberSearchTimer);
+  const q = e.target.value.trim();
+  const results = el("teamMemberResults");
+  if(q.length < 2){ results.classList.add("hide"); results.innerHTML=""; return; }
+  memberSearchTimer = setTimeout(async ()=>{
+    results.classList.remove("hide");
+    results.innerHTML = `<div style="padding:8px 12px;color:var(--muted);font-size:12.5px"><span class="spin"></span> Searching…</div>`;
+    let people;
+    try{ people = await searchDirectoryUsers(q); }
+    catch(err){ results.innerHTML = `<div style="padding:8px 12px;color:var(--danger);font-size:12.5px">${escapeHtml(err.message||String(err))}</div>`; return; }
+    people = people.filter(p => !selectedTeamMembers.some(m=>m.id===p.id));
+    if(!people.length){ results.innerHTML = `<div style="padding:8px 12px;color:var(--muted);font-size:12.5px">No matches in the directory</div>`; return; }
+    results.innerHTML = people.map(p => `
+      <div class="memberResultRow" data-id="${escapeHtml(p.id)}" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)">
+        <div>${escapeHtml(p.displayName||"")}</div>
+        <div style="color:var(--muted);font-size:11.5px">${escapeHtml(p.mail||p.userPrincipalName||"")}</div>
+      </div>`).join("");
+    results.querySelectorAll(".memberResultRow").forEach(row=>{
+      row.onclick = ()=>{
+        const p = people.find(x=>x.id===row.dataset.id);
+        if(!p) return;
+        selectedTeamMembers.push({ id:p.id, displayName:p.displayName||p.mail||p.userPrincipalName, mail:p.mail||p.userPrincipalName, role:"member" });
+        renderMemberChips();
+        el("teamMemberSearch").value = "";
+        results.classList.add("hide"); results.innerHTML = "";
+      };
+    });
+  }, 300);
+};
+document.addEventListener("click", (e)=>{
+  if(!e.target.closest("#teamMemberSearch") && !e.target.closest("#teamMemberResults")) el("teamMemberResults").classList.add("hide");
+});
+
 /* Graph folder helpers — create one child folder under a given drive item */
 async function graphCreateFolder(tok, driveId, parentItemId, name){
   const r = await fetch(`${GRAPH}/drives/${driveId}/items/${parentItemId}/children`, {
@@ -1555,12 +1626,43 @@ async function createTeam(){
       await attachFolderStructure(tok, recipientUpn, filesFolder, permFailures);
     }
 
+    // add the people picked from the directory
+    const memberFailures = [];
+    for(let i=0;i<selectedTeamMembers.length;i++){
+      const m = selectedTeamMembers[i];
+      status.innerHTML = `<span class="spin"></span> Adding members (${i+1}/${selectedTeamMembers.length})…`;
+      try{
+        const mRes = await fetch(`${GRAPH}/teams/${teamId}/members`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            roles: m.role==="owner" ? ["owner"] : [],
+            "user@odata.bind": `https://graph.microsoft.com/v1.0/users('${m.id}')`
+          })
+        });
+        if(!mRes.ok){
+          const body = await mRes.text().catch(()=> "");
+          console.error("add member failed", mRes.status, m, body);
+          memberFailures.push(`${m.displayName}: ${mRes.status}`);
+        }
+      }catch(e){
+        console.error("add member threw", e, m);
+        memberFailures.push(`${m.displayName}: ${e.message||String(e)}`);
+      }
+    }
+
     const chList = channelNames.length ? channelNames.map(escapeHtml).join(", ") : "General";
     const permNote = permFailures.length
       ? ` <div style="color:var(--warn);margin-top:6px">⚠ ${permFailures.length} folder(s) may still be inheriting permissions. First error: <span class="mono">${escapeHtml(permFailures[0])}</span> — full list in the browser console (F12).</div>`
       : ` <div style="color:var(--muted);margin-top:6px">All folders were given unique permissions (inheritance broken).</div>`;
-    status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>${permNote}`;
+    const memberList = selectedTeamMembers.map(m=>escapeHtml(m.displayName)).join(", ");
+    const memberNote = selectedTeamMembers.length
+      ? ` <div style="color:var(--muted);margin-top:6px">Members: ${memberList}.${memberFailures.length ? ` ⚠ ${memberFailures.length} failed: ${escapeHtml(memberFailures.join("; "))}` : ""}</div>`
+      : "";
+    status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>${permNote}${memberNote}`;
     el("teamName").value=""; el("teamDesc").value=""; el("teamChannelCount").value="1"; renderChannelFields();
+    selectedTeamMembers = []; renderMemberChips();
     toast("Team created");
   }catch(e){
     status.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message||String(e))}</span>`;
