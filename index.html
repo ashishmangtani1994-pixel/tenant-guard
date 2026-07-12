@@ -1051,12 +1051,12 @@
             <select id="teamVisibility"><option value="Private">Private</option><option value="Public">Public</option></select>
           </div>
           <div class="field">
-            <label>Additional channels to create</label>
+            <label>Number of channels to create</label>
             <input type="number" id="teamChannelCount" min="0" max="20" value="1" />
           </div>
           <div id="channelFieldsWrap" style="display:flex;flex-direction:column;gap:10px"></div>
           <div style="font-size:11.5px;color:var(--faint);line-height:1.5">
-            Teams always provisions a default <span class="mono">General</span> channel — Graph doesn't allow skipping or removing it. It gets the same folder structure as the channels below.
+            Channel 1 becomes the team's <b>first channel</b> — it takes that name instead of "General". Graph still won't let it be deleted afterwards (every team needs at least one channel), but it's never called "General" to begin with. Leave Channel 1 blank to keep the "General" default.
           </div>
         </div>
         <div class="foot" style="margin-top:20px;padding-top:0;border:none">
@@ -1424,7 +1424,7 @@ async function createTeam(){
   const desc = (el("teamDesc").value||"").trim();
   const visibility = el("teamVisibility").value;
   const channelNames = [...document.querySelectorAll(".channelNameInput")]
-    .map(i=>i.value.trim()).filter(Boolean).filter(n=>n.toLowerCase()!=="general");
+    .map(i=>i.value.trim()).filter(Boolean);
   const status = el("teamStatus");
   if(!name){ status.innerHTML = `<span style="color:var(--danger)">Team name is required.</span>`; return; }
 
@@ -1445,7 +1445,10 @@ async function createTeam(){
         "template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
         displayName: name,
         description: desc || name,
-        visibility
+        visibility,
+        // naming this at creation avoids the channel being called "General" at all —
+        // Graph still won't let it be deleted afterwards, but it's never "General" to begin with
+        ...(channelNames[0] ? { firstChannelName: channelNames[0] } : {})
       })
     });
     if(!createRes.ok && createRes.status!==202) throw new Error(`Graph returned ${createRes.status}`);
@@ -1469,19 +1472,21 @@ async function createTeam(){
     }
     if(!teamId) throw new Error("Team created but its ID couldn't be resolved — check Teams admin center in a minute.");
 
-    // find the auto-created "General" channel — Graph always creates it, it can't be skipped
-    status.innerHTML = `<span class="spin"></span> Locating default channel…`;
+    // find the first channel — it's named channelNames[0] if given (via firstChannelName above),
+    // otherwise Graph defaults it to "General"; either way it's auto-created and can't be deleted
+    status.innerHTML = `<span class="spin"></span> Locating first channel…`;
     let channels = [];
     for(let i=0;i<10 && !channels.length;i++){
       const r = await fetch(`${GRAPH}/teams/${teamId}/channels`, { headers:{ Authorization:`Bearer ${tok}` } });
       if(r.ok){ const j = await r.json(); channels = j.value||[]; }
       if(!channels.length) await new Promise(res=>setTimeout(res,2000));
     }
-    const generalId = channels.find(c=>c.displayName==="General")?.id;
+    const firstChannelName = channelNames[0] || "General";
+    const firstChannelId = (channels.find(c=>c.displayName===firstChannelName) || channels[0])?.id;
 
-    // create the additional channels the person asked for
-    const createdChannelIds = generalId ? [generalId] : [];
-    for(const chName of channelNames){
+    // create any remaining requested channels — the first one is already provisioned above
+    const createdChannelIds = firstChannelId ? [firstChannelId] : [];
+    for(const chName of channelNames.slice(1)){
       status.innerHTML = `<span class="spin"></span> Adding channel "${escapeHtml(chName)}"…`;
       const chRes = await fetch(`${GRAPH}/teams/${teamId}/channels`, {
         method: "POST",
@@ -1499,7 +1504,7 @@ async function createTeam(){
       await attachFolderStructure(tok, teamId, createdChannelIds[i]);
     }
 
-    const chList = channelNames.length ? `General, ${channelNames.map(escapeHtml).join(", ")}` : "General";
+    const chList = channelNames.length ? channelNames.map(escapeHtml).join(", ") : "General";
     status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>`;
     el("teamName").value=""; el("teamDesc").value=""; el("teamChannelCount").value="1"; renderChannelFields();
     toast("Team created");
