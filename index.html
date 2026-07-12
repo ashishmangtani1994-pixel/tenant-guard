@@ -681,6 +681,13 @@
           <button class="tab" data-tab="oauth">OAuth consents <span class="cnt" id="cntOauth">—</span></button>
         </div>
       </div>
+
+      <div class="navgroup" data-group="collab">
+        <button class="navhead"><span>Collaboration</span><span class="caret">▾</span></button>
+        <div class="navitems">
+          <button class="tab" data-tab="teams">Teams <span class="cnt" id="cntTeams">—</span></button>
+        </div>
+      </div>
     </aside>
 
     <!-- ==== CONTENT ==== -->
@@ -1026,6 +1033,35 @@
         <button class="btn danger" id="btnDelete" disabled>Delete selected</button>
       </div>
 
+      <!-- ==== TEAMS — create a Team + initial channel ==== -->
+      <div class="card hide" id="teamsPanel" style="max-width:560px;margin:0 0 20px">
+        <h3 style="margin:0 0 4px;font-family:'Space Grotesk';font-size:16px">Create a Team</h3>
+        <p style="margin:0 0 18px;color:var(--muted);font-size:13px">Provisions a Microsoft 365 group + Team via Graph, then adds your channel to it.</p>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="field">
+            <label>Team name</label>
+            <input type="text" id="teamName" placeholder="e.g. Finance Ops" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Description <span style="text-transform:none;color:var(--faint)">(optional)</span></label>
+            <input type="text" id="teamDesc" placeholder="What's this team for?" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Privacy</label>
+            <select id="teamVisibility"><option value="Private">Private</option><option value="Public">Public</option></select>
+          </div>
+          <div class="field">
+            <label>Channel name</label>
+            <input type="text" id="teamChannel" placeholder="e.g. General Discussion" autocomplete="off" />
+          </div>
+        </div>
+        <div class="foot" style="margin-top:20px;padding-top:0;border:none">
+          <span style="flex:1"></span>
+          <button class="btn primary" id="btnCreateTeam">Create team</button>
+        </div>
+        <div id="teamStatus" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
+      </div>
+
       <div class="tablewrap">
         <table>
           <thead>
@@ -1160,6 +1196,9 @@ const SEND_SHARED_SCOPES = ["Mail.Send","Mail.Send.Shared"];
 // broad (acts as the signed-in admin across the directory), so it's split out and only
 // requested at the moment a device delete is attempted, not at every sign-in.
 const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
+// Group.ReadWrite.All is needed to create a Microsoft 365 group/Team and its channels.
+// Requested on demand (same pattern as DEVICE_DELETE_SCOPES) only when "Create team" is clicked.
+const TEAM_SCOPES = ["Group.ReadWrite.All"];
 const ALL_SCOPES   = [...READ_SCOPES, ...WRITE_SCOPES];
 
 // redirect URI = this page, no query/hash. Register this exact value as a SPA platform.
@@ -1324,6 +1363,78 @@ async function token(scopes){
 el("cfgConsent").onclick = () => {
   msalApp.loginRedirect({ scopes: ALL_SCOPES, redirectUri: REDIRECT, prompt: "admin_consent" });
 };
+
+/* Teams: create a Microsoft 365 group + Team, then add the requested channel.
+   Team creation is async on Graph's side (returns 202 + Location header pointing at an
+   operation); poll that until it resolves before creating the channel. */
+async function createTeam(){
+  const name = (el("teamName").value||"").trim();
+  const desc = (el("teamDesc").value||"").trim();
+  const channel = (el("teamChannel").value||"").trim();
+  const visibility = el("teamVisibility").value;
+  const status = el("teamStatus");
+  if(!name){ status.innerHTML = `<span style="color:var(--danger)">Team name is required.</span>`; return; }
+  if(!channel){ status.innerHTML = `<span style="color:var(--danger)">Channel name is required.</span>`; return; }
+
+  const btn = el("btnCreateTeam");
+  btn.disabled = true;
+  status.innerHTML = `<span class="spin"></span> Requesting permission…`;
+
+  let tok;
+  try{ tok = await token(TEAM_SCOPES); }
+  catch(e){ status.innerHTML = `<span style="color:var(--danger)">Couldn't get consent for Group.ReadWrite.All: ${escapeHtml(e.message||String(e))}</span>`; btn.disabled=false; return; }
+
+  try{
+    status.innerHTML = `<span class="spin"></span> Creating team "${escapeHtml(name)}"…`;
+    const createRes = await fetch(`${GRAPH}/teams`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        "template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
+        displayName: name,
+        description: desc || name,
+        visibility
+      })
+    });
+    if(!createRes.ok && createRes.status!==202) throw new Error(`Graph returned ${createRes.status}`);
+    const opLocation = createRes.headers.get("Location"); // e.g. /teams('<id>')/operations('<opId>')
+    const teamIdMatch = (opLocation||"").match(/teams\('([^']+)'\)/);
+    let teamId = teamIdMatch ? teamIdMatch[1] : null;
+
+    // poll the operation (or the group) until the team is actually provisioned
+    status.innerHTML = `<span class="spin"></span> Provisioning (this can take up to a minute)…`;
+    for(let i=0;i<20;i++){
+      await new Promise(r=>setTimeout(r,3000));
+      const checkUrl = opLocation ? `${GRAPH}${opLocation}` : null;
+      if(checkUrl){
+        const opRes = await fetch(checkUrl, { headers:{ Authorization:`Bearer ${tok}` } });
+        if(opRes.ok){
+          const op = await opRes.json();
+          if(op.status==="succeeded"){ teamId = op.targetResourceId || teamId; break; }
+          if(op.status==="failed"){ throw new Error(op.error?.message || "Team provisioning failed"); }
+        }
+      } else break;
+    }
+    if(!teamId) throw new Error("Team created but its ID couldn't be resolved — check Teams admin center in a minute.");
+
+    status.innerHTML = `<span class="spin"></span> Adding channel "${escapeHtml(channel)}"…`;
+    const chRes = await fetch(`${GRAPH}/teams/${teamId}/channels`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: channel, membershipType: "standard" })
+    });
+    if(!chRes.ok) throw new Error(`Channel creation failed (${chRes.status})`);
+
+    status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channel "${escapeHtml(channel)}".</span>`;
+    el("teamName").value=""; el("teamDesc").value=""; el("teamChannel").value="";
+    toast("Team created");
+  }catch(e){
+    status.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message||String(e))}</span>`;
+  }finally{
+    btn.disabled = false;
+  }
+}
+el("btnCreateTeam").onclick = createTeam;
 
 function enterApp(){
   el("signin").classList.add("hide");
@@ -2195,6 +2306,15 @@ function render(){
 
   // antivirus sets its own header (per sub-mode) inside renderAntivirus
   if(tab==="antivirus"){ renderAntivirus(); return; }
+
+  // teams tab is a form, not a table — hide the shared table/filter chrome and show its own panel
+  const isTeams = tab==="teams";
+  el("teamsPanel").classList.toggle("hide", !isTeams);
+  document.querySelector(".tablewrap").classList.toggle("hide", isTeams);
+  el("filterbar").classList.toggle("hide", isTeams);
+  el("actionbar").classList.toggle("hide", isTeams);
+  document.querySelector(".controls").classList.toggle("hide", isTeams);
+  if(isTeams) return;
 
   const heads = { recommendations:HEAD_REC, baseline:HEAD_CIS, cmmc:HEAD_CIS, cmmc2:HEAD_CMMC2, cis:HEAD_CIS, cis81:HEAD_CIS, cisv6:HEAD_CIS, cisv5:HEAD_CIS, nist:HEAD_CIS, device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
     devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH };
