@@ -1051,8 +1051,12 @@
             <select id="teamVisibility"><option value="Private">Private</option><option value="Public">Public</option></select>
           </div>
           <div class="field">
-            <label>Channel name</label>
-            <input type="text" id="teamChannel" placeholder="e.g. General Discussion" autocomplete="off" />
+            <label>Additional channels to create</label>
+            <input type="number" id="teamChannelCount" min="0" max="20" value="1" />
+          </div>
+          <div id="channelFieldsWrap" style="display:flex;flex-direction:column;gap:10px"></div>
+          <div style="font-size:11.5px;color:var(--faint);line-height:1.5">
+            Teams always provisions a default <span class="mono">General</span> channel — Graph doesn't allow skipping or removing it. It gets the same folder structure as the channels below.
           </div>
         </div>
         <div class="foot" style="margin-top:20px;padding-top:0;border:none">
@@ -1197,8 +1201,15 @@ const SEND_SHARED_SCOPES = ["Mail.Send","Mail.Send.Shared"];
 // requested at the moment a device delete is attempted, not at every sign-in.
 const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
 // Group.ReadWrite.All is needed to create a Microsoft 365 group/Team and its channels.
+// Files.ReadWrite.All is needed to create the attached folder structure inside each channel.
 // Requested on demand (same pattern as DEVICE_DELETE_SCOPES) only when "Create team" is clicked.
-const TEAM_SCOPES = ["Group.ReadWrite.All"];
+const TEAM_SCOPES = ["Group.ReadWrite.All","Files.ReadWrite.All"];
+// Folder structure applied to every channel (including the default General channel).
+const TEAM_FOLDER_TREE = {
+  "01_Workbench":    ["Drafts","Incoming","Working"],
+  "02_KnowledgeBase":["Policies","Procedures","Templates","Reference","Archive"],
+  "03_Vault":        ["Confidential","Legal","Restricted"]
+};
 const ALL_SCOPES   = [...READ_SCOPES, ...WRITE_SCOPES];
 
 // redirect URI = this page, no query/hash. Register this exact value as a SPA platform.
@@ -1364,17 +1375,58 @@ el("cfgConsent").onclick = () => {
   msalApp.loginRedirect({ scopes: ALL_SCOPES, redirectUri: REDIRECT, prompt: "admin_consent" });
 };
 
-/* Teams: create a Microsoft 365 group + Team, then add the requested channel.
+/* Teams: dynamic "how many channels" -> that many name fields */
+function renderChannelFields(){
+  const n = Math.max(0, Math.min(20, parseInt(el("teamChannelCount").value,10)||0));
+  const wrap = el("channelFieldsWrap");
+  const existing = [...wrap.querySelectorAll(".channelNameInput")].map(i=>i.value);
+  wrap.innerHTML = Array.from({length:n}, (_,i)=>
+    `<div class="field"><label>Channel ${i+1} name</label><input type="text" class="channelNameInput" placeholder="e.g. Design" value="${escapeHtml(existing[i]||"")}" autocomplete="off" /></div>`
+  ).join("");
+}
+el("teamChannelCount").oninput = renderChannelFields;
+renderChannelFields();
+
+/* Graph folder helpers — create one child folder under a given drive item */
+async function graphCreateFolder(tok, driveId, parentItemId, name){
+  const r = await fetch(`${GRAPH}/drives/${driveId}/items/${parentItemId}/children`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "replace" })
+  });
+  if(!r.ok) throw new Error(`Folder "${name}" failed (${r.status})`);
+  return r.json();
+}
+// a channel's SharePoint folder isn't always ready the instant the channel is created — poll it
+async function waitForChannelFilesFolder(tok, teamId, channelId){
+  for(let i=0;i<15;i++){
+    const r = await fetch(`${GRAPH}/teams/${teamId}/channels/${channelId}/filesFolder`, { headers:{ Authorization:`Bearer ${tok}` } });
+    if(r.ok) return r.json();
+    await new Promise(res=>setTimeout(res,2000));
+  }
+  throw new Error("channel folder never became available");
+}
+async function attachFolderStructure(tok, teamId, channelId){
+  const filesFolder = await waitForChannelFilesFolder(tok, teamId, channelId);
+  const driveId = filesFolder.parentReference.driveId, rootId = filesFolder.id;
+  for(const [topName, children] of Object.entries(TEAM_FOLDER_TREE)){
+    const topFolder = await graphCreateFolder(tok, driveId, rootId, topName);
+    for(const childName of children) await graphCreateFolder(tok, driveId, topFolder.id, childName);
+  }
+}
+
+/* Teams: create a Microsoft 365 group + Team, then the requested channels, then the
+   folder structure inside each one (including the unavoidable default "General" channel).
    Team creation is async on Graph's side (returns 202 + Location header pointing at an
-   operation); poll that until it resolves before creating the channel. */
+   operation); poll that until it resolves before creating channels. */
 async function createTeam(){
   const name = (el("teamName").value||"").trim();
   const desc = (el("teamDesc").value||"").trim();
-  const channel = (el("teamChannel").value||"").trim();
   const visibility = el("teamVisibility").value;
+  const channelNames = [...document.querySelectorAll(".channelNameInput")]
+    .map(i=>i.value.trim()).filter(Boolean).filter(n=>n.toLowerCase()!=="general");
   const status = el("teamStatus");
   if(!name){ status.innerHTML = `<span style="color:var(--danger)">Team name is required.</span>`; return; }
-  if(!channel){ status.innerHTML = `<span style="color:var(--danger)">Channel name is required.</span>`; return; }
 
   const btn = el("btnCreateTeam");
   btn.disabled = true;
@@ -1382,7 +1434,7 @@ async function createTeam(){
 
   let tok;
   try{ tok = await token(TEAM_SCOPES); }
-  catch(e){ status.innerHTML = `<span style="color:var(--danger)">Couldn't get consent for Group.ReadWrite.All: ${escapeHtml(e.message||String(e))}</span>`; btn.disabled=false; return; }
+  catch(e){ status.innerHTML = `<span style="color:var(--danger)">Couldn't get consent: ${escapeHtml(e.message||String(e))}</span>`; btn.disabled=false; return; }
 
   try{
     status.innerHTML = `<span class="spin"></span> Creating team "${escapeHtml(name)}"…`;
@@ -1401,7 +1453,7 @@ async function createTeam(){
     const teamIdMatch = (opLocation||"").match(/teams\('([^']+)'\)/);
     let teamId = teamIdMatch ? teamIdMatch[1] : null;
 
-    // poll the operation (or the group) until the team is actually provisioned
+    // poll the operation until the team is actually provisioned
     status.innerHTML = `<span class="spin"></span> Provisioning (this can take up to a minute)…`;
     for(let i=0;i<20;i++){
       await new Promise(r=>setTimeout(r,3000));
@@ -1417,16 +1469,39 @@ async function createTeam(){
     }
     if(!teamId) throw new Error("Team created but its ID couldn't be resolved — check Teams admin center in a minute.");
 
-    status.innerHTML = `<span class="spin"></span> Adding channel "${escapeHtml(channel)}"…`;
-    const chRes = await fetch(`${GRAPH}/teams/${teamId}/channels`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ displayName: channel, membershipType: "standard" })
-    });
-    if(!chRes.ok) throw new Error(`Channel creation failed (${chRes.status})`);
+    // find the auto-created "General" channel — Graph always creates it, it can't be skipped
+    status.innerHTML = `<span class="spin"></span> Locating default channel…`;
+    let channels = [];
+    for(let i=0;i<10 && !channels.length;i++){
+      const r = await fetch(`${GRAPH}/teams/${teamId}/channels`, { headers:{ Authorization:`Bearer ${tok}` } });
+      if(r.ok){ const j = await r.json(); channels = j.value||[]; }
+      if(!channels.length) await new Promise(res=>setTimeout(res,2000));
+    }
+    const generalId = channels.find(c=>c.displayName==="General")?.id;
 
-    status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channel "${escapeHtml(channel)}".</span>`;
-    el("teamName").value=""; el("teamDesc").value=""; el("teamChannel").value="";
+    // create the additional channels the person asked for
+    const createdChannelIds = generalId ? [generalId] : [];
+    for(const chName of channelNames){
+      status.innerHTML = `<span class="spin"></span> Adding channel "${escapeHtml(chName)}"…`;
+      const chRes = await fetch(`${GRAPH}/teams/${teamId}/channels`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: chName, membershipType: "standard" })
+      });
+      if(!chRes.ok) throw new Error(`Channel "${chName}" failed (${chRes.status})`);
+      const ch = await chRes.json();
+      createdChannelIds.push(ch.id);
+    }
+
+    // attach the standard folder structure to every channel, General included
+    for(let i=0;i<createdChannelIds.length;i++){
+      status.innerHTML = `<span class="spin"></span> Building folder structure (${i+1}/${createdChannelIds.length} channels)…`;
+      await attachFolderStructure(tok, teamId, createdChannelIds[i]);
+    }
+
+    const chList = channelNames.length ? `General, ${channelNames.map(escapeHtml).join(", ")}` : "General";
+    status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>`;
+    el("teamName").value=""; el("teamDesc").value=""; el("teamChannelCount").value="1"; renderChannelFields();
     toast("Team created");
   }catch(e){
     status.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message||String(e))}</span>`;
