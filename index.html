@@ -1204,10 +1204,11 @@ const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
 // Files.ReadWrite.All is needed to create the attached folder structure inside each channel.
 // Requested on demand (same pattern as DEVICE_DELETE_SCOPES) only when "Create team" is clicked.
 const TEAM_SCOPES = ["Group.ReadWrite.All","Files.ReadWrite.All"];
-// Removing unique permissions has no Graph endpoint — it only exists via classic SharePoint
-// REST (resetRoleInheritance), which needs a SharePoint-audience token: "https://{tenant}.
-// sharepoint.com/AllSites.Write" rather than graph.microsoft.com. The hostname is resolved at
-// runtime from /sites/root, then requested the same on-demand way as TEAM_SCOPES.
+// Giving each folder its own unique permissions ("Stop Inheriting Permissions") has no Graph
+// endpoint — it only exists via classic SharePoint REST (breakRoleInheritance), which needs a
+// SharePoint-audience token: "https://{tenant}.sharepoint.com/AllSites.Write" rather than
+// graph.microsoft.com. The hostname is resolved at runtime from /sites/root, then requested the
+// same on-demand way as TEAM_SCOPES.
 // PREREQUISITE: the app registration needs the SharePoint "AllSites.Write" delegated API
 // permission added (API permissions → APIs my organization uses → SharePoint → Delegated →
 // AllSites.Write) with admin consent granted — this is a one-time Entra portal step, not
@@ -1415,30 +1416,32 @@ async function waitForChannelFilesFolder(tok, teamId, channelId){
   }
   throw new Error("channel folder never became available");
 }
-// Microsoft Graph has no "delete unique permissions" / reset-inheritance action for driveItems —
-// it only exists on the classic SharePoint REST API (resetRoleInheritance), which needs a
-// SharePoint-audience token (not a graph.microsoft.com one). Silently no-ops if spToken is falsy
-// (i.e. AllSites.Write was never consented) so a missing permission doesn't abort team creation.
-async function resetRoleInheritance(spToken, webUrl){
+// Microsoft Graph has no equivalent of SharePoint's "Stop Inheriting Permissions" action for
+// driveItems — it only exists on the classic SharePoint REST API (breakRoleInheritance), which
+// needs a SharePoint-audience token (not a graph.microsoft.com one). copyRoleAssignments=true
+// seeds the new unique permissions from whatever the folder currently inherits, so access isn't
+// dropped at the moment it becomes unique. Silently no-ops if spToken is falsy (i.e. AllSites.Write
+// was never consented) so a missing permission doesn't abort team creation.
+async function breakRoleInheritance(spToken, webUrl){
   if(!spToken) return false;
   try{
     const u = new URL(webUrl);
     const serverRelUrl = decodeURIComponent(u.pathname);
     const literal = encodeURI(serverRelUrl).replace(/'/g,"''");
-    const api = `${u.origin}/_api/web/GetFolderByServerRelativeUrl('${literal}')/ListItemAllFields/resetRoleInheritance`;
+    const api = `${u.origin}/_api/web/GetFolderByServerRelativeUrl('${literal}')/ListItemAllFields/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=false)`;
     const r = await fetch(api, { method:"POST", headers:{ Authorization:`Bearer ${spToken}`, Accept:"application/json;odata=nometadata" } });
     return r.ok;
   }catch(e){ return false; }
 }
 async function attachFolderStructure(tok, spToken, filesFolder){
   const driveId = filesFolder.parentReference.driveId, rootId = filesFolder.id;
-  await resetRoleInheritance(spToken, filesFolder.webUrl); // the channel's own root folder
+  // the channel's own root folder already gets unique permissions from Teams by default — leave it alone
   for(const [topName, children] of Object.entries(TEAM_FOLDER_TREE)){
     const topFolder = await graphCreateFolder(tok, driveId, rootId, topName);
-    await resetRoleInheritance(spToken, topFolder.webUrl);
+    await breakRoleInheritance(spToken, topFolder.webUrl);
     for(const childName of children){
       const childFolder = await graphCreateFolder(tok, driveId, topFolder.id, childName);
-      await resetRoleInheritance(spToken, childFolder.webUrl);
+      await breakRoleInheritance(spToken, childFolder.webUrl);
     }
   }
 }
@@ -1537,19 +1540,19 @@ async function createTeam(){
       createdChannelIds.push(ch.id);
     }
 
-    // attach the standard folder structure to every channel, General included — and remove
-    // the unique permissions Teams applies to each channel folder by default
-    let permResetSkipped = 0;
+    // attach the standard folder structure to every channel, General included — and give each
+    // created folder its own unique permissions (Stop Inheriting Permissions)
+    let permBreakSkipped = 0;
     for(let i=0;i<createdChannelIds.length;i++){
       status.innerHTML = `<span class="spin"></span> Building folder structure (${i+1}/${createdChannelIds.length} channels)…`;
       const filesFolder = await waitForChannelFilesFolder(tok, teamId, createdChannelIds[i]);
       await attachFolderStructure(tok, spToken, filesFolder);
-      if(!spToken) permResetSkipped++;
+      if(!spToken) permBreakSkipped++;
     }
 
     const chList = channelNames.length ? channelNames.map(escapeHtml).join(", ") : "General";
-    const permNote = permResetSkipped
-      ? ` <span style="color:var(--warn)">(unique permissions left in place — SharePoint "${SP_PERMISSION}" wasn't consented)</span>`
+    const permNote = permBreakSkipped
+      ? ` <span style="color:var(--warn)">(folders left inheriting permissions — SharePoint "${SP_PERMISSION}" wasn't consented)</span>`
       : "";
     status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>${permNote}`;
     el("teamName").value=""; el("teamDesc").value=""; el("teamChannelCount").value="1"; renderChannelFields();
