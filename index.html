@@ -1420,28 +1420,41 @@ async function waitForChannelFilesFolder(tok, teamId, channelId){
 // driveItems — it only exists on the classic SharePoint REST API (breakRoleInheritance), which
 // needs a SharePoint-audience token (not a graph.microsoft.com one). copyRoleAssignments=true
 // seeds the new unique permissions from whatever the folder currently inherits, so access isn't
-// dropped at the moment it becomes unique. Silently no-ops if spToken is falsy (i.e. AllSites.Write
-// was never consented) so a missing permission doesn't abort team creation.
+// dropped at the moment it becomes unique.
+// Request shape (headers, URL building) is intentionally identical to the earlier
+// resetRoleInheritance call that was proven to reach SharePoint successfully — only the
+// action name + args differ. Returns {ok, detail} — failures are logged AND surfaced in the
+// UI rather than silently swallowed.
 async function breakRoleInheritance(spToken, webUrl){
-  if(!spToken) return false;
+  if(!spToken) return { ok:false, detail:"no SharePoint token" };
   try{
     const u = new URL(webUrl);
     const serverRelUrl = decodeURIComponent(u.pathname);
     const literal = encodeURI(serverRelUrl).replace(/'/g,"''");
-    const api = `${u.origin}/_api/web/GetFolderByServerRelativeUrl('${literal}')/ListItemAllFields/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=false)`;
+    const api = `${u.origin}/_api/web/GetFolderByServerRelativeUrl('${literal}')/ListItemAllFields/breakroleinheritance(copyRoleAssignments=true, clearSubscopes=true)`;
     const r = await fetch(api, { method:"POST", headers:{ Authorization:`Bearer ${spToken}`, Accept:"application/json;odata=nometadata" } });
-    return r.ok;
-  }catch(e){ return false; }
+    if(!r.ok){
+      const body = await r.text().catch(()=> "");
+      console.error("breakRoleInheritance failed", r.status, api, body);
+      return { ok:false, detail:`${r.status} on ${serverRelUrl}: ${body.slice(0,200)}` };
+    }
+    return { ok:true };
+  }catch(e){
+    console.error("breakRoleInheritance threw", e, webUrl);
+    return { ok:false, detail:e.message||String(e) };
+  }
 }
-async function attachFolderStructure(tok, spToken, filesFolder){
+async function attachFolderStructure(tok, spToken, filesFolder, failures){
   const driveId = filesFolder.parentReference.driveId, rootId = filesFolder.id;
   // the channel's own root folder already gets unique permissions from Teams by default — leave it alone
   for(const [topName, children] of Object.entries(TEAM_FOLDER_TREE)){
     const topFolder = await graphCreateFolder(tok, driveId, rootId, topName);
-    await breakRoleInheritance(spToken, topFolder.webUrl);
+    const r1 = await breakRoleInheritance(spToken, topFolder.webUrl);
+    if(!r1.ok) failures.push(r1.detail);
     for(const childName of children){
       const childFolder = await graphCreateFolder(tok, driveId, topFolder.id, childName);
-      await breakRoleInheritance(spToken, childFolder.webUrl);
+      const r2 = await breakRoleInheritance(spToken, childFolder.webUrl);
+      if(!r2.ok) failures.push(r2.detail);
     }
   }
 }
@@ -1469,14 +1482,16 @@ async function createTeam(){
 
   // resolve the tenant's SharePoint hostname and request its scope now — before creating
   // anything — so a consent redirect never happens mid-way through a partially built team
-  let spToken = null;
+  let spToken = null, spTokenError = null;
   try{
     const siteRes = await fetch(`${GRAPH}/sites/root`, { headers:{ Authorization:`Bearer ${tok}` } });
-    if(siteRes.ok){
-      const origin = new URL((await siteRes.json()).webUrl).origin;
-      spToken = await token([`${origin}/${SP_PERMISSION}`]);
-    }
-  }catch(e){ spToken = null; } // AllSites.Write not consented — folders will still be created, just left with unique permissions
+    if(!siteRes.ok) throw new Error(`GET /sites/root → ${siteRes.status}`);
+    const origin = new URL((await siteRes.json()).webUrl).origin;
+    spToken = await token([`${origin}/${SP_PERMISSION}`]);
+  }catch(e){
+    spTokenError = e.message||String(e);
+    console.error("SharePoint token acquisition failed — check the app registration has the SharePoint 'AllSites.Write' delegated permission added AND admin-consented:", e);
+  }
 
   try{
     status.innerHTML = `<span class="spin"></span> Creating team "${escapeHtml(name)}"…`;
@@ -1542,18 +1557,20 @@ async function createTeam(){
 
     // attach the standard folder structure to every channel, General included — and give each
     // created folder its own unique permissions (Stop Inheriting Permissions)
-    let permBreakSkipped = 0;
+    const permFailures = [];
     for(let i=0;i<createdChannelIds.length;i++){
       status.innerHTML = `<span class="spin"></span> Building folder structure (${i+1}/${createdChannelIds.length} channels)…`;
       const filesFolder = await waitForChannelFilesFolder(tok, teamId, createdChannelIds[i]);
-      await attachFolderStructure(tok, spToken, filesFolder);
-      if(!spToken) permBreakSkipped++;
+      await attachFolderStructure(tok, spToken, filesFolder, permFailures);
     }
 
     const chList = channelNames.length ? channelNames.map(escapeHtml).join(", ") : "General";
-    const permNote = permBreakSkipped
-      ? ` <span style="color:var(--warn)">(folders left inheriting permissions — SharePoint "${SP_PERMISSION}" wasn't consented)</span>`
-      : "";
+    let permNote = "";
+    if(spTokenError){
+      permNote = ` <div style="color:var(--warn);margin-top:6px">⚠ Folders left inheriting permissions — couldn't get a SharePoint token: <span class="mono">${escapeHtml(spTokenError)}</span>. Check the app registration has the SharePoint "${SP_PERMISSION}" delegated permission added <i>and admin-consented</i> (API permissions → Add a permission → APIs my organization uses → search "SharePoint" or "Office 365 SharePoint Online" → Delegated permissions → ${SP_PERMISSION}).</div>`;
+    } else if(permFailures.length){
+      permNote = ` <div style="color:var(--warn);margin-top:6px">⚠ ${permFailures.length} folder(s) kept inheriting permissions. First error: <span class="mono">${escapeHtml(permFailures[0])}</span> — full list in the browser console (F12).</div>`;
+    }
     status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>${permNote}`;
     el("teamName").value=""; el("teamDesc").value=""; el("teamChannelCount").value="1"; renderChannelFields();
     toast("Team created");
