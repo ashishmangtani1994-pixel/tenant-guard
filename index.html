@@ -1201,19 +1201,10 @@ const SEND_SHARED_SCOPES = ["Mail.Send","Mail.Send.Shared"];
 // requested at the moment a device delete is attempted, not at every sign-in.
 const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
 // Group.ReadWrite.All is needed to create a Microsoft 365 group/Team and its channels.
-// Files.ReadWrite.All is needed to create the attached folder structure inside each channel.
+// Files.ReadWrite.All is needed to create the folder structure AND to assign each folder its own
+// permission (which is what breaks inheritance — see breakInheritanceViaGraph below).
 // Requested on demand (same pattern as DEVICE_DELETE_SCOPES) only when "Create team" is clicked.
 const TEAM_SCOPES = ["Group.ReadWrite.All","Files.ReadWrite.All"];
-// Giving each folder its own unique permissions ("Stop Inheriting Permissions") has no Graph
-// endpoint — it only exists via classic SharePoint REST (breakRoleInheritance), which needs a
-// SharePoint-audience token: "https://{tenant}.sharepoint.com/AllSites.Write" rather than
-// graph.microsoft.com. The hostname is resolved at runtime from /sites/root, then requested the
-// same on-demand way as TEAM_SCOPES.
-// PREREQUISITE: the app registration needs the SharePoint "AllSites.Write" delegated API
-// permission added (API permissions → APIs my organization uses → SharePoint → Delegated →
-// AllSites.Write) with admin consent granted — this is a one-time Entra portal step, not
-// something the app can request for itself.
-const SP_PERMISSION = "AllSites.Write";
 // Folder structure applied to every channel (including the default General channel).
 const TEAM_FOLDER_TREE = {
   "01_Workbench":    ["Drafts","Incoming","Working"],
@@ -1416,44 +1407,51 @@ async function waitForChannelFilesFolder(tok, teamId, channelId){
   }
   throw new Error("channel folder never became available");
 }
-// Microsoft Graph has no equivalent of SharePoint's "Stop Inheriting Permissions" action for
-// driveItems — it only exists on the classic SharePoint REST API (breakRoleInheritance), which
-// needs a SharePoint-audience token (not a graph.microsoft.com one). copyRoleAssignments=true
-// seeds the new unique permissions from whatever the folder currently inherits, so access isn't
-// dropped at the moment it becomes unique.
-// Request shape (headers, URL building) is intentionally identical to the earlier
-// resetRoleInheritance call that was proven to reach SharePoint successfully — only the
-// action name + args differ. Returns {ok, detail} — failures are logged AND surfaced in the
-// UI rather than silently swallowed.
-async function breakRoleInheritance(spToken, webUrl){
-  if(!spToken) return { ok:false, detail:"no SharePoint token" };
+// SharePoint's classic REST /_api/ (breakRoleInheritance) CANNOT be called from a browser SPA:
+// SharePoint doesn't return CORS headers to arbitrary origins, so the browser blocks the request
+// before it reaches the server. That's a hard browser boundary, not a header/syntax problem.
+//
+// Microsoft Graph IS CORS-enabled, and per Microsoft's docs assigning a permission to a folder
+// breaks inheritance on that folder automatically ("Assigning permissions to lists, list items,
+// folders, or files breaks inheritance on the assigned resource"). So we grant the folder an
+// explicit permission via Graph, which produces exactly the unique-permissions state we want.
+//
+// requireSignIn/sendInvitation are set so nobody actually receives an email — this is a
+// permission assignment, not a share.
+async function breakInheritanceViaGraph(tok, driveId, itemId, recipientUpn, path){
   try{
-    const u = new URL(webUrl);
-    const serverRelUrl = decodeURIComponent(u.pathname);
-    const literal = encodeURI(serverRelUrl).replace(/'/g,"''");
-    const api = `${u.origin}/_api/web/GetFolderByServerRelativeUrl('${literal}')/ListItemAllFields/breakroleinheritance(copyRoleAssignments=true, clearSubscopes=true)`;
-    const r = await fetch(api, { method:"POST", headers:{ Authorization:`Bearer ${spToken}`, Accept:"application/json;odata=nometadata" } });
+    const r = await fetch(`${GRAPH}/drives/${driveId}/items/${itemId}/invite`, {
+      method: "POST",
+      headers: { Authorization:`Bearer ${tok}`, "Content-Type":"application/json" },
+      body: JSON.stringify({
+        recipients: [{ email: recipientUpn }],
+        roles: ["write"],
+        requireSignIn: true,
+        sendInvitation: false,
+        retainInheritedPermissions: false   // <- this is what forces the folder to stop inheriting
+      })
+    });
     if(!r.ok){
       const body = await r.text().catch(()=> "");
-      console.error("breakRoleInheritance failed", r.status, api, body);
-      return { ok:false, detail:`${r.status} on ${serverRelUrl}: ${body.slice(0,200)}` };
+      console.error("breakInheritanceViaGraph failed", r.status, path, body);
+      return { ok:false, detail:`${r.status} on ${path}: ${body.slice(0,200)}` };
     }
     return { ok:true };
   }catch(e){
-    console.error("breakRoleInheritance threw", e, webUrl);
-    return { ok:false, detail:e.message||String(e) };
+    console.error("breakInheritanceViaGraph threw", e, path);
+    return { ok:false, detail:`${path}: ${e.message||String(e)}` };
   }
 }
-async function attachFolderStructure(tok, spToken, filesFolder, failures){
+async function attachFolderStructure(tok, recipientUpn, filesFolder, failures){
   const driveId = filesFolder.parentReference.driveId, rootId = filesFolder.id;
   // the channel's own root folder already gets unique permissions from Teams by default — leave it alone
   for(const [topName, children] of Object.entries(TEAM_FOLDER_TREE)){
     const topFolder = await graphCreateFolder(tok, driveId, rootId, topName);
-    const r1 = await breakRoleInheritance(spToken, topFolder.webUrl);
+    const r1 = await breakInheritanceViaGraph(tok, driveId, topFolder.id, recipientUpn, topName);
     if(!r1.ok) failures.push(r1.detail);
     for(const childName of children){
       const childFolder = await graphCreateFolder(tok, driveId, topFolder.id, childName);
-      const r2 = await breakRoleInheritance(spToken, childFolder.webUrl);
+      const r2 = await breakInheritanceViaGraph(tok, driveId, childFolder.id, recipientUpn, `${topName}/${childName}`);
       if(!r2.ok) failures.push(r2.detail);
     }
   }
@@ -1480,18 +1478,11 @@ async function createTeam(){
   try{ tok = await token(TEAM_SCOPES); }
   catch(e){ status.innerHTML = `<span style="color:var(--danger)">Couldn't get consent: ${escapeHtml(e.message||String(e))}</span>`; btn.disabled=false; return; }
 
-  // resolve the tenant's SharePoint hostname and request its scope now — before creating
-  // anything — so a consent redirect never happens mid-way through a partially built team
-  let spToken = null, spTokenError = null;
-  try{
-    const siteRes = await fetch(`${GRAPH}/sites/root`, { headers:{ Authorization:`Bearer ${tok}` } });
-    if(!siteRes.ok) throw new Error(`GET /sites/root → ${siteRes.status}`);
-    const origin = new URL((await siteRes.json()).webUrl).origin;
-    spToken = await token([`${origin}/${SP_PERMISSION}`]);
-  }catch(e){
-    spTokenError = e.message||String(e);
-    console.error("SharePoint token acquisition failed — check the app registration has the SharePoint 'AllSites.Write' delegated permission added AND admin-consented:", e);
-  }
+  // No SharePoint-audience token needed any more — breaking inheritance now goes through Graph
+  // (SharePoint's /_api/ can't be called from a browser SPA at all; it has no CORS support).
+  // The signed-in admin is used as the permission recipient, which is what forces each folder
+  // to stop inheriting.
+  const recipientUpn = account.username;
 
   try{
     status.innerHTML = `<span class="spin"></span> Creating team "${escapeHtml(name)}"…`;
@@ -1561,16 +1552,13 @@ async function createTeam(){
     for(let i=0;i<createdChannelIds.length;i++){
       status.innerHTML = `<span class="spin"></span> Building folder structure (${i+1}/${createdChannelIds.length} channels)…`;
       const filesFolder = await waitForChannelFilesFolder(tok, teamId, createdChannelIds[i]);
-      await attachFolderStructure(tok, spToken, filesFolder, permFailures);
+      await attachFolderStructure(tok, recipientUpn, filesFolder, permFailures);
     }
 
     const chList = channelNames.length ? channelNames.map(escapeHtml).join(", ") : "General";
-    let permNote = "";
-    if(spTokenError){
-      permNote = ` <div style="color:var(--warn);margin-top:6px">⚠ Folders left inheriting permissions — couldn't get a SharePoint token: <span class="mono">${escapeHtml(spTokenError)}</span>. Check the app registration has the SharePoint "${SP_PERMISSION}" delegated permission added <i>and admin-consented</i> (API permissions → Add a permission → APIs my organization uses → search "SharePoint" or "Office 365 SharePoint Online" → Delegated permissions → ${SP_PERMISSION}).</div>`;
-    } else if(permFailures.length){
-      permNote = ` <div style="color:var(--warn);margin-top:6px">⚠ ${permFailures.length} folder(s) kept inheriting permissions. First error: <span class="mono">${escapeHtml(permFailures[0])}</span> — full list in the browser console (F12).</div>`;
-    }
+    const permNote = permFailures.length
+      ? ` <div style="color:var(--warn);margin-top:6px">⚠ ${permFailures.length} folder(s) may still be inheriting permissions. First error: <span class="mono">${escapeHtml(permFailures[0])}</span> — full list in the browser console (F12).</div>`
+      : ` <div style="color:var(--muted);margin-top:6px">All folders were given unique permissions (inheritance broken).</div>`;
     status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>${permNote}`;
     el("teamName").value=""; el("teamDesc").value=""; el("teamChannelCount").value="1"; renderChannelFields();
     toast("Team created");
