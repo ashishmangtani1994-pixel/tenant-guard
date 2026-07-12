@@ -1204,6 +1204,15 @@ const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
 // Files.ReadWrite.All is needed to create the attached folder structure inside each channel.
 // Requested on demand (same pattern as DEVICE_DELETE_SCOPES) only when "Create team" is clicked.
 const TEAM_SCOPES = ["Group.ReadWrite.All","Files.ReadWrite.All"];
+// Removing unique permissions has no Graph endpoint — it only exists via classic SharePoint
+// REST (resetRoleInheritance), which needs a SharePoint-audience token: "https://{tenant}.
+// sharepoint.com/AllSites.Write" rather than graph.microsoft.com. The hostname is resolved at
+// runtime from /sites/root, then requested the same on-demand way as TEAM_SCOPES.
+// PREREQUISITE: the app registration needs the SharePoint "AllSites.Write" delegated API
+// permission added (API permissions → APIs my organization uses → SharePoint → Delegated →
+// AllSites.Write) with admin consent granted — this is a one-time Entra portal step, not
+// something the app can request for itself.
+const SP_PERMISSION = "AllSites.Write";
 // Folder structure applied to every channel (including the default General channel).
 const TEAM_FOLDER_TREE = {
   "01_Workbench":    ["Drafts","Incoming","Working"],
@@ -1406,12 +1415,31 @@ async function waitForChannelFilesFolder(tok, teamId, channelId){
   }
   throw new Error("channel folder never became available");
 }
-async function attachFolderStructure(tok, teamId, channelId){
-  const filesFolder = await waitForChannelFilesFolder(tok, teamId, channelId);
+// Microsoft Graph has no "delete unique permissions" / reset-inheritance action for driveItems —
+// it only exists on the classic SharePoint REST API (resetRoleInheritance), which needs a
+// SharePoint-audience token (not a graph.microsoft.com one). Silently no-ops if spToken is falsy
+// (i.e. AllSites.Write was never consented) so a missing permission doesn't abort team creation.
+async function resetRoleInheritance(spToken, webUrl){
+  if(!spToken) return false;
+  try{
+    const u = new URL(webUrl);
+    const serverRelUrl = decodeURIComponent(u.pathname);
+    const literal = encodeURI(serverRelUrl).replace(/'/g,"''");
+    const api = `${u.origin}/_api/web/GetFolderByServerRelativeUrl('${literal}')/ListItemAllFields/resetRoleInheritance`;
+    const r = await fetch(api, { method:"POST", headers:{ Authorization:`Bearer ${spToken}`, Accept:"application/json;odata=nometadata" } });
+    return r.ok;
+  }catch(e){ return false; }
+}
+async function attachFolderStructure(tok, spToken, filesFolder){
   const driveId = filesFolder.parentReference.driveId, rootId = filesFolder.id;
+  await resetRoleInheritance(spToken, filesFolder.webUrl); // the channel's own root folder
   for(const [topName, children] of Object.entries(TEAM_FOLDER_TREE)){
     const topFolder = await graphCreateFolder(tok, driveId, rootId, topName);
-    for(const childName of children) await graphCreateFolder(tok, driveId, topFolder.id, childName);
+    await resetRoleInheritance(spToken, topFolder.webUrl);
+    for(const childName of children){
+      const childFolder = await graphCreateFolder(tok, driveId, topFolder.id, childName);
+      await resetRoleInheritance(spToken, childFolder.webUrl);
+    }
   }
 }
 
@@ -1435,6 +1463,17 @@ async function createTeam(){
   let tok;
   try{ tok = await token(TEAM_SCOPES); }
   catch(e){ status.innerHTML = `<span style="color:var(--danger)">Couldn't get consent: ${escapeHtml(e.message||String(e))}</span>`; btn.disabled=false; return; }
+
+  // resolve the tenant's SharePoint hostname and request its scope now — before creating
+  // anything — so a consent redirect never happens mid-way through a partially built team
+  let spToken = null;
+  try{
+    const siteRes = await fetch(`${GRAPH}/sites/root`, { headers:{ Authorization:`Bearer ${tok}` } });
+    if(siteRes.ok){
+      const origin = new URL((await siteRes.json()).webUrl).origin;
+      spToken = await token([`${origin}/${SP_PERMISSION}`]);
+    }
+  }catch(e){ spToken = null; } // AllSites.Write not consented — folders will still be created, just left with unique permissions
 
   try{
     status.innerHTML = `<span class="spin"></span> Creating team "${escapeHtml(name)}"…`;
@@ -1498,14 +1537,21 @@ async function createTeam(){
       createdChannelIds.push(ch.id);
     }
 
-    // attach the standard folder structure to every channel, General included
+    // attach the standard folder structure to every channel, General included — and remove
+    // the unique permissions Teams applies to each channel folder by default
+    let permResetSkipped = 0;
     for(let i=0;i<createdChannelIds.length;i++){
       status.innerHTML = `<span class="spin"></span> Building folder structure (${i+1}/${createdChannelIds.length} channels)…`;
-      await attachFolderStructure(tok, teamId, createdChannelIds[i]);
+      const filesFolder = await waitForChannelFilesFolder(tok, teamId, createdChannelIds[i]);
+      await attachFolderStructure(tok, spToken, filesFolder);
+      if(!spToken) permResetSkipped++;
     }
 
     const chList = channelNames.length ? channelNames.map(escapeHtml).join(", ") : "General";
-    status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>`;
+    const permNote = permResetSkipped
+      ? ` <span style="color:var(--warn)">(unique permissions left in place — SharePoint "${SP_PERMISSION}" wasn't consented)</span>`
+      : "";
+    status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>${permNote}`;
     el("teamName").value=""; el("teamDesc").value=""; el("teamChannelCount").value="1"; renderChannelFields();
     toast("Team created");
   }catch(e){
