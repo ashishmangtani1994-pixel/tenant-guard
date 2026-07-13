@@ -1557,17 +1557,24 @@ async function inviteAndAddAsGuestMember(email, rowEl){
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 let memberSearchTimer = null;
+let memberSearchSeq = 0; // guards against an earlier, slower request overwriting a later one's result
 el("teamMemberSearch").oninput = (e)=>{
   clearTimeout(memberSearchTimer);
   const q = e.target.value.trim();
   const results = el("teamMemberResults");
   if(q.length < 2){ results.classList.add("hide"); results.innerHTML=""; return; }
   memberSearchTimer = setTimeout(async ()=>{
+    const mySeq = ++memberSearchSeq;
     results.classList.remove("hide");
     results.innerHTML = `<div style="padding:8px 12px;color:var(--muted);font-size:12.5px"><span class="spin"></span> Searching…</div>`;
     let people;
     try{ people = await searchDirectoryUsers(q); }
-    catch(err){ results.innerHTML = `<div style="padding:8px 12px;color:var(--danger);font-size:12.5px">${escapeHtml(err.message||String(err))}</div>`; return; }
+    catch(err){
+      if(mySeq !== memberSearchSeq) return; // a newer keystroke has since started a fresher search — drop this stale result
+      results.innerHTML = `<div style="padding:8px 12px;color:var(--danger);font-size:12.5px">${escapeHtml(err.message||String(err))}</div>`;
+      return;
+    }
+    if(mySeq !== memberSearchSeq) return; // stale — a newer search superseded this one while it was in flight
     people = people.filter(p => !selectedTeamMembers.some(m=>m.id===p.id));
 
     // offer an inline "invite as guest" row when what's typed looks like an email that isn't
