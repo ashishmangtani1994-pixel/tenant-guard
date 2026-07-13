@@ -1036,7 +1036,7 @@
       <!-- ==== TEAMS — create a Team + initial channel ==== -->
       <div class="card hide" id="teamsPanel" style="max-width:560px;margin:0 0 20px">
         <h3 style="margin:0 0 4px;font-family:'Space Grotesk';font-size:16px">Create a Team</h3>
-        <p style="margin:0 0 18px;color:var(--muted);font-size:13px">Provisions a Microsoft 365 group + Team via Graph, then adds your channel to it.</p>
+        <p style="margin:0 0 18px;color:var(--muted);font-size:13px">Provisions a Microsoft 365 group + Team via Graph, plus a shared "Resource Hub" library pinned as a tab in every channel.</p>
         <div style="display:flex;flex-direction:column;gap:14px">
           <div class="field">
             <label>Team name</label>
@@ -1210,19 +1210,24 @@ const SEND_SHARED_SCOPES = ["Mail.Send","Mail.Send.Shared"];
 // requested at the moment a device delete is attempted, not at every sign-in.
 const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
 // Group.ReadWrite.All is needed to create a Microsoft 365 group/Team and its channels.
-// Files.ReadWrite.All is needed to create the folder structure AND to assign each folder its own
-// permission (which is what breaks inheritance — see breakInheritanceViaGraph below).
+// Files.ReadWrite.All is needed to create folders AND to assign each one its own permission
+// (which is what breaks inheritance — see breakInheritanceViaGraph below).
 // User.ReadBasic.All powers the member-search typeahead against the directory.
 // TeamMember.ReadWrite.All is needed to actually add the picked people to the team.
+// Sites.Manage.All is needed to create the "Resource Hub" document library at the site level
+// (Files.ReadWrite.All only covers items inside libraries that already exist).
+// TeamsTab.Create is needed to pin the library as a tab in each channel.
 // Requested on demand (same pattern as DEVICE_DELETE_SCOPES) only when the Teams tab is used.
-const TEAM_SCOPES = ["Group.ReadWrite.All","Files.ReadWrite.All","User.ReadBasic.All","TeamMember.ReadWrite.All"];
-// Folder structure applied to every channel (including the default General channel).
-const TEAM_FOLDER_TREE = {
-  "01_Workbench":    ["Drafts","Incoming","Working"],
-  "02_KnowledgeBase":["Policies","Procedures","Templates","Reference","Archive"],
-  "03_Vault":        ["Confidential","Legal","Restricted"]
+const TEAM_SCOPES = ["Group.ReadWrite.All","Files.ReadWrite.All","User.ReadBasic.All","TeamMember.ReadWrite.All","Sites.Manage.All","TeamsTab.Create"];
+// One shared library ("Resource Hub") created once at the team's SharePoint site, not per channel.
+// Only the three top-level folders get unique permissions; their children just inherit from them.
+const RESOURCE_HUB_TREE = {
+  "Knowledge Base": ["Policies","Procedures","Templates","Reference","Archive"],
+  "Vault":          ["Confidential","Legal","Restricted"],
+  "Workbench":      ["Drafts","Incoming","Working"]
 };
 const ALL_SCOPES   = [...READ_SCOPES, ...WRITE_SCOPES];
+
 
 // redirect URI = this page, no query/hash. Register this exact value as a SPA platform.
 const REDIRECT = location.origin + location.pathname;
@@ -1469,15 +1474,6 @@ async function graphCreateFolder(tok, driveId, parentItemId, name){
   if(!r.ok) throw new Error(`Folder "${name}" failed (${r.status})`);
   return r.json();
 }
-// a channel's SharePoint folder isn't always ready the instant the channel is created — poll it
-async function waitForChannelFilesFolder(tok, teamId, channelId){
-  for(let i=0;i<15;i++){
-    const r = await fetch(`${GRAPH}/teams/${teamId}/channels/${channelId}/filesFolder`, { headers:{ Authorization:`Bearer ${tok}` } });
-    if(r.ok) return r.json();
-    await new Promise(res=>setTimeout(res,2000));
-  }
-  throw new Error("channel folder never became available");
-}
 // SharePoint's classic REST /_api/ (breakRoleInheritance) CANNOT be called from a browser SPA:
 // SharePoint doesn't return CORS headers to arbitrary origins, so the browser blocks the request
 // before it reaches the server. That's a hard browser boundary, not a header/syntax problem.
@@ -1513,23 +1509,71 @@ async function breakInheritanceViaGraph(tok, driveId, itemId, recipientUpn, path
     return { ok:false, detail:`${path}: ${e.message||String(e)}` };
   }
 }
-async function attachFolderStructure(tok, recipientUpn, filesFolder, failures){
-  const driveId = filesFolder.parentReference.driveId, rootId = filesFolder.id;
-  // the channel's own root folder already gets unique permissions from Teams by default — leave it alone
-  for(const [topName, children] of Object.entries(TEAM_FOLDER_TREE)){
-    const topFolder = await graphCreateFolder(tok, driveId, rootId, topName);
-    const r1 = await breakInheritanceViaGraph(tok, driveId, topFolder.id, recipientUpn, topName);
+
+/* Resource Hub: ONE document library created once at the team's SharePoint site — not per
+   channel. Team ID and the underlying Microsoft 365 group ID are the same value, so the site
+   is reached via /groups/{teamId}/sites/root. Only the three top-level folders get unique
+   permissions; their children inherit from them normally. Returns the library's root webUrl,
+   which becomes the contentUrl for the tab pinned in each channel. */
+async function createResourceHub(tok, teamId, recipientUpn, failures){
+  const siteRes = await fetch(`${GRAPH}/groups/${teamId}/sites/root`, { headers:{ Authorization:`Bearer ${tok}` } });
+  if(!siteRes.ok) throw new Error(`Couldn't resolve the team's SharePoint site (${siteRes.status})`);
+  const site = await siteRes.json();
+
+  const listRes = await fetch(`${GRAPH}/sites/${site.id}/lists`, {
+    method: "POST",
+    headers: { Authorization:`Bearer ${tok}`, "Content-Type":"application/json" },
+    body: JSON.stringify({ displayName: "Resource Hub", list: { template: "documentLibrary" } })
+  });
+  if(!listRes.ok) throw new Error(`Couldn't create the "Resource Hub" library (${listRes.status})`);
+  const list = await listRes.json();
+
+  const driveRes = await fetch(`${GRAPH}/sites/${site.id}/lists/${list.id}/drive`, { headers:{ Authorization:`Bearer ${tok}` } });
+  if(!driveRes.ok) throw new Error(`Couldn't resolve the library's drive (${driveRes.status})`);
+  const drive = await driveRes.json();
+
+  const rootRes = await fetch(`${GRAPH}/drives/${drive.id}/root`, { headers:{ Authorization:`Bearer ${tok}` } });
+  if(!rootRes.ok) throw new Error(`Couldn't resolve the library's root folder (${rootRes.status})`);
+  const root = await rootRes.json();
+
+  for(const [topName, children] of Object.entries(RESOURCE_HUB_TREE)){
+    const topFolder = await graphCreateFolder(tok, drive.id, root.id, topName);
+    const r1 = await breakInheritanceViaGraph(tok, drive.id, topFolder.id, recipientUpn, topName);
     if(!r1.ok) failures.push(r1.detail);
-    for(const childName of children){
-      const childFolder = await graphCreateFolder(tok, driveId, topFolder.id, childName);
-      const r2 = await breakInheritanceViaGraph(tok, driveId, childFolder.id, recipientUpn, `${topName}/${childName}`);
-      if(!r2.ok) failures.push(r2.detail);
+    for(const childName of children) await graphCreateFolder(tok, drive.id, topFolder.id, childName);
+  }
+  return root.webUrl;
+}
+
+// Pins the Resource Hub library as a "Document Library" tab in a channel — this is the built-in
+// SharePoint tab type (teamsAppId com.microsoft.teamspace.tab.files.sharepoint per Microsoft's
+// docs), pointed at the library's root folder URL.
+async function addResourceHubTab(tok, teamId, channelId, hubWebUrl){
+  try{
+    const r = await fetch(`${GRAPH}/teams/${teamId}/channels/${channelId}/tabs`, {
+      method: "POST",
+      headers: { Authorization:`Bearer ${tok}`, "Content-Type":"application/json" },
+      body: JSON.stringify({
+        displayName: "Resource Hub",
+        "teamsApp@odata.bind": "https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/com.microsoft.teamspace.tab.files.sharepoint",
+        configuration: { entityId:"", contentUrl: hubWebUrl, removeUrl:null, websiteUrl:null }
+      })
+    });
+    if(!r.ok){
+      const body = await r.text().catch(()=> "");
+      console.error("addResourceHubTab failed", r.status, channelId, body);
+      return { ok:false, detail:`${r.status}: ${body.slice(0,200)}` };
     }
+    return { ok:true };
+  }catch(e){
+    console.error("addResourceHubTab threw", e, channelId);
+    return { ok:false, detail:e.message||String(e) };
   }
 }
 
-/* Teams: create a Microsoft 365 group + Team, then the requested channels, then the
-   folder structure inside each one (including the unavoidable default "General" channel).
+/* Teams: create a Microsoft 365 group + Team, then the requested channels, then one shared
+   "Resource Hub" library at the site pinned as a tab in every channel (including the
+   unavoidable default "General" channel).
    Team creation is async on Graph's side (returns 202 + Location header pointing at an
    operation); poll that until it resolves before creating channels. */
 async function createTeam(){
@@ -1617,13 +1661,16 @@ async function createTeam(){
       createdChannelIds.push(ch.id);
     }
 
-    // attach the standard folder structure to every channel, General included — and give each
-    // created folder its own unique permissions (Stop Inheriting Permissions)
+    // create the shared "Resource Hub" library once at the site, then pin it as a tab in every channel
     const permFailures = [];
+    status.innerHTML = `<span class="spin"></span> Creating "Resource Hub" library…`;
+    const hubWebUrl = await createResourceHub(tok, teamId, recipientUpn, permFailures);
+
+    const tabFailures = [];
     for(let i=0;i<createdChannelIds.length;i++){
-      status.innerHTML = `<span class="spin"></span> Building folder structure (${i+1}/${createdChannelIds.length} channels)…`;
-      const filesFolder = await waitForChannelFilesFolder(tok, teamId, createdChannelIds[i]);
-      await attachFolderStructure(tok, recipientUpn, filesFolder, permFailures);
+      status.innerHTML = `<span class="spin"></span> Pinning Resource Hub tab (${i+1}/${createdChannelIds.length} channels)…`;
+      const rt = await addResourceHubTab(tok, teamId, createdChannelIds[i], hubWebUrl);
+      if(!rt.ok) tabFailures.push(rt.detail);
     }
 
     // add the people picked from the directory
@@ -1654,13 +1701,16 @@ async function createTeam(){
 
     const chList = channelNames.length ? channelNames.map(escapeHtml).join(", ") : "General";
     const permNote = permFailures.length
-      ? ` <div style="color:var(--warn);margin-top:6px">⚠ ${permFailures.length} folder(s) may still be inheriting permissions. First error: <span class="mono">${escapeHtml(permFailures[0])}</span> — full list in the browser console (F12).</div>`
-      : ` <div style="color:var(--muted);margin-top:6px">All folders were given unique permissions (inheritance broken).</div>`;
+      ? ` <div style="color:var(--warn);margin-top:6px">⚠ ${permFailures.length} Resource Hub folder(s) may still be inheriting permissions. First error: <span class="mono">${escapeHtml(permFailures[0])}</span> — full list in the browser console (F12).</div>`
+      : ` <div style="color:var(--muted);margin-top:6px">Resource Hub folders (Knowledge Base, Vault, Workbench) were given unique permissions.</div>`;
+    const tabNote = tabFailures.length
+      ? ` <div style="color:var(--warn);margin-top:6px">⚠ Resource Hub tab failed to pin on ${tabFailures.length} channel(s). First error: <span class="mono">${escapeHtml(tabFailures[0])}</span> — full list in the browser console (F12).</div>`
+      : "";
     const memberList = selectedTeamMembers.map(m=>escapeHtml(m.displayName)).join(", ");
     const memberNote = selectedTeamMembers.length
       ? ` <div style="color:var(--muted);margin-top:6px">Members: ${memberList}.${memberFailures.length ? ` ⚠ ${memberFailures.length} failed: ${escapeHtml(memberFailures.join("; "))}` : ""}</div>`
       : "";
-    status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — each with its folder structure.</span>${permNote}${memberNote}`;
+    status.innerHTML = `<span style="color:var(--ok)">✓ Team "${escapeHtml(name)}" created with channels: ${chList} — Resource Hub library created and pinned as a tab in each.</span>${permNote}${tabNote}${memberNote}`;
     el("teamName").value=""; el("teamDesc").value=""; el("teamChannelCount").value="1"; renderChannelFields();
     selectedTeamMembers = []; renderMemberChips();
     toast("Team created");
