@@ -1855,6 +1855,32 @@ async function loadUserFormData(){
       el("userDomain").innerHTML = `<option value="">Failed to load (${escapeHtml(e.message||String(e))})</option>`;
     }
   }
+// Graph's subscribedSkus only returns the raw skuPartNumber (e.g. "SPB"), not the friendly
+// name shown in the admin center ("Microsoft 365 Business Premium") — map the common ones so
+// two different products don't look like garbled variants of the same string.
+const SKU_FRIENDLY_NAMES = {
+  "SPB": "Microsoft 365 Business Premium",
+  "BUSINESS_PREMIUM_AND_MICROSOFT_365_COPILOT_FOR_BUSINESS": "Microsoft 365 Business Premium with Copilot",
+  "O365_BUSINESS_ESSENTIALS": "Microsoft 365 Business Basic",
+  "O365_BUSINESS_PREMIUM": "Microsoft 365 Apps for Business",
+  "SPE_E3": "Microsoft 365 E3",
+  "SPE_E5": "Microsoft 365 E5",
+  "ENTERPRISEPACK": "Office 365 E3",
+  "ENTERPRISEPREMIUM": "Office 365 E5",
+  "EXCHANGESTANDARD": "Exchange Online (Plan 1)",
+  "EXCHANGEENTERPRISE": "Exchange Online (Plan 2)",
+  "FLOW_FREE": "Microsoft Power Automate Free",
+  "POWER_BI_STANDARD": "Power BI (free)",
+  "TEAMS_EXPLORATORY": "Teams Exploratory",
+  "STREAM": "Microsoft Stream",
+  "AAD_PREMIUM": "Microsoft Entra ID P1",
+  "AAD_PREMIUM_P2": "Microsoft Entra ID P2",
+  "EMS": "Enterprise Mobility + Security E3",
+  "EMSPREMIUM": "Enterprise Mobility + Security E5"
+};
+function friendlySkuName(skuPartNumber){
+  return SKU_FRIENDLY_NAMES[skuPartNumber] || skuPartNumber.replace(/_/g," ");
+}
   if(!userLicensesLoaded){
     try{
       const r = await fetch(`${GRAPH}/subscribedSkus`, { headers:{ Authorization:`Bearer ${tok}` } });
@@ -1865,10 +1891,10 @@ async function loadUserFormData(){
       else{
         wrap.innerHTML = skus.map(s=>{
           const avail = (s.prepaidUnits?.enabled||0) - (s.consumedUnits||0);
-          const disabled = avail<=0;
-          return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;${disabled?"opacity:.45":""}">
-            <input type="checkbox" class="userLicenseChk" value="${escapeHtml(s.skuId)}" ${disabled?"disabled":""} style="width:auto" />
-            ${escapeHtml(s.skuPartNumber)} <span style="color:var(--muted);font-size:11.5px">(${avail} available)</span>
+          const low = avail<=0;
+          return `<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px">
+            <input type="checkbox" class="userLicenseChk" value="${escapeHtml(s.skuId)}" style="width:auto;flex:0 0 auto;margin-top:2px" />
+            <span style="overflow-wrap:anywhere">${escapeHtml(friendlySkuName(s.skuPartNumber))} <span style="font-size:11.5px;color:${low?"var(--warn)":"var(--muted)"}">(${avail} available)</span></span>
           </label>`;
         }).join("");
       }
