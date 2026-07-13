@@ -1727,7 +1727,7 @@ async function createResourceHub(tok, teamId, recipientUpn, failures, status){
     // baseline: break inheritance down to just the admin who ran this — everyone else denied by default
     const r1 = await grantFolderAccess(tok, drive.id, topFolder.id, { email: recipientUpn }, "write", true, topName);
     if(!r1.ok) failures.push(r1.detail);
-    // layer group-based access on top, per RESOURCE_HUB_ACCESS — Marketing Freelancer stays absent everywhere
+    // layer group-based access on top, per RESOURCE_HUB_ACCESS
     for(const grant of RESOURCE_HUB_ACCESS[topName] || []){
       const groupId = PERMISSION_GROUPS[grant.group];
       const r2 = await grantFolderAccess(tok, drive.id, topFolder.id, { objectId: groupId }, grant.role, false, `${topName} → ${grant.group}`);
@@ -1735,6 +1735,22 @@ async function createResourceHub(tok, teamId, recipientUpn, failures, status){
     }
     for(const childName of children) await graphCreateFolder(tok, drive.id, topFolder.id, childName);
   }
+
+  // Lock down the library ROOT itself too — otherwise it keeps the library's default team-wide
+  // Edit permission, so anyone (including a guest in none of the three groups) can still open
+  // Resource Hub and freely upload/create at the root level, even with the subfolders locked down.
+  const rRoot = await grantFolderAccess(tok, drive.id, root.id, { email: recipientUpn }, "write", true, "Resource Hub (root)");
+  if(!rRoot.ok) failures.push(rRoot.detail);
+  for(const grant of [
+    { group:"marketingFreelancer",  role:"read"  },
+    { group:"accountingFreelancer", role:"read"  },
+    { group:"operationsManager",    role:"write" }
+  ]){
+    const groupId = PERMISSION_GROUPS[grant.group];
+    const rg = await grantFolderAccess(tok, drive.id, root.id, { objectId: groupId }, grant.role, false, `Resource Hub (root) → ${grant.group}`);
+    if(!rg.ok) failures.push(rg.detail);
+  }
+
   return root.webUrl;
 }
 
