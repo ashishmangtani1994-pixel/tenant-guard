@@ -1304,7 +1304,7 @@ const SEND_SHARED_SCOPES = ["Mail.Send","Mail.Send.Shared"];
 const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
 // Group.ReadWrite.All is needed to create a Microsoft 365 group/Team and its channels.
 // Files.ReadWrite.All is needed to create folders AND to assign each one its own permission
-// (which is what breaks inheritance — see breakInheritanceViaGraph below).
+// (which is what breaks inheritance — see grantFolderAccess below).
 // User.ReadBasic.All powers the member-search typeahead against the directory.
 // TeamMember.ReadWrite.All is needed to actually add the picked people to the team.
 // Sites.Manage.All is needed to create the "Resource Hub" document library at the site level
@@ -1634,32 +1634,51 @@ async function graphCreateFolder(tok, driveId, parentItemId, name){
 // folders, or files breaks inheritance on the assigned resource"). So we grant the folder an
 // explicit permission via Graph, which produces exactly the unique-permissions state we want.
 //
+// recipient is either { email } (works for users) or { objectId } (required for security groups
+// with no mailbox — Marketing/Accounting/Operations below are plain security groups, no email).
 // requireSignIn/sendInvitation are set so nobody actually receives an email — this is a
-// permission assignment, not a share.
-async function breakInheritanceViaGraph(tok, driveId, itemId, recipientUpn, path){
+// permission assignment, not a share. breakInheritance=true on the FIRST grant for an item wipes
+// whatever it would have inherited, so only recipients explicitly granted afterward can see it —
+// that's what makes "no group listed = access denied" the default for everyone else.
+async function grantFolderAccess(tok, driveId, itemId, recipient, role, breakInheritance, path){
   try{
+    const body = {
+      recipients: [recipient],
+      roles: [role],
+      requireSignIn: true,
+      sendInvitation: false
+    };
+    if(breakInheritance) body.retainInheritedPermissions = false;
     const r = await fetch(`${GRAPH}/drives/${driveId}/items/${itemId}/invite`, {
       method: "POST",
       headers: { Authorization:`Bearer ${tok}`, "Content-Type":"application/json" },
-      body: JSON.stringify({
-        recipients: [{ email: recipientUpn }],
-        roles: ["write"],
-        requireSignIn: true,
-        sendInvitation: false,
-        retainInheritedPermissions: false   // <- this is what forces the folder to stop inheriting
-      })
+      body: JSON.stringify(body)
     });
     if(!r.ok){
-      const body = await r.text().catch(()=> "");
-      console.error("breakInheritanceViaGraph failed", r.status, path, body);
-      return { ok:false, detail:`${r.status} on ${path}: ${body.slice(0,200)}` };
+      const body2 = await r.text().catch(()=> "");
+      console.error("grantFolderAccess failed", r.status, path, body2);
+      return { ok:false, detail:`${r.status} on ${path}: ${body2.slice(0,200)}` };
     }
     return { ok:true };
   }catch(e){
-    console.error("breakInheritanceViaGraph threw", e, path);
+    console.error("grantFolderAccess threw", e, path);
     return { ok:false, detail:`${path}: ${e.message||String(e)}` };
   }
 }
+
+// Cafeteria99-tenant security group object IDs (Entra ID → Groups). Not mail-enabled, so they're
+// granted by objectId rather than email.
+const PERMISSION_GROUPS = {
+  marketingFreelancer:  "63e55843-90dd-4c41-b620-f51ccc515b3b", // Marketing Freelancer
+  accountingFreelancer: "7fa0cd76-97ad-4b15-9eed-89051e370fde", // Accounting Freelancer
+  operationsManager:    "6f2ca481-2eee-43a4-8365-4141241b67fe"  // Operations Manager
+};
+// Per-folder access on top of the admin-only baseline.
+const RESOURCE_HUB_ACCESS = {
+  "Knowledge Base": [ { group:"marketingFreelancer",  role:"read"  }, { group:"accountingFreelancer", role:"read" }, { group:"operationsManager", role:"write" } ],
+  "Vault":          [ { group:"marketingFreelancer",  role:"read"  },                                                { group:"operationsManager", role:"write" } ],
+  "Workbench":      [ { group:"marketingFreelancer",  role:"read"  }, { group:"accountingFreelancer", role:"read" }, { group:"operationsManager", role:"write" } ]
+};
 
 /* Resource Hub: ONE document library created once at the team's SharePoint site — not per
    channel. Team ID and the underlying Microsoft 365 group ID are the same value, so the site
@@ -1705,8 +1724,15 @@ async function createResourceHub(tok, teamId, recipientUpn, failures, status){
 
   for(const [topName, children] of Object.entries(RESOURCE_HUB_TREE)){
     const topFolder = await graphCreateFolder(tok, drive.id, root.id, topName);
-    const r1 = await breakInheritanceViaGraph(tok, drive.id, topFolder.id, recipientUpn, topName);
+    // baseline: break inheritance down to just the admin who ran this — everyone else denied by default
+    const r1 = await grantFolderAccess(tok, drive.id, topFolder.id, { email: recipientUpn }, "write", true, topName);
     if(!r1.ok) failures.push(r1.detail);
+    // layer group-based access on top, per RESOURCE_HUB_ACCESS — Marketing Freelancer stays absent everywhere
+    for(const grant of RESOURCE_HUB_ACCESS[topName] || []){
+      const groupId = PERMISSION_GROUPS[grant.group];
+      const r2 = await grantFolderAccess(tok, drive.id, topFolder.id, { objectId: groupId }, grant.role, false, `${topName} → ${grant.group}`);
+      if(!r2.ok) failures.push(r2.detail);
+    }
     for(const childName of children) await graphCreateFolder(tok, drive.id, topFolder.id, childName);
   }
   return root.webUrl;
