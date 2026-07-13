@@ -1665,11 +1665,27 @@ async function breakInheritanceViaGraph(tok, driveId, itemId, recipientUpn, path
    channel. Team ID and the underlying Microsoft 365 group ID are the same value, so the site
    is reached via /groups/{teamId}/sites/root. Only the three top-level folders get unique
    permissions; their children inherit from them normally. Returns the library's root webUrl,
-   which becomes the contentUrl for the tab pinned in each channel. */
-async function createResourceHub(tok, teamId, recipientUpn, failures){
-  const siteRes = await fetch(`${GRAPH}/groups/${teamId}/sites/root`, { headers:{ Authorization:`Bearer ${tok}` } });
-  if(!siteRes.ok) throw new Error(`Couldn't resolve the team's SharePoint site (${siteRes.status})`);
-  const site = await siteRes.json();
+   which becomes the contentUrl for the tab added in each channel. */
+
+// The group's SharePoint site is provisioned asynchronously and lags behind team creation by
+// anywhere from a few seconds to ~a minute — calling /sites/root too early returns 404, which
+// is what "Couldn't resolve the team's SharePoint site (404)" was. Poll rather than fail fast.
+async function waitForGroupSite(tok, teamId, status){
+  let lastStatus = 0;
+  for(let i=0;i<30;i++){
+    const r = await fetch(`${GRAPH}/groups/${teamId}/sites/root`, { headers:{ Authorization:`Bearer ${tok}` } });
+    if(r.ok) return r.json();
+    lastStatus = r.status;
+    if(r.status !== 404) break; // a non-404 (403, 401…) won't fix itself by waiting
+    if(status) status.innerHTML = `<span class="spin"></span> Waiting for the team's SharePoint site to provision (${i+1}/30)…`;
+    await new Promise(res=>setTimeout(res,4000));
+  }
+  throw new Error(`Couldn't resolve the team's SharePoint site (${lastStatus}) — it may still be provisioning; try again in a minute.`);
+}
+
+async function createResourceHub(tok, teamId, recipientUpn, failures, status){
+  const site = await waitForGroupSite(tok, teamId, status);
+  if(status) status.innerHTML = `<span class="spin"></span> Creating "Resource Hub" library…`;
 
   const listRes = await fetch(`${GRAPH}/sites/${site.id}/lists`, {
     method: "POST",
@@ -1816,8 +1832,7 @@ async function createTeam(){
     // create the shared "Resource Hub" library once at the site, then add it as a document-library
     // tab in every channel (same as the Teams UI's "Add Document Library" → "Pasted Link" flow)
     const permFailures = [];
-    status.innerHTML = `<span class="spin"></span> Creating "Resource Hub" library…`;
-    const hubWebUrl = await createResourceHub(tok, teamId, recipientUpn, permFailures);
+    const hubWebUrl = await createResourceHub(tok, teamId, recipientUpn, permFailures, status);
 
     const tabFailures = [];
     for(let i=0;i<createdChannelIds.length;i++){
