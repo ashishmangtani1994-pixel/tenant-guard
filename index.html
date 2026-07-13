@@ -623,6 +623,14 @@
   <div class="workspace">
     <!-- ==== LEFT NAV — collapsible sections ==== -->
     <aside class="sidenav" id="sidenav">
+      <div class="navgroup" data-group="m365mgmt">
+        <button class="navhead" data-grouphead="m365mgmt"><span class="caret">▾</span> M365 Management</button>
+        <div class="navitems">
+          <button class="tab" data-tab="users">Users</button>
+          <button class="tab" data-tab="guests">Guests</button>
+          <button class="tab" data-tab="teams">Teams <span class="cnt" id="cntTeams">—</span></button>
+        </div>
+      </div>
       <div class="navgroup" data-group="posture">
         <button class="navhead" data-grouphead="posture"><span class="caret">▾</span> Posture</button>
         <div class="navitems">
@@ -682,12 +690,7 @@
         </div>
       </div>
 
-      <div class="navgroup" data-group="collab">
-        <button class="navhead"><span>Collaboration</span><span class="caret">▾</span></button>
-        <div class="navitems">
-          <button class="tab" data-tab="teams">Teams <span class="cnt" id="cntTeams">—</span></button>
-        </div>
-      </div>
+
     </aside>
 
     <!-- ==== CONTENT ==== -->
@@ -1033,6 +1036,96 @@
         <button class="btn danger" id="btnDelete" disabled>Delete selected</button>
       </div>
 
+      <!-- ==== USERS — create a user + assign licenses ==== -->
+      <div class="card hide" id="usersPanel" style="max-width:560px;margin:0 0 20px">
+        <h3 style="margin:0 0 4px;font-family:'Space Grotesk';font-size:16px">Create a user</h3>
+        <p style="margin:0 0 18px;color:var(--muted);font-size:13px">Creates the account via Graph, then assigns whichever licenses you pick below (subject to available seats).</p>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="field">
+            <label>Display name</label>
+            <input type="text" id="userDisplayName" placeholder="e.g. Priya Sharma" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Username</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="text" id="userMailNick" placeholder="priya.sharma" autocomplete="off" style="flex:1" />
+              <span style="color:var(--muted)">@</span>
+              <select id="userDomain" style="flex:1"><option value="">Loading domains…</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Usage location <span style="text-transform:none;color:var(--faint)">(required to assign licenses)</span></label>
+            <select id="userUsageLocation">
+              <option value="US">United States</option>
+              <option value="IN">India</option>
+              <option value="GB">United Kingdom</option>
+              <option value="CA">Canada</option>
+              <option value="AU">Australia</option>
+              <option value="DE">Germany</option>
+              <option value="FR">France</option>
+              <option value="AE">United Arab Emirates</option>
+              <option value="SG">Singapore</option>
+              <option value="BH">Bahrain</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Temporary password</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="userTempPassword" placeholder="Click generate →" autocomplete="off" style="flex:1" />
+              <button type="button" class="btn" id="btnGenPassword">Generate</button>
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <input type="checkbox" id="userForceChangePw" checked style="width:auto" />
+            Require password change at next sign-in
+          </label>
+          <div class="field">
+            <label>Licenses</label>
+            <div id="userLicenseList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:10px">
+              <span style="color:var(--muted);font-size:12.5px">Loading available licenses…</span>
+            </div>
+          </div>
+        </div>
+        <div class="foot" style="margin-top:20px;padding-top:0;border:none">
+          <span style="flex:1"></span>
+          <button class="btn primary" id="btnCreateUser">Create user</button>
+        </div>
+        <div id="userStatus" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
+      </div>
+
+      <!-- ==== GUESTS — invite an external user ==== -->
+      <div class="card hide" id="guestsPanel" style="max-width:560px;margin:0 0 20px">
+        <h3 style="margin:0 0 4px;font-family:'Space Grotesk';font-size:16px">Invite a guest</h3>
+        <p style="margin:0 0 18px;color:var(--muted);font-size:13px">Sends a B2B guest invitation via Graph — they'll get an email to accept and sign in.</p>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="field">
+            <label>Email address</label>
+            <input type="email" id="guestEmail" placeholder="name@externaldomain.com" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Display name <span style="text-transform:none;color:var(--faint)">(optional)</span></label>
+            <input type="text" id="guestDisplayName" placeholder="e.g. Alex Rivera" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Personal message <span style="text-transform:none;color:var(--faint)">(optional)</span></label>
+            <textarea id="guestMessage" rows="3" placeholder="Add a note to include in the invite email…" style="resize:vertical"></textarea>
+          </div>
+          <div class="field">
+            <label>Redirect URL after they accept</label>
+            <input type="text" id="guestRedirectUrl" value="https://myapps.microsoft.com/" autocomplete="off" />
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <input type="checkbox" id="guestSendInvite" checked style="width:auto" />
+            Send the invitation email
+          </label>
+        </div>
+        <div class="foot" style="margin-top:20px;padding-top:0;border:none">
+          <span style="flex:1"></span>
+          <button class="btn primary" id="btnInviteGuest">Send invite</button>
+        </div>
+        <div id="guestStatus" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
+      </div>
+
       <!-- ==== TEAMS — create a Team + initial channel ==== -->
       <div class="card hide" id="teamsPanel" style="max-width:560px;margin:0 0 20px">
         <h3 style="margin:0 0 4px;font-family:'Space Grotesk';font-size:16px">Create a Team</h3>
@@ -1219,6 +1312,13 @@ const DEVICE_DELETE_SCOPES = ["Directory.AccessAsUser.All"];
 // TeamsTab.Create is needed to pin the library as a tab in each channel.
 // Requested on demand (same pattern as DEVICE_DELETE_SCOPES) only when the Teams tab is used.
 const TEAM_SCOPES = ["Group.ReadWrite.All","Files.ReadWrite.All","User.ReadBasic.All","TeamMember.ReadWrite.All","Sites.Manage.All","TeamsTab.Create"];
+// User.ReadWrite.All covers both creating a user (POST /users) and assigning licenses
+// (POST /users/{id}/assignLicense). Organization.Read.All reads verified domains and the
+// tenant's subscribedSkus (available license pool). Requested on demand when the Users tab is used.
+const USER_SCOPES = ["User.ReadWrite.All","Organization.Read.All"];
+// User.Invite.All is the least-privileged scope for POST /invitations (B2B guest invites).
+// Requested on demand when the Guests tab is used.
+const GUEST_SCOPES = ["User.Invite.All"];
 // One shared library ("Resource Hub") created once at the team's SharePoint site, not per channel.
 // Only the three top-level folders get unique permissions; their children just inherit from them.
 const RESOURCE_HUB_TREE = {
@@ -1721,6 +1821,184 @@ async function createTeam(){
   }
 }
 el("btnCreateTeam").onclick = createTeam;
+
+/* ===== USERS TAB ===== */
+let userDomainsLoaded = false, userLicensesLoaded = false;
+function genPassword(){
+  const upper="ABCDEFGHJKLMNPQRSTUVWXYZ", lower="abcdefghijkmnpqrstuvwxyz", digits="23456789", sym="!@#$%&*";
+  const all = upper+lower+digits+sym;
+  const pick = set => set[Math.floor(Math.random()*set.length)];
+  let pw = pick(upper)+pick(lower)+pick(digits)+pick(sym);
+  for(let i=0;i<8;i++) pw += pick(all);
+  return pw.split("").sort(()=>Math.random()-0.5).join("");
+}
+el("btnGenPassword").onclick = ()=>{ el("userTempPassword").value = genPassword(); };
+
+async function loadUserFormData(){
+  if(userDomainsLoaded && userLicensesLoaded) return;
+  let tok;
+  try{ tok = await token(USER_SCOPES); }
+  catch(e){
+    el("userDomain").innerHTML = `<option value="">Couldn't load — sign-in required</option>`;
+    el("userLicenseList").innerHTML = `<span style="color:var(--danger);font-size:12.5px">${escapeHtml(e.message||String(e))}</span>`;
+    return;
+  }
+  if(!userDomainsLoaded){
+    try{
+      const r = await fetch(`${GRAPH}/organization?$select=verifiedDomains`, { headers:{ Authorization:`Bearer ${tok}` } });
+      if(!r.ok) throw new Error(`${r.status}`);
+      const org = (await r.json()).value?.[0];
+      const domains = (org?.verifiedDomains||[]).map(d=>d.name);
+      el("userDomain").innerHTML = domains.map(d=>`<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("") || `<option value="">No verified domains found</option>`;
+      userDomainsLoaded = true;
+    }catch(e){
+      el("userDomain").innerHTML = `<option value="">Failed to load (${escapeHtml(e.message||String(e))})</option>`;
+    }
+  }
+  if(!userLicensesLoaded){
+    try{
+      const r = await fetch(`${GRAPH}/subscribedSkus`, { headers:{ Authorization:`Bearer ${tok}` } });
+      if(!r.ok) throw new Error(`${r.status}`);
+      const skus = (await r.json()).value || [];
+      const wrap = el("userLicenseList");
+      if(!skus.length){ wrap.innerHTML = `<span style="color:var(--muted);font-size:12.5px">No licenses found in this tenant</span>`; }
+      else{
+        wrap.innerHTML = skus.map(s=>{
+          const avail = (s.prepaidUnits?.enabled||0) - (s.consumedUnits||0);
+          const disabled = avail<=0;
+          return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;${disabled?"opacity:.45":""}">
+            <input type="checkbox" class="userLicenseChk" value="${escapeHtml(s.skuId)}" ${disabled?"disabled":""} style="width:auto" />
+            ${escapeHtml(s.skuPartNumber)} <span style="color:var(--muted);font-size:11.5px">(${avail} available)</span>
+          </label>`;
+        }).join("");
+      }
+      userLicensesLoaded = true;
+    }catch(e){
+      el("userLicenseList").innerHTML = `<span style="color:var(--danger);font-size:12.5px">${escapeHtml(e.message||String(e))}</span>`;
+    }
+  }
+}
+
+async function createUser(){
+  const displayName = (el("userDisplayName").value||"").trim();
+  const mailNick = (el("userMailNick").value||"").trim();
+  const domain = el("userDomain").value;
+  const usageLocation = el("userUsageLocation").value;
+  const password = el("userTempPassword").value;
+  const forceChange = el("userForceChangePw").checked;
+  const skuIds = [...document.querySelectorAll(".userLicenseChk:checked")].map(c=>c.value);
+  const status = el("userStatus");
+
+  if(!displayName){ status.innerHTML = `<span style="color:var(--danger)">Display name is required.</span>`; return; }
+  if(!mailNick || !domain){ status.innerHTML = `<span style="color:var(--danger)">Username and domain are required.</span>`; return; }
+  if(!password){ status.innerHTML = `<span style="color:var(--danger)">Generate a temporary password first.</span>`; return; }
+
+  const btn = el("btnCreateUser");
+  btn.disabled = true;
+  status.innerHTML = `<span class="spin"></span> Requesting permission…`;
+
+  let tok;
+  try{ tok = await token(USER_SCOPES); }
+  catch(e){ status.innerHTML = `<span style="color:var(--danger)">Couldn't get consent: ${escapeHtml(e.message||String(e))}</span>`; btn.disabled=false; return; }
+
+  try{
+    const upn = `${mailNick}@${domain}`;
+    status.innerHTML = `<span class="spin"></span> Creating ${escapeHtml(upn)}…`;
+    const uRes = await fetch(`${GRAPH}/users`, {
+      method: "POST",
+      headers: { Authorization:`Bearer ${tok}`, "Content-Type":"application/json" },
+      body: JSON.stringify({
+        accountEnabled: true,
+        displayName,
+        mailNickname: mailNick,
+        userPrincipalName: upn,
+        usageLocation,
+        passwordProfile: { password, forceChangePasswordNextSignIn: forceChange }
+      })
+    });
+    if(!uRes.ok){
+      const body = await uRes.text().catch(()=> "");
+      throw new Error(`Create user failed (${uRes.status}): ${body.slice(0,200)}`);
+    }
+    const user = await uRes.json();
+
+    let licenseNote = "";
+    if(skuIds.length){
+      status.innerHTML = `<span class="spin"></span> Assigning ${skuIds.length} license(s)…`;
+      const lRes = await fetch(`${GRAPH}/users/${user.id}/assignLicense`, {
+        method: "POST",
+        headers: { Authorization:`Bearer ${tok}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ addLicenses: skuIds.map(skuId=>({ skuId })), removeLicenses: [] })
+      });
+      if(!lRes.ok){
+        const body = await lRes.text().catch(()=> "");
+        console.error("assignLicense failed", lRes.status, body);
+        licenseNote = ` <div style="color:var(--warn);margin-top:6px">⚠ User created, but license assignment failed (${lRes.status}): <span class="mono">${escapeHtml(body.slice(0,200))}</span></div>`;
+      }else{
+        licenseNote = ` <div style="color:var(--muted);margin-top:6px">${skuIds.length} license(s) assigned.</div>`;
+      }
+    }
+
+    status.innerHTML = `<span style="color:var(--ok)">✓ Created ${escapeHtml(upn)} — temporary password: <span class="mono">${escapeHtml(password)}</span></span>${licenseNote}`;
+    el("userDisplayName").value=""; el("userMailNick").value=""; el("userTempPassword").value="";
+    document.querySelectorAll(".userLicenseChk:checked").forEach(c=>c.checked=false);
+    toast("User created");
+  }catch(e){
+    status.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message||String(e))}</span>`;
+  }finally{
+    btn.disabled = false;
+  }
+}
+el("btnCreateUser").onclick = createUser;
+
+/* ===== GUESTS TAB ===== */
+async function inviteGuest(){
+  const email = (el("guestEmail").value||"").trim();
+  const displayName = (el("guestDisplayName").value||"").trim();
+  const message = (el("guestMessage").value||"").trim();
+  const redirectUrl = (el("guestRedirectUrl").value||"").trim() || "https://myapps.microsoft.com/";
+  const sendInvite = el("guestSendInvite").checked;
+  const status = el("guestStatus");
+
+  if(!email){ status.innerHTML = `<span style="color:var(--danger)">Email address is required.</span>`; return; }
+
+  const btn = el("btnInviteGuest");
+  btn.disabled = true;
+  status.innerHTML = `<span class="spin"></span> Requesting permission…`;
+
+  let tok;
+  try{ tok = await token(GUEST_SCOPES); }
+  catch(e){ status.innerHTML = `<span style="color:var(--danger)">Couldn't get consent: ${escapeHtml(e.message||String(e))}</span>`; btn.disabled=false; return; }
+
+  try{
+    status.innerHTML = `<span class="spin"></span> Sending invite to ${escapeHtml(email)}…`;
+    const body = {
+      invitedUserEmailAddress: email,
+      inviteRedirectUrl: redirectUrl,
+      sendInvitationMessage: sendInvite
+    };
+    if(displayName) body.invitedUserDisplayName = displayName;
+    if(message) body.invitedUserMessageInfo = { customizedMessageBody: message };
+
+    const r = await fetch(`${GRAPH}/invitations`, {
+      method: "POST",
+      headers: { Authorization:`Bearer ${tok}`, "Content-Type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    if(!r.ok){
+      const b = await r.text().catch(()=> "");
+      throw new Error(`Invite failed (${r.status}): ${b.slice(0,200)}`);
+    }
+    status.innerHTML = `<span style="color:var(--ok)">✓ Invitation sent to ${escapeHtml(email)}.</span>`;
+    el("guestEmail").value=""; el("guestDisplayName").value=""; el("guestMessage").value="";
+    toast("Guest invited");
+  }catch(e){
+    status.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message||String(e))}</span>`;
+  }finally{
+    btn.disabled = false;
+  }
+}
+el("btnInviteGuest").onclick = inviteGuest;
 
 function enterApp(){
   el("signin").classList.add("hide");
@@ -2593,14 +2871,17 @@ function render(){
   // antivirus sets its own header (per sub-mode) inside renderAntivirus
   if(tab==="antivirus"){ renderAntivirus(); return; }
 
-  // teams tab is a form, not a table — hide the shared table/filter chrome and show its own panel
-  const isTeams = tab==="teams";
+  // teams/users/guests tabs are forms, not tables — hide the shared table/filter chrome and show the right panel
+  const isTeams = tab==="teams", isUsers = tab==="users", isGuests = tab==="guests";
+  const isFormTab = isTeams || isUsers || isGuests;
   el("teamsPanel").classList.toggle("hide", !isTeams);
-  document.querySelector(".tablewrap").classList.toggle("hide", isTeams);
-  el("filterbar").classList.toggle("hide", isTeams);
-  el("actionbar").classList.toggle("hide", isTeams);
-  document.querySelector(".controls").classList.toggle("hide", isTeams);
-  if(isTeams) return;
+  el("usersPanel").classList.toggle("hide", !isUsers);
+  el("guestsPanel").classList.toggle("hide", !isGuests);
+  document.querySelector(".tablewrap").classList.toggle("hide", isFormTab);
+  el("filterbar").classList.toggle("hide", isFormTab);
+  el("actionbar").classList.toggle("hide", isFormTab);
+  document.querySelector(".controls").classList.toggle("hide", isFormTab);
+  if(isFormTab) return;
 
   const heads = { recommendations:HEAD_REC, baseline:HEAD_CIS, cmmc:HEAD_CIS, cmmc2:HEAD_CMMC2, cis:HEAD_CIS, cis81:HEAD_CIS, cisv6:HEAD_CIS, cisv5:HEAD_CIS, nist:HEAD_CIS, device:HEAD_DEVICES, risky:HEAD_RISKY, mfa:HEAD_MFA, ca:HEAD_CA, license:HEAD_LICENSE, health:HEAD_HEALTH, bitlocker:HEAD_BITLOCKER, laps:HEAD_LAPS, patching:HEAD_PATCHING,
     devcompliance:HEAD_DEVCOMP, jailbroken:HEAD_JAIL, privileged:HEAD_PRIV, securescore:HEAD_SEC, legacyauth:HEAD_LEGACY, appcreds:HEAD_APPCREDS, oauth:HEAD_OAUTH };
@@ -4772,6 +5053,7 @@ function switchTab(newTab){
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab===tab));
   _bizKey="";  // force baseline dashboard to re-animate on re-entry
   const c = document.querySelector(".content"); if(c){ c.classList.remove("fade"); void c.offsetWidth; c.classList.add("fade"); }
+  if(tab==="users") loadUserFormData();
   const loader = LOADER_BY_TAB[tab];
   if(loader && !loader[0]()){ loader[1](); } else { render(); }
 }
