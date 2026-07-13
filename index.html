@@ -1529,6 +1529,33 @@ async function searchDirectoryUsers(query){
   return (await r.json()).value || [];
 }
 
+// Invites an address that isn't in the directory as a B2B guest, then drops them straight into
+// the member picker as a pending chip — same POST /invitations call as the Guests tab, just
+// triggered inline so the person doesn't have to switch tabs mid-flow.
+async function inviteAndAddAsGuestMember(email, rowEl){
+  rowEl.innerHTML = `<span class="spin"></span> Inviting ${escapeHtml(email)}…`;
+  let tok;
+  try{ tok = await token(GUEST_SCOPES); }
+  catch(e){ rowEl.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message||String(e))}</span>`; return; }
+  try{
+    const r = await fetch(`${GRAPH}/invitations`, {
+      method: "POST",
+      headers: { Authorization:`Bearer ${tok}`, "Content-Type":"application/json" },
+      body: JSON.stringify({ invitedUserEmailAddress: email, inviteRedirectUrl: "https://myapps.microsoft.com/", sendInvitationMessage: true })
+    });
+    if(!r.ok){ const body = await r.text().catch(()=> ""); throw new Error(`${r.status}: ${body.slice(0,200)}`); }
+    const inv = await r.json();
+    selectedTeamMembers.push({ id: inv.invitedUser.id, displayName: inv.invitedUser.displayName || email, mail: email, role:"member" });
+    renderMemberChips();
+    el("teamMemberSearch").value = "";
+    el("teamMemberResults").classList.add("hide"); el("teamMemberResults").innerHTML = "";
+    toast("Guest invited and added");
+  }catch(e){
+    rowEl.innerHTML = `<span style="color:var(--danger)">Invite failed: ${escapeHtml(e.message||String(e))}</span>`;
+  }
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 let memberSearchTimer = null;
 el("teamMemberSearch").oninput = (e)=>{
   clearTimeout(memberSearchTimer);
@@ -1542,12 +1569,26 @@ el("teamMemberSearch").oninput = (e)=>{
     try{ people = await searchDirectoryUsers(q); }
     catch(err){ results.innerHTML = `<div style="padding:8px 12px;color:var(--danger);font-size:12.5px">${escapeHtml(err.message||String(err))}</div>`; return; }
     people = people.filter(p => !selectedTeamMembers.some(m=>m.id===p.id));
-    if(!people.length){ results.innerHTML = `<div style="padding:8px 12px;color:var(--muted);font-size:12.5px">No matches in the directory</div>`; return; }
-    results.innerHTML = people.map(p => `
+
+    // offer an inline "invite as guest" row when what's typed looks like an email that isn't
+    // already in the directory results — covers a different domain than the signed-in user's
+    const exactMatchExists = people.some(p => (p.mail||p.userPrincipalName||"").toLowerCase() === q.toLowerCase());
+    const alreadyPending = selectedTeamMembers.some(m => (m.mail||"").toLowerCase() === q.toLowerCase());
+    const offerInvite = EMAIL_RE.test(q) && !exactMatchExists && !alreadyPending;
+
+    const peopleHtml = people.map(p => `
       <div class="memberResultRow" data-id="${escapeHtml(p.id)}" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)">
         <div>${escapeHtml(p.displayName||"")}</div>
         <div style="color:var(--muted);font-size:11.5px">${escapeHtml(p.mail||p.userPrincipalName||"")}</div>
       </div>`).join("");
+    const inviteHtml = offerInvite ? `
+      <div class="inviteGuestRow" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--accent,#6366f1)">
+        + Invite <span class="mono">${escapeHtml(q)}</span> as a guest
+      </div>` : "";
+
+    if(!people.length && !offerInvite){ results.innerHTML = `<div style="padding:8px 12px;color:var(--muted);font-size:12.5px">No matches in the directory</div>`; return; }
+    results.innerHTML = peopleHtml + inviteHtml;
+
     results.querySelectorAll(".memberResultRow").forEach(row=>{
       row.onclick = ()=>{
         const p = people.find(x=>x.id===row.dataset.id);
@@ -1558,6 +1599,8 @@ el("teamMemberSearch").oninput = (e)=>{
         results.classList.add("hide"); results.innerHTML = "";
       };
     });
+    const inviteRow = results.querySelector(".inviteGuestRow");
+    if(inviteRow) inviteRow.onclick = ()=> inviteAndAddAsGuestMember(q, inviteRow);
   }, 300);
 };
 document.addEventListener("click", (e)=>{
