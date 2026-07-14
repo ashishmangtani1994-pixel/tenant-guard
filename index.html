@@ -1722,8 +1722,30 @@ async function createResourceHub(tok, teamId, recipientUpn, failures, status){
   if(!rootRes.ok) throw new Error(`Couldn't resolve the library's root folder (${rootRes.status})`);
   const root = await rootRes.json();
 
+  // Lock down the library ROOT FIRST — before creating any subfolders. This way, when we break
+  // inheritance on each subfolder below, the root already has its final permission state, so
+  // there's no window where a root-level grant can propagate to a child before the child's own
+  // inheritance break has fully committed (which was causing the Accounting Freelancer leak on Vault).
+  const rRoot = await grantFolderAccess(tok, drive.id, root.id, { email: recipientUpn }, "write", true, "Resource Hub (root)");
+  if(!rRoot.ok) failures.push(rRoot.detail);
+  for(const grant of [
+    { group:"marketingFreelancer",  role:"read"  },
+    { group:"accountingFreelancer", role:"read"  },
+    { group:"operationsManager",    role:"write" }
+  ]){
+    const groupId = PERMISSION_GROUPS[grant.group];
+    const rg = await grantFolderAccess(tok, drive.id, root.id, { objectId: groupId }, grant.role, false, `Resource Hub (root) → ${grant.group}`);
+    if(!rg.ok) failures.push(rg.detail);
+  }
+
+  // Small pause to let SharePoint fully commit the root's permission state before we create
+  // children whose inheritance-break needs to see a stable parent
+  await new Promise(res=>setTimeout(res,3000));
+
+  const folderIds = {}; // track folder IDs for the verification pass below
   for(const [topName, children] of Object.entries(RESOURCE_HUB_TREE)){
     const topFolder = await graphCreateFolder(tok, drive.id, root.id, topName);
+    folderIds[topName] = topFolder.id;
     // baseline: break inheritance down to just the admin who ran this — everyone else denied by default
     const r1 = await grantFolderAccess(tok, drive.id, topFolder.id, { email: recipientUpn }, "write", true, topName);
     if(!r1.ok) failures.push(r1.detail);
@@ -1736,19 +1758,53 @@ async function createResourceHub(tok, teamId, recipientUpn, failures, status){
     for(const childName of children) await graphCreateFolder(tok, drive.id, topFolder.id, childName);
   }
 
-  // Lock down the library ROOT itself too — otherwise it keeps the library's default team-wide
-  // Edit permission, so anyone (including a guest in none of the three groups) can still open
-  // Resource Hub and freely upload/create at the root level, even with the subfolders locked down.
-  const rRoot = await grantFolderAccess(tok, drive.id, root.id, { email: recipientUpn }, "write", true, "Resource Hub (root)");
-  if(!rRoot.ok) failures.push(rRoot.detail);
-  for(const grant of [
-    { group:"marketingFreelancer",  role:"read"  },
-    { group:"accountingFreelancer", role:"read"  },
-    { group:"operationsManager",    role:"write" }
-  ]){
-    const groupId = PERMISSION_GROUPS[grant.group];
-    const rg = await grantFolderAccess(tok, drive.id, root.id, { objectId: groupId }, grant.role, false, `Resource Hub (root) → ${grant.group}`);
-    if(!rg.ok) failures.push(rg.detail);
+  // DEFENSIVE VERIFICATION: after all grants are done, explicitly check EVERY location's actual
+  // permissions (root + all three folders) and remove any of our three groups that shouldn't be
+  // there. This catches any grants that leaked through due to SharePoint's eventual consistency.
+  //
+  // Build a complete map of what's allowed where:
+  const ALLOWED_GROUPS_BY_LOCATION = {
+    "Resource Hub (root)": new Set([
+      PERMISSION_GROUPS.marketingFreelancer,
+      PERMISSION_GROUPS.accountingFreelancer,
+      PERMISSION_GROUPS.operationsManager
+    ])
+  };
+  for(const [topName, grants] of Object.entries(RESOURCE_HUB_ACCESS)){
+    ALLOWED_GROUPS_BY_LOCATION[topName] = new Set(grants.map(g => PERMISSION_GROUPS[g.group]));
+  }
+  // Map location names to their driveItem IDs
+  const locationItemIds = { "Resource Hub (root)": root.id, ...folderIds };
+  const allGroupIds = Object.values(PERMISSION_GROUPS);
+
+  for(const [location, itemId] of Object.entries(locationItemIds)){
+    if(!itemId) continue;
+    const allowedHere = ALLOWED_GROUPS_BY_LOCATION[location] || new Set();
+    try{
+      const permRes = await fetch(`${GRAPH}/drives/${drive.id}/items/${itemId}/permissions`, { headers:{ Authorization:`Bearer ${tok}` } });
+      if(!permRes.ok){ console.error(`Couldn't list permissions on ${location}: ${permRes.status}`); continue; }
+      const perms = (await permRes.json()).value || [];
+      for(const perm of perms){
+        // Graph can return the group identity in several shapes depending on how it was granted
+        const grantedId = perm.grantedToV2?.siteGroup?.id
+          || perm.grantedToV2?.group?.id
+          || perm.grantedTo?.group?.id
+          || perm.grantedToIdentitiesV2?.[0]?.siteGroup?.id
+          || perm.grantedToIdentitiesV2?.[0]?.group?.id
+          || null;
+        const isOneOfOurGroups = grantedId && allGroupIds.includes(grantedId);
+        if(isOneOfOurGroups && !allowedHere.has(grantedId)){
+          // this group is present but shouldn't be at this location — remove it
+          const groupName = Object.entries(PERMISSION_GROUPS).find(([,v])=>v===grantedId)?.[0] || grantedId;
+          console.warn(`Removing leaked permission on ${location}: ${groupName} (perm ${perm.id})`);
+          const delRes = await fetch(`${GRAPH}/drives/${drive.id}/items/${itemId}/permissions/${perm.id}`, {
+            method: "DELETE", headers:{ Authorization:`Bearer ${tok}` }
+          });
+          if(!delRes.ok) console.error(`Failed to remove leaked perm ${perm.id} on ${location}:`, delRes.status);
+          else console.log(`Cleaned up leaked permission on ${location} for ${groupName}`);
+        }
+      }
+    }catch(e){ console.error(`Permission verification failed for ${location}:`, e); }
   }
 
   return root.webUrl;
