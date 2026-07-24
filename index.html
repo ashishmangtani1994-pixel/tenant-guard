@@ -142,6 +142,9 @@
   .upn{color:var(--muted);font-family:var(--mono);font-size:11.5px;margin-top:1px;word-break:break-all;overflow-wrap:anywhere}
   /* keep the identity column from blowing out the table width on long external (#EXT#) UPNs */
   tbody td:nth-child(2){max-width:340px}
+  /* privileged-accounts table: keep long role lists and MFA method lists from wrecking row height / column width */
+  .roles-list{max-height:120px;overflow-y:auto;line-height:1.5;padding-right:4px}
+  .mfa-methods{display:block;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default;color:var(--muted);font-size:12px}
   .pill{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;letter-spacing:.03em}
   .pill.member{background:rgba(34,211,238,.12);color:var(--accent)}
   .pill.guest{background:rgba(224,165,0,.13);color:var(--warn)}
@@ -4690,11 +4693,12 @@ function renderPrivileged(){
   if(!rows.length){ tb.innerHTML=`<tr><td colspan="6" class="empty"><div class="big">No matches</div>No accounts match the current filters.</td></tr>`; return; }
   tb.innerHTML = rows.map(u=>{
     const mfaPill = u.mfa===true?`<span class="pill lic-yes">Yes</span>`:(u.mfa===false?`<span class="pill miss">No</span>`:`<span class="pill off">—</span>`);
+    const methodsStr = (u.mfaMethods||[]).join(", ");
     return `<tr>
       <td><div class="uname">${escapeHtml(u.displayName||"—")}</div><div class="upn">${escapeHtml(u.upn||"")}</div></td>
-      <td>${escapeHtml(u.roles.join(", "))}</td>
+      <td><div class="roles-list">${escapeHtml(u.roles.join(", "))}</div></td>
       <td>${mfaPill}</td>
-      <td class="num opt">${escapeHtml((u.mfaMethods||[]).join(", ")||"—")}</td>
+      <td class="num opt"><span class="mfa-methods" title="${escapeHtml(methodsStr)}">${escapeHtml(methodsStr||"—")}</span></td>
       <td class="num opt">${fmtDate(lastActivity(u))}</td>
       <td class="num">${u.accountEnabled===false?`<span class="pill off">disabled</span>`:"enabled"}</td>
     </tr>`;
