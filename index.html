@@ -1295,7 +1295,7 @@ const GRAPH_BETA = "https://graph.microsoft.com/beta";
 const READ_SCOPES  = ["User.Read.All","AuditLog.Read.All","Directory.Read.All","Device.Read.All",
   "IdentityRiskyUser.Read.All","Policy.Read.All","UserAuthenticationMethod.Read.All","ServiceHealth.Read.All",
   "BitlockerKey.ReadBasic.All","DeviceManagementManagedDevices.Read.All","DeviceLocalCredential.ReadBasic.All",
-  "SecurityEvents.Read.All","Application.Read.All",
+  "SecurityEvents.Read.All","Application.Read.All","RoleEligibilitySchedule.Read.Directory",
   "DeviceManagementConfiguration.Read.All","DeviceManagementApps.Read.All","IdentityRiskEvent.Read.All",
   "Reports.Read.All","Sites.Read.All","SharePointTenantSettings.Read.All"];
 const WRITE_SCOPES = ["User.ReadWrite.All"];
@@ -2519,7 +2519,7 @@ async function loadMdm(){   // shared: device compliance + jailbroken
   }catch(e){ handleGraphError(e); }
 }
 async function loadPrivileged(){
-  el("tbody").innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Reading privileged role assignments…</td></tr>`;
+  el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Reading privileged role assignments…</td></tr>`;
   try{
     const tok = await token(READ_SCOPES); if(!tok) return;
     const r = await gget(`${GRAPH}/directoryRoles?$expand=members`, tok);
@@ -2528,10 +2528,28 @@ async function loadPrivileged(){
       for(const m of (role.members||[])){
         if(m["@odata.type"] && !/#microsoft\.graph\.user/i.test(m["@odata.type"])) continue;
         let u = map.get(m.id);
-        if(!u){ u = { id:m.id, displayName:m.displayName, upn:m.userPrincipalName, accountEnabled:m.accountEnabled, roles:[] }; map.set(m.id, u); }
+        if(!u){ u = { id:m.id, displayName:m.displayName, upn:m.userPrincipalName, accountEnabled:m.accountEnabled, roles:[], eligibleRoles:[] }; map.set(m.id, u); }
         u.roles.push(role.displayName);
       }
     }
+    /* PIM eligible (not-yet-activated) role assignments — needs Entra ID P2 + admin consent for
+       RoleEligibilitySchedule.Read.Directory; best-effort, so an unlicensed/unconsented tenant just
+       shows no eligible roles instead of breaking the rest of the view */
+    try{
+      let eurl = `${GRAPH}/roleManagement/directory/roleEligibilityScheduleInstances?$expand=principal($select=id,displayName,userPrincipalName,accountEnabled),roleDefinition($select=displayName)&$top=200`;
+      while(eurl){
+        const pg = await gget(eurl, tok);
+        for(const inst of (pg.value||[])){
+          const p = inst.principal;
+          if(!p || (p["@odata.type"] && !/#microsoft\.graph\.user/i.test(p["@odata.type"]))) continue;
+          let u = map.get(p.id);
+          if(!u){ u = { id:p.id, displayName:p.displayName, upn:p.userPrincipalName, accountEnabled:p.accountEnabled, roles:[], eligibleRoles:[] }; map.set(p.id, u); }
+          const rn = (inst.roleDefinition && inst.roleDefinition.displayName) || "Unknown role";
+          if(!u.eligibleRoles.includes(rn)) u.eligibleRoles.push(rn);
+        }
+        eurl = pg["@odata.nextLink"] || null;
+      }
+    }catch(e){ /* no P2 license, no eligible assignments, or scope not consented — non-fatal */ }
     if(!mfaLoaded){
       try{ let murl = `${GRAPH}/reports/authenticationMethods/userRegistrationDetails?$top=200`; allRegDetails = [];
            while(murl){ const pg = await gget(murl, tok); allRegDetails.push(...(pg.value||[])); murl = pg["@odata.nextLink"]||null; } mfaLoaded = true; }catch(e){}
@@ -2539,7 +2557,7 @@ async function loadPrivileged(){
     const mfaMap = new Map(allRegDetails.map(x=>[String(x.userPrincipalName||"").toLowerCase(), x]));
     /* pull last sign-in (interactive/non-interactive/successful, whichever is latest) directly per
        privileged account — works even if the full directory list hasn't been scanned yet */
-    el("tbody").innerHTML = `<tr><td colspan="6" class="loadrow"><span class="spin"></span> Reading sign-in activity for ${map.size} privileged account(s)…</td></tr>`;
+    el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Reading sign-in activity for ${map.size} privileged account(s)…</td></tr>`;
     const sigById = new Map();
     await Promise.all([...map.keys()].map(async id=>{
       try{ const su = await gget(`${GRAPH}/users/${id}?$select=signInActivity`, tok); sigById.set(id, su.signInActivity||null); }
@@ -2549,7 +2567,7 @@ async function loadPrivileged(){
       const k = String(u.upn||"").toLowerCase(); const reg = mfaMap.get(k);
       const methods = reg?(reg.methodsRegistered||[]):[];
       return { ...u, mfa: reg?reg.isMfaRegistered:null, mfaMethods: methods, hasPasskey: methods.some(m=>/passkey/i.test(m)), signInActivity: sigById.get(u.id)||null };
-    }).sort((a,b)=> b.roles.length - a.roles.length);
+    }).sort((a,b)=> (b.roles.length+b.eligibleRoles.length) - (a.roles.length+a.eligibleRoles.length));
     privLoaded = true; render();
   }catch(e){ handleGraphError(e); }
 }
@@ -2851,7 +2869,7 @@ const HEAD_BITLOCKER = `<th>Device</th><th>OS</th><th>BitLocker key</th><th>Encr
 const HEAD_LAPS = `<th>Device</th><th>OS</th><th>LAPS key</th><th class="opt">Last backup</th><th>Ownership</th>`;
 const HEAD_DEVCOMP = `<th>Device</th><th>OS</th><th>Compliance</th><th>Managed by</th><th class="opt">Last sync</th>`;
 const HEAD_JAIL    = `<th>Device</th><th>OS</th><th>Jailbroken / rooted</th><th>Managed by</th>`;
-const HEAD_PRIV    = `<th>Account</th><th>Roles</th><th>MFA</th><th>MFA methods</th><th>Passkey</th><th>Last sign-in</th><th>Status</th>`;
+const HEAD_PRIV    = `<th>Account</th><th>Active roles</th><th>Eligible roles</th><th>MFA</th><th>MFA methods</th><th>Passkey</th><th>Last sign-in</th><th>Status</th>`;
 const HEAD_SEC     = `<th>Control</th><th>Category</th><th>Score</th><th class="opt">Description</th>`;
 const HEAD_LEGACY  = `<th>User</th><th>App</th><th>Client</th><th>Result</th><th class="opt">IP</th><th>When</th>`;
 const HEAD_APPCREDS= `<th>Application</th><th>Type</th><th>Expires</th><th>Time left</th><th>Status</th>`;
@@ -4684,7 +4702,7 @@ function renderJailbroken(){
 function renderPrivileged(){
   const q=searchVal(), mf=v("fPrivMfa"), pk=v("fPrivPasskey");
   const rows = privRoles.filter(u=>{
-    if(q && !((u.displayName||"")+" "+(u.upn||"")+" "+u.roles.join(" ")).toLowerCase().includes(q)) return false;
+    if(q && !((u.displayName||"")+" "+(u.upn||"")+" "+u.roles.join(" ")+" "+(u.eligibleRoles||[]).join(" ")).toLowerCase().includes(q)) return false;
     if(mf==="yes" && u.mfa!==true) return false;
     if(mf==="no"  && u.mfa!==false) return false;
     if(pk==="yes" && !u.hasPasskey) return false;
@@ -4696,15 +4714,17 @@ function renderPrivileged(){
     "Global Admins", privRoles.filter(u=>u.roles.some(r=>/global administrator/i.test(r))).length,
     "MFA coverage", privRoles.length?Math.round(privRoles.filter(u=>u.mfa===true).length/privRoles.length*100)+"%":"—");
   const tb=el("tbody");
-  if(!privRoles.length){ tb.innerHTML=`<tr><td colspan="7" class="empty"><div class="big">No privileged accounts</div>No activated directory roles with members found (needs Directory.Read.All).</td></tr>`; return; }
-  if(!rows.length){ tb.innerHTML=`<tr><td colspan="7" class="empty"><div class="big">No matches</div>No accounts match the current filters.</td></tr>`; return; }
+  if(!privRoles.length){ tb.innerHTML=`<tr><td colspan="8" class="empty"><div class="big">No privileged accounts</div>No activated directory roles with members found (needs Directory.Read.All).</td></tr>`; return; }
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="8" class="empty"><div class="big">No matches</div>No accounts match the current filters.</td></tr>`; return; }
   tb.innerHTML = rows.map(u=>{
     const mfaPill = u.mfa===true?`<span class="pill lic-yes">Yes</span>`:(u.mfa===false?`<span class="pill miss">No</span>`:`<span class="pill off">—</span>`);
     const methodsStr = (u.mfaMethods||[]).join(", ");
     const pkPill = u.hasPasskey?`<span class="pill lic-yes">Yes</span>`:`<span class="pill miss">No</span>`;
+    const eligible = (u.eligibleRoles||[]).join(", ");
     return `<tr>
       <td><div class="uname">${escapeHtml(u.displayName||"—")}</div><div class="upn">${escapeHtml(u.upn||"")}</div></td>
-      <td><div class="roles-list">${escapeHtml(u.roles.join(", "))}</div></td>
+      <td><div class="roles-list">${escapeHtml(u.roles.join(", ")||"—")}</div></td>
+      <td><div class="roles-list">${escapeHtml(eligible||"—")}</div></td>
       <td>${mfaPill}</td>
       <td class="num opt"><span class="mfa-methods" title="${escapeHtml(methodsStr)}">${escapeHtml(methodsStr||"—")}</span></td>
       <td class="num">${pkPill}</td>
