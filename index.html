@@ -142,6 +142,10 @@
   .upn{color:var(--muted);font-family:var(--mono);font-size:11.5px;margin-top:1px;word-break:break-all;overflow-wrap:anywhere}
   /* keep the identity column from blowing out the table width on long external (#EXT#) UPNs */
   tbody td:nth-child(2){max-width:340px}
+  /* keep the "Inactive" column visible without scrolling right, in tables that opt in */
+  th.sticky-col{position:sticky;right:0;background:var(--panel-2);box-shadow:-6px 0 8px -6px rgba(0,0,0,.35)}
+  td.sticky-col{position:sticky;right:0;background:var(--panel);box-shadow:-6px 0 8px -6px rgba(0,0,0,.35)}
+  tbody tr:hover td.sticky-col{background:var(--panel-2)}
   /* privileged-accounts table: keep long role lists and MFA method lists from wrecking row height / column width */
   .roles-list{max-height:120px;overflow-y:auto;line-height:1.5;padding-right:4px}
   .mfa-methods{display:block;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default;color:var(--muted);font-size:12px}
@@ -1362,6 +1366,7 @@ let allLaps = [];           let lapsLoaded = false; let lapsAvailable = true;   
 /* ---- Advanced Security ---- */
 let mdmDevices = [];        let mdmLoaded = false;                              // managedDevices superset (compliance + jailbreak)
 let privRoles = [];         let privLoaded = false;                             // privileged accounts
+let mbxByUpn = null;        let mbxLoaded = false; let mbxLoading = false;      // mailbox usage report (shared mailbox + size)
 let secScore = null;        let secLoaded = false;                              // Microsoft Secure Score
 let legacySignins = [];     let legacyLoaded = false; let legacyAvailable = true; // legacy auth sign-ins
 let appCreds = [];          let appCredsLoaded = false; let appCredsAvailable = true; // app secrets/certs
@@ -1395,6 +1400,11 @@ document.addEventListener("mousemove", e=>{ if(!_tt.classList.contains("show")) 
 document.addEventListener("mouseout", e=>{ const t = e.target.closest && e.target.closest("[data-tip]"); if(t) _ttHide(); });
 document.addEventListener("scroll", _ttHide, true);
 function fmtDate(d){ if(!d) return "—"; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return "—"; return dt.toISOString().slice(0,10); }
+function fmtMbxSize(bytes){
+  const n = parseFloat(bytes); if(!n || isNaN(n) || n<=0) return "—";
+  const gb = n/2**30;
+  return gb>=1 ? gb.toFixed(2)+" GB" : (n/2**20).toFixed(0)+" MB";
+}
 function daysSince(d){ if(!d) return null; const dt=new Date(d); if(isNaN(dt)||dt.getFullYear()<2000) return null; return Math.floor((Date.now()-dt)/864e5); }
 function yn(b){ return b ? "yes" : "no"; }
 
@@ -2518,6 +2528,20 @@ async function loadMdm(){   // shared: device compliance + jailbroken
     render();
   }catch(e){ handleGraphError(e); }
 }
+async function loadMailboxUsage(){
+  if(mbxLoaded || mbxLoading) return;
+  mbxLoading = true;
+  try{
+    const tok = await token(READ_SCOPES); if(!tok){ mbxLoading=false; return; }
+    let url = `${GRAPH_BETA}/reports/getMailboxUsageDetail(period='D180')?$format=application/json&$top=500`, p=0;
+    const rows = [];
+    while(url && p<10){ const pg = await gget(url, tok); rows.push(...(pg.value||[])); url = pg["@odata.nextLink"]||null; p++; }
+    mbxByUpn = new Map(rows.map(m=>[String(m.userPrincipalName||"").toLowerCase(), m]));
+    mbxLoaded = true;
+  }catch(e){ /* mailbox usage report unavailable (no Exchange license / report not ready yet) — non-fatal */ }
+  mbxLoading = false;
+  if(tab==="member"||tab==="guest") render();
+}
 async function loadPrivileged(){
   el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Reading privileged role assignments…</td></tr>`;
   try{
@@ -2858,7 +2882,7 @@ function syncFilterBar(){
   if(dormant && typeof refreshScheduleBadges==="function") refreshScheduleBadges();
 }
 
-const HEAD_USERS   = `<th style="width:34px"></th><th>User</th><th>Type</th><th>License</th><th class="opt">Last interactive</th><th class="opt">Last non-interactive</th><th>Last activity</th><th>Inactive</th>`;
+const HEAD_USERS   = `<th style="width:34px"></th><th>User</th><th>Type</th><th>License</th><th class="opt">Last interactive</th><th class="opt">Last non-interactive</th><th>Last activity</th><th class="opt">Shared mailbox</th><th class="opt">Mailbox size</th><th class="sticky-col">Inactive</th>`;
 const HEAD_DEVICES = `<th style="width:34px"></th><th>Device</th><th>OS</th><th class="opt">Ownership</th><th class="opt">Registered</th><th>Last sign-in</th><th>Inactive</th>`;
 const HEAD_RISKY   = `<th>User</th><th>Risk level</th><th>Risk state</th><th class="opt">Detail</th><th>Last updated</th><th></th>`;
 const HEAD_MFA     = `<th>User</th><th>Type</th><th>MFA registered</th><th>MFA capable</th><th>SSPR registered</th><th>Methods</th>`;
@@ -5122,14 +5146,15 @@ function renderAvMalware(){
 }
 
 function renderUsers(rows){
-  ensureSkus();   // pull SKU catalogue so the License column can show product names
+  ensureSkus();          // pull SKU catalogue so the License column can show product names
+  loadMailboxUsage();    // pull mailbox usage report so Shared mailbox / Mailbox size can populate (best-effort)
   view = rows.slice().sort((a,b)=> b._inactive - a._inactive);
   setFilterCount(view.length, view.length);
   const thr = +el("thresh").value;
   const tb = el("tbody");
   if(!view.length){
     const why = `No ${tab==="member"?"members":"guests"} match the current filters or threshold.`;
-    tb.innerHTML = `<tr><td colspan="8" class="empty"><div class="big">Nothing to show</div>${why}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="10" class="empty"><div class="big">Nothing to show</div>${why}</td></tr>`;
     el("selAll").checked=false; updateSelection(); return;
   }
   tb.innerHTML = view.map(u=>{
@@ -5147,6 +5172,11 @@ function renderUsers(rows){
     const licPill = lns.length
       ? `<span class="pill lic-yes"${lns.length>1?` data-tip="${licTip}" style="cursor:help"`:""}>${escapeHtml(lns[0])}${lns.length>1?` +${lns.length-1}`:""}</span>`
       : `<span class="pill lic-no">Unlicensed</span>`;
+    const mbx = mbxByUpn ? mbxByUpn.get(String(u.userPrincipalName||"").toLowerCase()) : null;
+    const rtype = mbx ? String(mbx.recipientType||mbx.recipientTypeDetails||"") : "";
+    const sharedPill = !mbx ? `<span class="pill off">—</span>`
+      : (/shared/i.test(rtype) ? `<span class="pill lic-yes">Yes</span>` : `<span class="pill off">No</span>`);
+    const mbxSizeStr = mbx ? fmtMbxSize(mbx.storageUsedInBytes) : "—";
     return `<tr data-id="${u.id}">
       <td><input type="checkbox" class="rowchk" data-id="${u.id}"></td>
       <td><div class="uname">${escapeHtml(u.displayName||"—")}</div><div class="upn">${escapeHtml(u.userPrincipalName||"")}</div></td>
@@ -5155,7 +5185,9 @@ function renderUsers(rows){
       <td class="num opt">${fmtDate(a.lastSignInDateTime)}</td>
       <td class="num opt">${fmtDate(a.lastNonInteractiveSignInDateTime)}</td>
       <td class="num">${fmtDate(u._last)}</td>
-      <td class="days">${daysCell}<div class="decay"><i style="width:${over}%"></i></div></td>
+      <td class="num opt">${sharedPill}</td>
+      <td class="num opt">${mbxSizeStr}</td>
+      <td class="days sticky-col">${daysCell}<div class="decay"><i style="width:${over}%"></i></div></td>
     </tr>`;
   }).join("");
   tb.querySelectorAll(".rowchk").forEach(c=> c.onchange=onRowToggle);
