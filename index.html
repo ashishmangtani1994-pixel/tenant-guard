@@ -895,6 +895,10 @@
           <label>Passkey</label>
           <select id="fPrivPasskey"><option value="">All</option><option value="yes">Passkey enabled</option><option value="no">No passkey</option></select>
         </div>
+        <div class="field hide" id="wrapPrivLicense">
+          <label>License</label>
+          <select id="fPrivLicense"><option value="">All</option><option value="yes">Licensed</option><option value="no">Unlicensed</option></select>
+        </div>
         <div class="field hide" id="wrapSecCat">
           <label>Category</label>
           <select id="fSecCat"><option value="">All</option></select>
@@ -2833,7 +2837,7 @@ const ALL_FILTER_WRAPS = ["wrapType","wrapLicense","wrapOs","wrapOwn","wrapStatu
   "wrapMfaType","wrapMfaReg","wrapMfaCap","wrapSspr","wrapCaState","wrapLicStatus",
   "wrapHealthSvc","wrapHealthClass","wrapHealthStatus","wrapBlOs","wrapBlStatus","wrapBlEnc",
   "wrapPatchRel","wrapPatchStatus","wrapAvMode","wrapAvHealth","wrapLapsOs","wrapLapsStatus","wrapPatchView",
-  "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapPrivPasskey","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent",
+  "wrapDcState","wrapDcOs","wrapJailStatus","wrapPrivMfa","wrapPrivPasskey","wrapPrivLicense","wrapSecCat","wrapAcStatus","wrapAcType","wrapOaConsent",
   "wrapBaseCat","wrapBaseStatus","wrapBaseSev","wrapCmmcCat","wrapCmmcStatus","wrapCmmcSev",
   "wrapCmmc2Cat","wrapCmmc2Status","wrapCmmc2Sev","wrapCisCat","wrapCisStatus","wrapCisSev","wrapCis81Cat","wrapCis81Status","wrapCis81Sev","wrapCisv6Cat","wrapCisv6Status","wrapCisv6Sev","wrapCisv5Cat","wrapCisv5Status","wrapCisv5Sev","wrapNistCat","wrapNistStatus","wrapNistSev",
   "wrapRecState","wrapRecSev"];
@@ -2861,7 +2865,7 @@ const FILTERS_BY_TAB = {
   patching:["wrapPatchView","wrapPatchRel","wrapPatchStatus"],
   devcompliance:["wrapDcState","wrapDcOs"],
   jailbroken:["wrapJailStatus"],
-  privileged:["wrapPrivMfa","wrapPrivPasskey"],
+  privileged:["wrapPrivMfa","wrapPrivPasskey","wrapPrivLicense"],
   securescore:["wrapSecCat"],
   legacyauth:[],
   appcreds:["wrapAcStatus","wrapAcType"],
@@ -2912,7 +2916,7 @@ const HEAD_BITLOCKER = `<th>Device</th><th>OS</th><th>BitLocker key</th><th>Encr
 const HEAD_LAPS = `<th>Device</th><th>OS</th><th>LAPS key</th><th class="opt">Last backup</th><th>Ownership</th>`;
 const HEAD_DEVCOMP = `<th>Device</th><th>OS</th><th>Compliance</th><th>Managed by</th><th class="opt">Last sync</th>`;
 const HEAD_JAIL    = `<th>Device</th><th>OS</th><th>Jailbroken / rooted</th><th>Managed by</th>`;
-const HEAD_PRIV    = `<th>Account</th><th>Active roles</th><th>Eligible roles</th><th>MFA</th><th>MFA methods</th><th>Passkey</th><th>License</th><th>Last sign-in</th><th>Status</th>`;
+const HEAD_PRIV    = `<th>Account</th><th>Active roles</th><th>Eligible roles</th><th>MFA</th><th>MFA methods</th><th>Passkey</th><th>License</th><th>Status</th><th class="sticky-col">Last sign-in</th>`;
 const HEAD_SEC     = `<th>Control</th><th>Category</th><th>Score</th><th class="opt">Description</th>`;
 const HEAD_LEGACY  = `<th>User</th><th>App</th><th>Client</th><th>Result</th><th class="opt">IP</th><th>When</th>`;
 const HEAD_APPCREDS= `<th>Application</th><th>Type</th><th>Expires</th><th>Time left</th><th>Status</th>`;
@@ -4743,13 +4747,15 @@ function renderJailbroken(){
   }).join("");
 }
 function renderPrivileged(){
-  const q=searchVal(), mf=v("fPrivMfa"), pk=v("fPrivPasskey");
+  const q=searchVal(), mf=v("fPrivMfa"), pk=v("fPrivPasskey"), lic=v("fPrivLicense");
   const rows = privRoles.filter(u=>{
     if(q && !((u.displayName||"")+" "+(u.upn||"")+" "+u.roles.join(" ")+" "+(u.eligibleRoles||[]).join(" ")).toLowerCase().includes(q)) return false;
     if(mf==="yes" && u.mfa!==true) return false;
     if(mf==="no"  && u.mfa!==false) return false;
     if(pk==="yes" && !u.hasPasskey) return false;
     if(pk==="no"  && u.hasPasskey) return false;
+    if(lic==="yes" && !hasLicense(u)) return false;
+    if(lic==="no"  && hasLicense(u)) return false;
     return true;
   });
   view = rows; setFilterCount(rows.length, privRoles.length);
@@ -4773,8 +4779,8 @@ function renderPrivileged(){
       <td class="num opt"><span class="mfa-methods" title="${escapeHtml(methodsStr)}">${escapeHtml(methodsStr||"—")}</span></td>
       <td class="num">${pkPill}</td>
       <td class="num">${licPill}</td>
-      <td class="num opt">${fmtDate(lastActivity(u))}</td>
       <td class="num">${u.accountEnabled===false?`<span class="pill off">disabled</span>`:"enabled"}</td>
+      <td class="num sticky-col">${fmtDate(lastActivity(u))}</td>
     </tr>`;
   }).join("");
 }
@@ -5295,14 +5301,14 @@ el("btnRefresh").onclick = ()=>{
 ["fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap","fSspr",
  "fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
  "fPatchRel","fPatchStatus","fAvMode","fAvHealth","fLapsOs","fLapsStatus","fPatchView",
- "fDcState","fDcOs","fJailStatus","fPrivMfa","fPrivPasskey","fSecCat","fAcStatus","fAcType","fOaConsent",
+ "fDcState","fDcOs","fJailStatus","fPrivMfa","fPrivPasskey","fPrivLicense","fSecCat","fAcStatus","fAcType","fOaConsent",
  "fBaseCat","fBaseStatus","fBaseSev","fCmmcCat","fCmmcStatus","fCmmcSev","fCmmc2Cat","fCmmc2Status","fCmmc2Sev",
  "fCisCat","fCisStatus","fCisSev","fRecState","fRecSev"].forEach(id=> el(id).onchange = render);
 el("fClear").onclick = ()=>{
   ["fSearch","fType","fLicense","fStatus","fOs","fOwn","fRisk","fRiskState","fMfaType","fMfaReg","fMfaCap",
    "fSspr","fCaState","fLicStatus","fHealthSvc","fHealthClass","fHealthStatus","fBlOs","fBlStatus","fBlEnc",
    "fPatchRel","fPatchStatus","fLapsOs","fLapsStatus",
-   "fDcState","fDcOs","fJailStatus","fPrivMfa","fPrivPasskey","fSecCat","fAcStatus","fAcType","fOaConsent",
+   "fDcState","fDcOs","fJailStatus","fPrivMfa","fPrivPasskey","fPrivLicense","fSecCat","fAcStatus","fAcType","fOaConsent",
    "fBaseCat","fBaseStatus","fBaseSev","fCmmcCat","fCmmcStatus","fCmmcSev","fCmmc2Cat","fCmmc2Status","fCmmc2Sev",
    "fCisCat","fCisStatus","fCisSev","fRecState","fRecSev"].forEach(id=> el(id).value="");
   el("fAvMode").value="endpoints"; el("fAvHealth").value="unhealthy";   // antivirus keeps sensible defaults
