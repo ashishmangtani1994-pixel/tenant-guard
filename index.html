@@ -1190,11 +1190,13 @@
               <th class="opt">Last interactive</th>
               <th class="opt">Last non-interactive</th>
               <th>Last activity</th>
-              <th>Inactive</th>
+              <th class="opt">Shared mailbox</th>
+              <th class="opt">Mailbox size</th>
+              <th class="sticky-col">Inactive</th>
             </tr>
           </thead>
           <tbody id="tbody">
-            <tr><td colspan="8" class="loadrow"><span class="spin"></span> Loading directory…</td></tr>
+            <tr><td colspan="10" class="loadrow"><span class="spin"></span> Loading directory…</td></tr>
           </tbody>
         </table>
       </div>
@@ -2553,7 +2555,7 @@ async function loadMailboxUsage(){
   if(tab==="member"||tab==="guest") render();
 }
 async function loadPrivileged(){
-  el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Reading privileged role assignments…</td></tr>`;
+  el("tbody").innerHTML = `<tr><td colspan="9" class="loadrow"><span class="spin"></span> Reading privileged role assignments…</td></tr>`;
   try{
     const tok = await token(READ_SCOPES); if(!tok) return;
     const r = await gget(`${GRAPH}/directoryRoles?$expand=members`, tok);
@@ -2594,18 +2596,20 @@ async function loadPrivileged(){
            while(murl){ const pg = await gget(murl, tok); allRegDetails.push(...(pg.value||[])); murl = pg["@odata.nextLink"]||null; } mfaLoaded = true; }catch(e){}
     }
     const mfaMap = new Map(allRegDetails.map(x=>[String(x.userPrincipalName||"").toLowerCase(), x]));
-    /* pull last sign-in (interactive/non-interactive/successful, whichever is latest) directly per
-       privileged account — works even if the full directory list hasn't been scanned yet */
-    el("tbody").innerHTML = `<tr><td colspan="8" class="loadrow"><span class="spin"></span> Reading sign-in activity for ${map.size} privileged account(s)…</td></tr>`;
+    /* pull last sign-in (interactive/non-interactive/successful, whichever is latest) and license
+       assignment directly per privileged account — works even if the full directory list hasn't
+       been scanned yet */
+    el("tbody").innerHTML = `<tr><td colspan="9" class="loadrow"><span class="spin"></span> Reading sign-in activity for ${map.size} privileged account(s)…</td></tr>`;
     const sigById = new Map();
     await Promise.all([...map.keys()].map(async id=>{
-      try{ const su = await gget(`${GRAPH}/users/${id}?$select=signInActivity`, tok); sigById.set(id, su.signInActivity||null); }
+      try{ const su = await gget(`${GRAPH}/users/${id}?$select=signInActivity,assignedLicenses`, tok); sigById.set(id, su); }
       catch(e){ sigById.set(id, null); }
     }));
     privRoles = [...map.values()].map(u=>{
       const k = String(u.upn||"").toLowerCase(); const reg = mfaMap.get(k);
       const methods = reg?(reg.methodsRegistered||[]):[];
-      return { ...u, mfa: reg?reg.isMfaRegistered:null, mfaMethods: methods, hasPasskey: methods.some(m=>/passkey/i.test(m)), signInActivity: sigById.get(u.id)||null };
+      const su = sigById.get(u.id);
+      return { ...u, mfa: reg?reg.isMfaRegistered:null, mfaMethods: methods, hasPasskey: methods.some(m=>/passkey/i.test(m)), signInActivity: su?su.signInActivity:null, assignedLicenses: su?(su.assignedLicenses||[]):[] };
     }).sort((a,b)=> (b.roles.length+b.eligibleRoles.length) - (a.roles.length+a.eligibleRoles.length));
     privLoaded = true; render();
   }catch(e){ handleGraphError(e); }
@@ -2908,7 +2912,7 @@ const HEAD_BITLOCKER = `<th>Device</th><th>OS</th><th>BitLocker key</th><th>Encr
 const HEAD_LAPS = `<th>Device</th><th>OS</th><th>LAPS key</th><th class="opt">Last backup</th><th>Ownership</th>`;
 const HEAD_DEVCOMP = `<th>Device</th><th>OS</th><th>Compliance</th><th>Managed by</th><th class="opt">Last sync</th>`;
 const HEAD_JAIL    = `<th>Device</th><th>OS</th><th>Jailbroken / rooted</th><th>Managed by</th>`;
-const HEAD_PRIV    = `<th>Account</th><th>Active roles</th><th>Eligible roles</th><th>MFA</th><th>MFA methods</th><th>Passkey</th><th>Last sign-in</th><th>Status</th>`;
+const HEAD_PRIV    = `<th>Account</th><th>Active roles</th><th>Eligible roles</th><th>MFA</th><th>MFA methods</th><th>Passkey</th><th>License</th><th>Last sign-in</th><th>Status</th>`;
 const HEAD_SEC     = `<th>Control</th><th>Category</th><th>Score</th><th class="opt">Description</th>`;
 const HEAD_LEGACY  = `<th>User</th><th>App</th><th>Client</th><th>Result</th><th class="opt">IP</th><th>When</th>`;
 const HEAD_APPCREDS= `<th>Application</th><th>Type</th><th>Expires</th><th>Time left</th><th>Status</th>`;
@@ -4753,12 +4757,13 @@ function renderPrivileged(){
     "Global Admins", privRoles.filter(u=>u.roles.some(r=>/global administrator/i.test(r))).length,
     "MFA coverage", privRoles.length?Math.round(privRoles.filter(u=>u.mfa===true).length/privRoles.length*100)+"%":"—");
   const tb=el("tbody");
-  if(!privRoles.length){ tb.innerHTML=`<tr><td colspan="8" class="empty"><div class="big">No privileged accounts</div>No activated directory roles with members found (needs Directory.Read.All).</td></tr>`; return; }
-  if(!rows.length){ tb.innerHTML=`<tr><td colspan="8" class="empty"><div class="big">No matches</div>No accounts match the current filters.</td></tr>`; return; }
+  if(!privRoles.length){ tb.innerHTML=`<tr><td colspan="9" class="empty"><div class="big">No privileged accounts</div>No activated directory roles with members found (needs Directory.Read.All).</td></tr>`; return; }
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="9" class="empty"><div class="big">No matches</div>No accounts match the current filters.</td></tr>`; return; }
   tb.innerHTML = rows.map(u=>{
     const mfaPill = u.mfa===true?`<span class="pill lic-yes">Yes</span>`:(u.mfa===false?`<span class="pill miss">No</span>`:`<span class="pill off">—</span>`);
     const methodsStr = (u.mfaMethods||[]).join(", ");
     const pkPill = u.hasPasskey?`<span class="pill lic-yes">Yes</span>`:`<span class="pill miss">No</span>`;
+    const licPill = hasLicense(u)?`<span class="pill lic-yes">Yes</span>`:`<span class="pill lic-no">No</span>`;
     const eligible = (u.eligibleRoles||[]).join(", ");
     return `<tr>
       <td><div class="uname">${escapeHtml(u.displayName||"—")}</div><div class="upn">${escapeHtml(u.upn||"")}</div></td>
@@ -4767,6 +4772,7 @@ function renderPrivileged(){
       <td>${mfaPill}</td>
       <td class="num opt"><span class="mfa-methods" title="${escapeHtml(methodsStr)}">${escapeHtml(methodsStr||"—")}</span></td>
       <td class="num">${pkPill}</td>
+      <td class="num">${licPill}</td>
       <td class="num opt">${fmtDate(lastActivity(u))}</td>
       <td class="num">${u.accountEnabled===false?`<span class="pill off">disabled</span>`:"enabled"}</td>
     </tr>`;
