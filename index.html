@@ -6228,9 +6228,15 @@ async function migConnect(side) {
   }
 }
 
-async function migGetToken(side) {
+async function migGetToken(side, requireLogin) {
   const app  = side === "src" ? msalSrc  : msalTgt;
   const acct = side === "src" ? srcAccount : tgtAccount;
+  /* A manually requested rescan must not silently reuse a cached token. */
+  if(requireLogin) {
+    const r = await app.acquireTokenPopup({ scopes: MIG_SCOPES, account: acct, prompt: "login" });
+    if(side === "src") srcAccount = r.account; else tgtAccount = r.account;
+    return r.accessToken;
+  }
   try {
     const r = await app.acquireTokenSilent({ scopes: MIG_SCOPES, account: acct });
     return r.accessToken;
@@ -6240,13 +6246,13 @@ async function migGetToken(side) {
   }
 }
 
-async function migScan(side) {
+async function migScan(side, requireLogin) {
   if (side === "src") srcScanning = true; else tgtScanning = true;
   renderMigration();
   const result = { mailboxes: null, onedrive: null, sharepoint: null, users: null, scannedAt: new Date().toISOString() };
 
   try {
-    const tok = await migGetToken(side);
+    const tok = await migGetToken(side, requireLogin);
 
     /* Keep detailed inventories, not only totals, for discovery and mapping. */
     try {
@@ -6258,17 +6264,13 @@ async function migScan(side) {
         const j = await r.json(); rows.push(...(j.value || [])); url = j["@odata.nextLink"] || null;
       }
       const usedBytes = rows.reduce((a, m) => a + (parseFloat(m.storageUsedInBytes) || 0), 0);
-      const shared = rows.filter(m => {
-        const rt = String(m.recipientType || m.recipientTypeDetails || "").toLowerCase();
-        if (rt.includes("shared")) return true;
-        const hasLic = Array.isArray(m.assignedLicenses) ? m.assignedLicenses.length > 0 : !!m.hasLicense;
-        return !hasLic && parseFloat(m.storageUsedInBytes || 0) > 0;
-      }).length;
-      result.mailboxes = { total: rows.length, user: rows.length - shared, shared,
-        usedGB: (usedBytes / Math.pow(2, 30)).toFixed(2), items: rows.map(m => ({
-          name:m.displayName||"—", address:m.userPrincipalName||"", type:m.recipientType||m.recipientTypeDetails||"User",
+      const items = rows.map(m => ({
+          name:m.displayName||"—", address:m.userPrincipalName||"", type:m.recipientType||m.recipientTypeDetails||"Unclassified",
           usedBytes:parseFloat(m.storageUsedInBytes)||0, lastActivity:m.lastActivityDate||"", deleted:!!m.isDeleted
-        })) };
+        }));
+      const shared = items.filter(m=>/shared/i.test(m.type)).length;
+      result.mailboxes = { total: rows.length, user: 0, shared, unclassified:items.length-shared,
+        usedGB: (usedBytes / Math.pow(2, 30)).toFixed(2), items };
     } catch(e) { result.mailboxes = { error: String(e.message || e).slice(0, 80) }; }
 
     try {
@@ -6302,13 +6304,35 @@ async function migScan(side) {
         while(su&&up++<8){const sr=await fetch(su,{headers:{Authorization:"Bearer "+tok}});if(!sr.ok)break;const sj=await sr.json();usage.push(...(sj.value||[]));su=sj["@odata.nextLink"]||null;}
         const b=usage.reduce((a,s)=>a+(parseFloat(s.storageUsedInBytes)||0),0);spUsedGB=(b/Math.pow(2,30)).toFixed(2);
       } catch(_e) { /* storage report optional */ }
-      const byUrl=new Map(usage.map(s=>[String(s.siteUrl||"").replace(/\/$/,"").toLowerCase(),s]));
-      result.sharepoint = { total: sites.length, usedGB: spUsedGB, items:sites.map(s=>{const u=byUrl.get(String(s.webUrl||"").replace(/\/$/,"").toLowerCase())||{};return {name:s.displayName||"—",url:s.webUrl||"",usedBytes:parseFloat(u.storageUsedInBytes)||0,lastActivity:u.lastActivityDate||"",modified:s.lastModifiedDateTime||""};}) };
+      /* Usage-report URLs are not always identical to /sites search URLs. Build the
+         detailed table from the usage report first so storage is never lost, then
+         add the display name / last-modified timestamp when the directory matches. */
+      const normUrl=x=>String(x||"").replace(/\/$/,"").toLowerCase();
+      const siteByUrl=new Map(sites.map(s=>[normUrl(s.webUrl),s]));
+      const usedUrls=new Set();
+      const reportItems=usage.map(u=>{const key=normUrl(u.siteUrl),s=siteByUrl.get(key);usedUrls.add(key);return {
+        name:s?.displayName||u.siteUrl?.split("/").filter(Boolean).pop()||u.siteId||"—", url:u.siteUrl||s?.webUrl||"",
+        usedBytes:parseFloat(u.storageUsedInBytes)||0,lastActivity:u.lastActivityDate||"",modified:s?.lastModifiedDateTime||""
+      };});
+      const inventoryOnly=(usage.length ? [] : sites.filter(s=>!usedUrls.has(normUrl(s.webUrl)))).map(s=>({
+        name:s.displayName||"—",url:s.webUrl||"",usedBytes:null,lastActivity:"",modified:s.lastModifiedDateTime||""
+      }));
+      result.sharepoint = { total: reportItems.length+inventoryOnly.length, usedGB: spUsedGB, items:[...reportItems,...inventoryOnly] };
     } catch(e) { result.sharepoint = { error: String(e.message || e).slice(0, 80) }; }
     try {
       let url=GRAPH+"/users?$select=displayName,userPrincipalName,mail,userType,accountEnabled&$top=500",pages=0,users=[];
       while(url&&pages++<20){const r=await fetch(url,{headers:{Authorization:"Bearer "+tok}});if(!r.ok)throw new Error("HTTP "+r.status);const j=await r.json();users.push(...(j.value||[]));url=j["@odata.nextLink"]||null;}
       result.users={total:users.length,items:users.map(u=>({name:u.displayName||"—",address:u.userPrincipalName||"",mail:u.mail||"",type:u.userType||"Member",enabled:u.accountEnabled!==false}))};
+      /* The usage report does not include recipient type or licences. Match readable
+         report addresses to Entra users; retain Unclassified for concealed report data
+         instead of incorrectly calling it a shared mailbox. */
+      if(result.mailboxes && !result.mailboxes.error){
+        const addresses=new Set(users.flatMap(u=>[u.userPrincipalName,u.mail]).filter(Boolean).map(migKey));
+        result.mailboxes.items.forEach(m=>{ if(addresses.has(migKey(m.address))) m.type="User"; });
+        result.mailboxes.user=result.mailboxes.items.filter(m=>m.type==="User").length;
+        result.mailboxes.shared=result.mailboxes.items.filter(m=>/shared/i.test(m.type)).length;
+        result.mailboxes.unclassified=result.mailboxes.total-result.mailboxes.user-result.mailboxes.shared;
+      }
     } catch(e) { result.users = { error: String(e.message || e).slice(0, 80) }; }
 
   } catch(e) {
@@ -6376,7 +6400,7 @@ function migTenantCard(side) {
         : '<div style="font-size:11.5px;color:var(--faint);margin-top:2px">Not connected</div>')
     + '</div>'
     + (acct
-        ? '<button class="btn" onclick="migScan(\'' + side + '\')" '
+        ? '<button class="btn" onclick="migScan(\'' + side + '\', true)" '
           + (loading ? 'disabled' : '') + ' style="font-size:12px;padding:6px 12px">'
           + (loading ? '<span class="spin"></span>&nbsp;Scanning\u2026' : '\u21bb Rescan') + '</button>'
         : '<button class="btn primary" id="' + side + 'ConnectBtn" onclick="migConnect(\'' + side + '\')"'
@@ -6404,7 +6428,7 @@ function migTenantCard(side) {
     + (!data ? '<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px 0">Click \u21bb Rescan to load data</div>' : '')
     + (mbx ? (mbx.error ? _migErrRow('Mailboxes: ' + mbx.error)
         : _migStatRow('\ud83d\udcec', 'Mailboxes', mbx.total,
-            mbx.user + ' user \u00b7 ' + mbx.shared + ' shared \u00b7 ' + mbx.usedGB + ' GB used', col)) : '')
+            mbx.user + ' user \u00b7 ' + mbx.shared + ' shared' + (mbx.unclassified ? ' \u00b7 ' + mbx.unclassified + ' unclassified' : '') + ' \u00b7 ' + mbx.usedGB + ' GB used', col)) : '')
     + (od  ? (od.error  ? _migErrRow('OneDrive: ' + od.error)
         : _migStatRow('\u2601\ufe0f', 'OneDrive accounts', od.total,
             od.usedGB + ' GB used \u00b7 ' + od.allocGB + ' GB allocated', col)) : '')
