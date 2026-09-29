@@ -6198,7 +6198,7 @@ let srcAccount = null, tgtAccount = null;
 let srcData = null, tgtData = null;
 let srcScanning = false, tgtScanning = false;
 
-const MIG_SCOPES = ["User.Read", "Reports.Read.All", "Sites.Read.All"];
+const MIG_SCOPES = ["User.Read", "User.Read.All", "Directory.Read.All", "Reports.Read.All", "Sites.Read.All"];
 
 async function migGetApp(side) {
   if (side === "src" && msalSrc) return msalSrc;
@@ -6243,12 +6243,12 @@ async function migGetToken(side) {
 async function migScan(side) {
   if (side === "src") srcScanning = true; else tgtScanning = true;
   renderMigration();
-  const result = { mailboxes: null, onedrive: null, sharepoint: null };
+  const result = { mailboxes: null, onedrive: null, sharepoint: null, users: null, scannedAt: new Date().toISOString() };
 
   try {
     const tok = await migGetToken(side);
 
-    /* ---- Mailboxes via usage report ---- */
+    /* Keep detailed inventories, not only totals, for discovery and mapping. */
     try {
       let url = GRAPH_BETA + "/reports/getMailboxUsageDetail(period='D90')?$format=application/json&$top=500";
       const rows = []; let pages = 0;
@@ -6265,10 +6265,12 @@ async function migScan(side) {
         return !hasLic && parseFloat(m.storageUsedInBytes || 0) > 0;
       }).length;
       result.mailboxes = { total: rows.length, user: rows.length - shared, shared,
-        usedGB: (usedBytes / Math.pow(2, 30)).toFixed(2) };
+        usedGB: (usedBytes / Math.pow(2, 30)).toFixed(2), items: rows.map(m => ({
+          name:m.displayName||"—", address:m.userPrincipalName||"", type:m.recipientType||m.recipientTypeDetails||"User",
+          usedBytes:parseFloat(m.storageUsedInBytes)||0, lastActivity:m.lastActivityDate||"", deleted:!!m.isDeleted
+        })) };
     } catch(e) { result.mailboxes = { error: String(e.message || e).slice(0, 80) }; }
 
-    /* ---- OneDrive via usage report ---- */
     try {
       let url = GRAPH_BETA + "/reports/getOneDriveUsageAccountDetail(period='D90')?$format=application/json&$top=500";
       const rows = []; let pages = 0;
@@ -6281,29 +6283,33 @@ async function migScan(side) {
       const allocBytes = rows.reduce((a, o) => a + (parseFloat(o.storageAllocatedInBytes) || 0), 0);
       result.onedrive = { total: rows.length,
         usedGB:  (usedBytes  / Math.pow(2, 30)).toFixed(2),
-        allocGB: (allocBytes / Math.pow(2, 30)).toFixed(2) };
+        allocGB: (allocBytes / Math.pow(2, 30)).toFixed(2), items:rows.map(o=>({
+          name:o.ownerDisplayName||"—", address:o.ownerPrincipalName||"", url:o.siteUrl||"",
+          usedBytes:parseFloat(o.storageUsedInBytes)||0, allocatedBytes:parseFloat(o.storageAllocatedInBytes)||0, lastActivity:o.lastActivityDate||""
+        })) };
     } catch(e) { result.onedrive = { error: String(e.message || e).slice(0, 80) }; }
 
-    /* ---- SharePoint sites + storage ---- */
     try {
-      let siteCount = 0, url = GRAPH + "/sites?search=*&$select=id,displayName&$top=200", pages = 0;
+      let sites = [], url = GRAPH + "/sites?search=*&$select=id,displayName,webUrl,lastModifiedDateTime&$top=200", pages = 0;
       while (url && pages++ < 5) {
         const r = await fetch(url, { headers: { Authorization: "Bearer " + tok, ConsistencyLevel: "eventual" } });
         if (!r.ok) throw new Error("HTTP " + r.status);
-        const j = await r.json(); siteCount += (j.value || []).length; url = j["@odata.nextLink"] || null;
+        const j = await r.json(); sites.push(...(j.value || [])); url = j["@odata.nextLink"] || null;
       }
-      let spUsedGB = null;
+      let spUsedGB = null, usage=[];
       try {
-        const sr = await fetch(GRAPH_BETA + "/reports/getSharePointSiteUsageDetail(period='D90')?$format=application/json&$top=500",
-          { headers: { Authorization: "Bearer " + tok } });
-        if (sr.ok) {
-          const sj = await sr.json();
-          const b = (sj.value || []).reduce((a, s) => a + (parseFloat(s.storageUsedInBytes) || 0), 0);
-          spUsedGB = (b / Math.pow(2, 30)).toFixed(2);
-        }
+        let su=GRAPH_BETA+"/reports/getSharePointSiteUsageDetail(period='D90')?$format=application/json&$top=500", up=0;
+        while(su&&up++<8){const sr=await fetch(su,{headers:{Authorization:"Bearer "+tok}});if(!sr.ok)break;const sj=await sr.json();usage.push(...(sj.value||[]));su=sj["@odata.nextLink"]||null;}
+        const b=usage.reduce((a,s)=>a+(parseFloat(s.storageUsedInBytes)||0),0);spUsedGB=(b/Math.pow(2,30)).toFixed(2);
       } catch(_e) { /* storage report optional */ }
-      result.sharepoint = { total: siteCount, usedGB: spUsedGB };
+      const byUrl=new Map(usage.map(s=>[String(s.siteUrl||"").replace(/\/$/,"").toLowerCase(),s]));
+      result.sharepoint = { total: sites.length, usedGB: spUsedGB, items:sites.map(s=>{const u=byUrl.get(String(s.webUrl||"").replace(/\/$/,"").toLowerCase())||{};return {name:s.displayName||"—",url:s.webUrl||"",usedBytes:parseFloat(u.storageUsedInBytes)||0,lastActivity:u.lastActivityDate||"",modified:s.lastModifiedDateTime||""};}) };
     } catch(e) { result.sharepoint = { error: String(e.message || e).slice(0, 80) }; }
+    try {
+      let url=GRAPH+"/users?$select=displayName,userPrincipalName,mail,userType,accountEnabled&$top=500",pages=0,users=[];
+      while(url&&pages++<20){const r=await fetch(url,{headers:{Authorization:"Bearer "+tok}});if(!r.ok)throw new Error("HTTP "+r.status);const j=await r.json();users.push(...(j.value||[]));url=j["@odata.nextLink"]||null;}
+      result.users={total:users.length,items:users.map(u=>({name:u.displayName||"—",address:u.userPrincipalName||"",mail:u.mail||"",type:u.userType||"Member",enabled:u.accountEnabled!==false}))};
+    } catch(e) { result.users = { error: String(e.message || e).slice(0, 80) }; }
 
   } catch(e) {
     toast("Scan error: " + (e.message || String(e)).slice(0, 120), true);
@@ -6327,6 +6333,32 @@ function _migStatRow(icon, lbl, val, sub, col) {
 function _migErrRow(msg) {
   return '<div style="font-size:12px;color:var(--warn);padding:8px 0;border-bottom:1px solid var(--border)">\u26a0 ' + escapeHtml(msg) + '</div>';
 }
+let migView = "overview", migMapFilter = "";
+const migBytes = n => n == null ? "—" : (n/Math.pow(2,30)).toFixed(2)+" GB";
+function migItems(d,key){ return d&&d[key]&&d[key].items || []; }
+function migDownload(name,type,text){const b=new Blob([text],{type});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function migKey(x){return String(x||"").trim().toLowerCase();}
+function migLocal(x){return migKey(x).split("@")[0].replace(/[._-]/g,"");}
+function migMappings(){
+  const target=migItems(tgtData,"users"),byAddress=new Map(),byMail=new Map(),byLocal=new Map();
+  target.forEach(u=>{if(u.address)byAddress.set(migKey(u.address),u);if(u.mail)byMail.set(migKey(u.mail),u);const k=migLocal(u.address||u.mail);if(k&&!byLocal.has(k))byLocal.set(k,u);});
+  const source=migItems(srcData,"users").slice(),seen=new Set(source.map(u=>migKey(u.address||u.mail)));
+  [["mailboxes","Mailbox"],["onedrive","OneDrive owner"]].forEach(([key,type])=>migItems(srcData,key).forEach(x=>{const k=migKey(x.address);if(k&&!seen.has(k)){source.push({name:x.name,address:x.address,type});seen.add(k);}}));
+  return source.map(s=>{const exact=byAddress.get(migKey(s.address))||byMail.get(migKey(s.mail)),local=byLocal.get(migLocal(s.address||s.mail)),match=exact||local;return {source:s,target:match||null,confidence:exact?"Exact address":(local?"Local-part match":"Unmatched")};});
+}
+function migTable(headers,rows){
+  if(!rows.length)return '<div style="padding:22px 0;color:var(--muted);font-size:13px">No data loaded.</div>';
+  return '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+headers.map(h=>'<th style="text-align:left;padding:8px;border-bottom:1px solid var(--border);color:var(--faint);white-space:nowrap">'+escapeHtml(h)+'</th>').join("")+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>'<td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;max-width:220px;overflow-wrap:anywhere">'+escapeHtml(String(c||""))+'</td>').join("")+'</tr>').join("")+'</tbody></table>';
+}
+function migExportMappings(){
+  const q=x=>'"'+String(x||"").replace(/"/g,'""')+'"', rows=[["Source name","Source email","Target name","Target email","Match confidence"],...migMappings().map(r=>[r.source.name,r.source.address||r.source.mail,r.target&&r.target.name,r.target&&(r.target.address||r.target.mail),r.confidence])];
+  migDownload("tenant-guard-identity-mapping.csv","text/csv",rows.map(r=>r.map(q).join(",")).join("\n"));
+}
+function migSowData(){
+  const m=srcData&&srcData.mailboxes||{},o=srcData&&srcData.onedrive||{},s=srcData&&srcData.sharepoint||{},map=migMappings(),unmatched=map.filter(x=>!x.target).length;
+  return {generatedAt:new Date().toISOString(),sourceTenant:srcAccount&&srcAccount.username||"",targetTenant:tgtAccount&&tgtAccount.username||"",sourceScope:{mailboxes:m.total||0,sharedMailboxes:m.shared||0,mailboxStorageGB:m.usedGB||"0",oneDriveAccounts:o.total||0,oneDriveStorageGB:o.usedGB||"0",sharePointSites:s.total||0,sharePointStorageGB:s.usedGB||"0"},identityMapping:{sourceIdentities:map.length,unmatched,exactMatches:map.filter(x=>x.confidence==="Exact address").length,reviewMatches:map.filter(x=>x.confidence==="Local-part match").length},assumptions:["Assessment data comes from Microsoft Graph reports at scan time.","Actual content transfer requires a migration engine or service outside this browser-only application.","Mappings labelled Local-part match or Unmatched require customer validation."]};
+}
+function migExportSow(){const d=migSowData(),p=['# Tenant Migration Discovery Summary','','Use the following discovery data to prepare a migration Statement of Work. Include assumptions, migration waves, identity remediation, testing, cutover, rollback, governance, responsibilities, and exclusions. Do not invent quantities beyond this data.','','~~~json',JSON.stringify(d,null,2),'~~~'].join("\n");migDownload("tenant-guard-migration-sow-brief.md","text/markdown",p);}
 
 function migTenantCard(side) {
   const label   = side === "src" ? "Source Tenant" : "Target Tenant";
@@ -6419,14 +6451,21 @@ function migCompareTable() {
 function renderMigration() {
   var panel = el('migrationPanel');
   if (!panel) return;
+  const nav={overview:"Overview",mailboxes:"Mailboxes",onedrive:"OneDrive",sharepoint:"SharePoint",mapping:"Identity mapping"};
+  const cfg={mailboxes:{key:"mailboxes",cols:["Name","Email address","Type","Storage used","Last activity"],row:x=>[x.name,x.address,x.type,migBytes(x.usedBytes),x.lastActivity||"—"]},onedrive:{key:"onedrive",cols:["Owner","Email address","Storage used","Allocated","Last activity","Site URL"],row:x=>[x.name,x.address,migBytes(x.usedBytes),migBytes(x.allocatedBytes),x.lastActivity||"—",x.url]},sharepoint:{key:"sharepoint",cols:["Site","Storage used","Last activity","Last modified","URL"],row:x=>[x.name,migBytes(x.usedBytes),x.lastActivity||"—",x.modified||"—",x.url]}}[migView];
+  const inventory=()=>{const q=migKey(migMapFilter),side=(label,data,col)=>{const o=data&&data[cfg.key],rows=migItems(data,cfg.key).filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q));return '<div class="card" style="padding:18px;overflow:auto"><div style="font-family:Space Grotesk;font-weight:700;color:'+col+';margin-bottom:10px">'+label+' · '+rows.length+' item(s)</div>'+(o&&o.error?_migErrRow(o.error):migTable(cfg.cols,rows.map(cfg.row)))+'</div>';};return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+side("Source",srcData,"var(--accent)")+side("Target",tgtData,"var(--accent-2)")+'</div>';};
+  const mapping=()=>{const q=migKey(migMapFilter),rows=migMappings().filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q)),unmatched=rows.filter(r=>!r.target).length;return '<div class="card" style="padding:18px;overflow:auto"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><div style="font-family:Space Grotesk;font-weight:700">Identity and email mapping</div><span style="color:var(--muted);font-size:12px">'+rows.length+' source identities · '+unmatched+' unmatched</span><button class="btn" onclick="migExportMappings()" style="margin-left:auto">Export mapping CSV</button></div><div style="font-size:12px;color:var(--muted);margin-bottom:12px">Exact UPN/mail matches are candidates. Local-part matches need human review before the migration runbook is finalised.</div>'+migTable(["Source identity","Source email","Target identity","Target email","Match"],rows.map(r=>[r.source.name,r.source.address||r.source.mail,r.target?r.target.name:"—",r.target?(r.target.address||r.target.mail):"—",r.confidence]))+'</div>';};
+  const readiness=()=>{const d=migSowData(),c=[[d.sourceScope.mailboxes>0,"Mailbox inventory scanned",d.sourceScope.mailboxes+" mailboxes"],[d.sourceScope.oneDriveAccounts>0,"OneDrive inventory scanned",d.sourceScope.oneDriveAccounts+" accounts"],[d.sourceScope.sharePointSites>0,"SharePoint inventory scanned",d.sourceScope.sharePointSites+" sites"],[d.identityMapping.exactMatches>0,"Identity mapping started",d.identityMapping.exactMatches+" exact matches"],[d.identityMapping.unmatched===0,"All identities mapped",d.identityMapping.unmatched+" need mapping"]];return '<div class="card" style="padding:18px;margin-top:16px"><div style="font-family:Space Grotesk;font-weight:700;margin-bottom:10px">Migration readiness</div>'+c.map(x=>'<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:'+(x[0]?"var(--pass)":"var(--warn)")+'">'+(x[0]?"✓":"○")+'</span> <b>'+x[1]+'</b><span style="color:var(--muted)"> · '+x[2]+'</span></div>').join("")+'</div>';};
   panel.innerHTML =
     '<h2 style="font-family:\'Space Grotesk\';font-size:20px;margin:0 0 6px">Tenant Migration Scanner</h2>'
-    + '<p style="color:var(--muted);font-size:13px;margin:0 0 20px">Sign in to each tenant independently to scan mailboxes, OneDrive, and SharePoint data side by side.</p>'
+    + '<p style="color:var(--muted);font-size:13px;margin:0 0 16px">Scan both tenants, inspect detailed inventories, validate identity mappings, and export an AI-ready discovery brief for your migration SOW.</p>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+Object.entries(nav).map(([k,v])=>'<button class="btn '+(migView===k?"primary":"")+'" onclick="migView=\''+k+'\';renderMigration()">'+v+'</button>').join("")+'<button class="btn glow" onclick="migExportSow()" style="margin-left:auto">Export SOW brief</button></div>'
+    + '<div style="margin-bottom:14px"><input value="'+escapeHtml(migMapFilter)+'" oninput="migMapFilter=this.value;renderMigration()" placeholder="Filter inventories or mappings…" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 11px"></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
     + migTenantCard('src')
     + migTenantCard('tgt')
     + '</div>'
-    + migCompareTable();
+    + (migView==="overview" ? migCompareTable()+readiness() : (migView==="mapping"?'<div style="margin-top:16px">'+mapping()+'</div>':'<div style="margin-top:16px">'+inventory()+'</div>'));
 }
 
 /* ---------- boot ---------- */
