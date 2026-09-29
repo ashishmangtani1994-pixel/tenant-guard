@@ -6383,6 +6383,40 @@ function migSowData(){
   return {generatedAt:new Date().toISOString(),sourceTenant:srcAccount&&srcAccount.username||"",targetTenant:tgtAccount&&tgtAccount.username||"",sourceScope:{mailboxes:m.total||0,sharedMailboxes:m.shared||0,mailboxStorageGB:m.usedGB||"0",oneDriveAccounts:o.total||0,oneDriveStorageGB:o.usedGB||"0",sharePointSites:s.total||0,sharePointStorageGB:s.usedGB||"0"},identityMapping:{sourceIdentities:map.length,unmatched,exactMatches:map.filter(x=>x.confidence==="Exact address").length,reviewMatches:map.filter(x=>x.confidence==="Local-part match").length},assumptions:["Assessment data comes from Microsoft Graph reports at scan time.","Actual content transfer requires a migration engine or service outside this browser-only application.","Mappings labelled Local-part match or Unmatched require customer validation."]};
 }
 function migExportSow(){const d=migSowData(),p=['# Tenant Migration Discovery Summary','','Use the following discovery data to prepare a migration Statement of Work. Include assumptions, migration waves, identity remediation, testing, cutover, rollback, governance, responsibilities, and exclusions. Do not invent quantities beyond this data.','','~~~json',JSON.stringify(d,null,2),'~~~'].join("\n");migDownload("tenant-guard-migration-sow-brief.md","text/markdown",p);}
+function migMaskedIdentity(items){
+  return items.some(x=>/^[a-f0-9]{24,}$/i.test(String(x.address||"").replace(/\s/g,"")));
+}
+function migExportExcel(){
+  if(typeof XLSX==="undefined"){ toast("Excel export library is not available.",true); return; }
+  const wb=XLSX.utils.book_new(), add=(name,headers,rows)=>{
+    const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
+    ws["!cols"]=headers.map((h,i)=>({wch:Math.min(46,Math.max(String(h).length+2,...rows.slice(0,200).map(r=>String(r[i]??"").length+2)))}));
+    if(rows.length) ws["!autofilter"]={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:rows.length,c:headers.length-1}})};
+    XLSX.utils.book_append_sheet(wb,ws,name);
+  };
+  const d=migSowData(), summary=[
+    ["Generated",d.generatedAt],["Source tenant",d.sourceTenant],["Target tenant",d.targetTenant],[],
+    ["Metric","Source","Target"],
+    ["Mailboxes",d.sourceScope.mailboxes,tgtData?.mailboxes?.total??""],
+    ["Shared mailboxes",d.sourceScope.sharedMailboxes,tgtData?.mailboxes?.shared??""],
+    ["Mailbox storage (GB)",Number(d.sourceScope.mailboxStorageGB),Number(tgtData?.mailboxes?.usedGB||0)],
+    ["OneDrive accounts",d.sourceScope.oneDriveAccounts,tgtData?.onedrive?.total??""],
+    ["OneDrive storage (GB)",Number(d.sourceScope.oneDriveStorageGB),Number(tgtData?.onedrive?.usedGB||0)],
+    ["SharePoint sites",d.sourceScope.sharePointSites,tgtData?.sharepoint?.total??""],
+    ["SharePoint storage (GB)",Number(d.sourceScope.sharePointStorageGB),Number(tgtData?.sharepoint?.usedGB||0)],
+    [],["Identity mapping","Count"],["Exact address matches",d.identityMapping.exactMatches],["Review matches",d.identityMapping.reviewMatches],["Unmatched",d.identityMapping.unmatched]
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(summary);ws["!cols"]=[{wch:30},{wch:30},{wch:30}];XLSX.utils.book_append_sheet(wb,ws,"Summary");
+  const addTenant=(prefix,data)=>{
+    add(prefix+" Mailboxes",["Name","Email address","Mailbox type","Storage used (bytes)","Last activity","Deleted"],migItems(data,"mailboxes").map(x=>[x.name,x.address,x.type,x.usedBytes,x.lastActivity,x.deleted?"Yes":"No"]));
+    add(prefix+" OneDrive",["Owner","Email address","Site URL","Storage used (bytes)","Allocated (bytes)","Last activity"],migItems(data,"onedrive").map(x=>[x.name,x.address,x.url,x.usedBytes,x.allocatedBytes,x.lastActivity]));
+    add(prefix+" SharePoint",["Site","URL","Storage used (bytes)","Last activity","Last modified"],migItems(data,"sharepoint").map(x=>[x.name,x.url,x.usedBytes,x.lastActivity,x.modified]));
+    add(prefix+" Directory Users",["Name","UPN","Mail","User type","Enabled"],migItems(data,"users").map(x=>[x.name,x.address,x.mail,x.type,x.enabled?"Yes":"No"]));
+  };
+  addTenant("Source",srcData); addTenant("Target",tgtData);
+  add("Identity Mapping",["Source name","Source email","Target name","Target email","Match confidence"],migMappings().map(r=>[r.source.name,r.source.address||r.source.mail,r.target?.name||"",r.target?(r.target.address||r.target.mail):"",r.confidence]));
+  XLSX.writeFile(wb,"tenant-guard-migration-inventory-"+new Date().toISOString().slice(0,10)+".xlsx");
+}
 
 function migTenantCard(side) {
   const label   = side === "src" ? "Source Tenant" : "Target Tenant";
@@ -6476,6 +6510,7 @@ function renderMigration() {
   var panel = el('migrationPanel');
   if (!panel) return;
   const nav={overview:"Overview",mailboxes:"Mailboxes",onedrive:"OneDrive",sharepoint:"SharePoint",mapping:"Identity mapping"};
+  const reportMasked=migMaskedIdentity(migItems(srcData,"mailboxes"))||migMaskedIdentity(migItems(tgtData,"mailboxes"));
   const cfg={mailboxes:{key:"mailboxes",cols:["Name","Email address","Type","Storage used","Last activity"],row:x=>[x.name,x.address,x.type,migBytes(x.usedBytes),x.lastActivity||"—"]},onedrive:{key:"onedrive",cols:["Owner","Email address","Storage used","Allocated","Last activity","Site URL"],row:x=>[x.name,x.address,migBytes(x.usedBytes),migBytes(x.allocatedBytes),x.lastActivity||"—",x.url]},sharepoint:{key:"sharepoint",cols:["Site","Storage used","Last activity","Last modified","URL"],row:x=>[x.name,migBytes(x.usedBytes),x.lastActivity||"—",x.modified||"—",x.url]}}[migView];
   const inventory=()=>{const q=migKey(migMapFilter),side=(label,data,col)=>{const o=data&&data[cfg.key],rows=migItems(data,cfg.key).filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q));return '<div class="card" style="padding:18px;overflow:auto"><div style="font-family:Space Grotesk;font-weight:700;color:'+col+';margin-bottom:10px">'+label+' · '+rows.length+' item(s)</div>'+(o&&o.error?_migErrRow(o.error):migTable(cfg.cols,rows.map(cfg.row)))+'</div>';};return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+side("Source",srcData,"var(--accent)")+side("Target",tgtData,"var(--accent-2)")+'</div>';};
   const mapping=()=>{const q=migKey(migMapFilter),rows=migMappings().filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q)),unmatched=rows.filter(r=>!r.target).length;return '<div class="card" style="padding:18px;overflow:auto"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><div style="font-family:Space Grotesk;font-weight:700">Identity and email mapping</div><span style="color:var(--muted);font-size:12px">'+rows.length+' source identities · '+unmatched+' unmatched</span><button class="btn" onclick="migExportMappings()" style="margin-left:auto">Export mapping CSV</button></div><div style="font-size:12px;color:var(--muted);margin-bottom:12px">Exact UPN/mail matches are candidates. Local-part matches need human review before the migration runbook is finalised.</div>'+migTable(["Source identity","Source email","Target identity","Target email","Match"],rows.map(r=>[r.source.name,r.source.address||r.source.mail,r.target?r.target.name:"—",r.target?(r.target.address||r.target.mail):"—",r.confidence]))+'</div>';};
@@ -6483,7 +6518,8 @@ function renderMigration() {
   panel.innerHTML =
     '<h2 style="font-family:\'Space Grotesk\';font-size:20px;margin:0 0 6px">Tenant Migration Scanner</h2>'
     + '<p style="color:var(--muted);font-size:13px;margin:0 0 16px">Scan both tenants, inspect detailed inventories, validate identity mappings, and export an AI-ready discovery brief for your migration SOW.</p>'
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+Object.entries(nav).map(([k,v])=>'<button class="btn '+(migView===k?"primary":"")+'" onclick="migView=\''+k+'\';renderMigration()">'+v+'</button>').join("")+'<button class="btn glow" onclick="migExportSow()" style="margin-left:auto">Export SOW brief</button></div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+Object.entries(nav).map(([k,v])=>'<button class="btn '+(migView===k?"primary":"")+'" onclick="migView=\''+k+'\';renderMigration()">'+v+'</button>').join("")+'<button class="btn" onclick="migExportExcel()" style="margin-left:auto">Export Excel</button><button class="btn glow" onclick="migExportSow()">Export SOW brief</button></div>'
+    + (reportMasked?'<div style="background:rgba(245,181,59,.10);border:1px solid rgba(245,181,59,.32);border-radius:8px;padding:10px 12px;color:var(--manual);font-size:12.5px;margin-bottom:14px">Mailbox names and addresses are masked by the Microsoft 365 reports privacy setting. To receive real identities in the usage report, a Microsoft 365 admin must turn off <b>Display concealed user, group, and site names in all reports</b> under <b>Settings → Org settings → Reports</b>, then rescan. The Excel export includes the separate Directory Users sheet with real Entra UPNs, but it cannot safely attach masked storage rows to those users.</div>': '')
     + '<div style="margin-bottom:14px"><input value="'+escapeHtml(migMapFilter)+'" oninput="migMapFilter=this.value;renderMigration()" placeholder="Filter inventories or mappings…" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 11px"></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
     + migTenantCard('src')
